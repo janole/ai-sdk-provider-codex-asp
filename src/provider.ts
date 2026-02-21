@@ -3,7 +3,7 @@ import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
-import type { DynamicToolHandler } from "./dynamic-tools";
+import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
 
 const PROVIDER_ID = "codex-app-server" as const;
@@ -23,6 +23,9 @@ export interface CodexProviderSettings {
     };
     defaultThreadSettings?: CodexThreadDefaults;
     transportFactory?: () => CodexTransport;
+    /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
+    tools?: Record<string, DynamicToolDefinition>;
+    /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
     toolHandlers?: Record<string, DynamicToolHandler>;
     toolTimeoutMs?: number;
 }
@@ -78,6 +81,9 @@ export function createCodexAppServer(
             : {}),
         ...(settings.transportFactory
             ? { transportFactory: settings.transportFactory }
+            : {}),
+        ...(settings.tools
+            ? { tools: { ...settings.tools } }
             : {}),
         ...(settings.toolHandlers
             ? { toolHandlers: { ...settings.toolHandlers } }

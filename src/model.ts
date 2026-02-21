@@ -16,6 +16,7 @@ import {
     type WebSocketTransportSettings,
 } from "./client/transport-websocket";
 import {
+    type DynamicToolDefinition,
     type DynamicToolHandler,
     DynamicToolsDispatcher,
 } from "./dynamic-tools";
@@ -58,6 +59,7 @@ export interface CodexModelConfig {
         };
         defaultThreadSettings?: CodexThreadDefaults;
         transportFactory?: () => CodexTransport;
+        tools?: Record<string, DynamicToolDefinition>;
         toolHandlers?: Record<string, DynamicToolHandler>;
         toolTimeoutMs?: number;
     };
@@ -340,9 +342,12 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         const dynamicToolsEnabled =
                             this.config.providerSettings.experimentalApi === true;
-                        if (dynamicToolsEnabled) 
+                        if (dynamicToolsEnabled)
                         {
                             const dispatcher = new DynamicToolsDispatcher({
+                                ...(this.config.providerSettings.tools
+                                    ? { tools: this.config.providerSettings.tools }
+                                    : {}),
                                 ...(this.config.providerSettings.toolHandlers
                                     ? { handlers: this.config.providerSettings.toolHandlers }
                                     : {}),
@@ -385,8 +390,18 @@ export class CodexLanguageModel implements LanguageModelV3
                         await client.request<CodexInitializeResult>("initialize", initializeParams);
                         await client.notification("initialized");
 
+                        const toolDefs = this.config.providerSettings.tools;
+                        const dynamicTools = toolDefs
+                            ? Object.entries(toolDefs).map(([name, def]) => ({
+                                name,
+                                description: def.description,
+                                inputSchema: def.inputSchema,
+                            }))
+                            : undefined;
+
                         const threadStartParams: CodexThreadStartParams = {
                             model: this.config.providerSettings.defaultModel ?? this.modelId,
+                            ...(dynamicTools ? { dynamicTools } : {}),
                             ...(this.config.providerSettings.defaultThreadSettings?.cwd
                                 ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
                                 : {}),

@@ -16,6 +16,7 @@ export { StdioTransport } from "./client/transport-stdio";
 export type { WebSocketTransportSettings } from "./client/transport-websocket";
 export { WebSocketTransport } from "./client/transport-websocket";
 export type {
+    DynamicToolDefinition,
     DynamicToolExecutionContext,
     DynamicToolHandler,
     DynamicToolsDispatcherSettings,

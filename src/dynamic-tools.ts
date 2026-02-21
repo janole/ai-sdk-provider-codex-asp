@@ -18,7 +18,17 @@ export type DynamicToolHandler = (
     context: DynamicToolExecutionContext,
 ) => Promise<CodexToolCallResult>;
 
+/** Full tool definition: schema advertised to Codex + local execution handler. */
+export interface DynamicToolDefinition {
+    description: string;
+    inputSchema: Record<string, unknown>;
+    execute: DynamicToolHandler;
+}
+
 export interface DynamicToolsDispatcherSettings {
+    /** Tools with full schema advertised to Codex. Handlers are registered automatically. */
+    tools?: Record<string, DynamicToolDefinition>;
+    /** Legacy handler-only registration (no schema). Tools are not advertised to Codex. */
     handlers?: Record<string, DynamicToolHandler>;
     timeoutMs?: number;
 }
@@ -57,13 +67,21 @@ export class DynamicToolsDispatcher
     private readonly handlers = new Map<string, DynamicToolHandler>();
     private readonly timeoutMs: number;
 
-    constructor(settings: DynamicToolsDispatcherSettings = {}) 
+    constructor(settings: DynamicToolsDispatcherSettings = {})
     {
         this.timeoutMs = settings.timeoutMs ?? 30_000;
 
-        if (settings.handlers) 
+        if (settings.tools)
         {
-            for (const [name, handler] of Object.entries(settings.handlers)) 
+            for (const [name, def] of Object.entries(settings.tools))
+            {
+                this.register(name, def.execute);
+            }
+        }
+
+        if (settings.handlers)
+        {
+            for (const [name, handler] of Object.entries(settings.handlers))
             {
                 this.register(name, handler);
             }

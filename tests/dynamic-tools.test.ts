@@ -148,6 +148,48 @@ describe("DynamicToolsDispatcher", () =>
         });
     });
 
+    it("executes tools registered via the tools (schema) API", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport);
+        const dispatcher = new DynamicToolsDispatcher({
+            tools: {
+                lookup: {
+                    description: "Look up a record by id.",
+                    inputSchema: {
+                        type: "object",
+                        properties: { id: { type: "string" } },
+                        required: ["id"],
+                    },
+                    execute: (args) => Promise.resolve({
+                        success: true,
+                        contentItems: [{ type: "inputText", text: `schema:${JSON.stringify(args)}` }],
+                    }),
+                },
+            },
+            timeoutMs: 100,
+        });
+
+        await client.connect();
+        dispatcher.attach(client);
+
+        transport.emitMessage({
+            id: 55,
+            method: "item/tool/call",
+            params: { tool: "lookup", arguments: { id: "XYZ" } },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(transport.sentMessages.at(-1)).toEqual({
+            id: 55,
+            result: {
+                success: true,
+                contentItems: [{ type: "inputText", text: "schema:{\"id\":\"XYZ\"}" }],
+            },
+        });
+    });
+
     it("returns failure response when handler times out", async () =>
     {
         const dispatcher = new DynamicToolsDispatcher({
@@ -208,11 +250,19 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
         const provider = createCodexAppServer({
             experimentalApi: true,
             transportFactory: () => transport,
-            toolHandlers: {
-                lookup: (args) => Promise.resolve({
-                    success: true,
-                    contentItems: [{ type: "inputText", text: `lookup:${JSON.stringify(args)}` }],
-                }),
+            tools: {
+                lookup: {
+                    description: "Look up a record by id.",
+                    inputSchema: {
+                        type: "object",
+                        properties: { id: { type: "string" } },
+                        required: ["id"],
+                    },
+                    execute: (args) => Promise.resolve({
+                        success: true,
+                        contentItems: [{ type: "inputText", text: `lookup:${JSON.stringify(args)}` }],
+                    }),
+                },
             },
             toolTimeoutMs: 100,
             clientInfo: { name: "test-client", version: "1.0.0" },
@@ -238,5 +288,55 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
                 contentItems: [{ type: "inputText", text: "lookup:{\"id\":\"ABC-1\"}" }],
             },
         });
+    });
+
+    it("includes dynamicTools definitions in thread/start params", async () =>
+    {
+        const transport = new ScriptedDynamicTransport();
+
+        const provider = createCodexAppServer({
+            experimentalApi: true,
+            transportFactory: () => transport,
+            tools: {
+                lookup: {
+                    description: "Look up a record by id.",
+                    inputSchema: {
+                        type: "object",
+                        properties: { id: { type: "string" } },
+                        required: ["id"],
+                    },
+                    execute: (args) => Promise.resolve({
+                        success: true,
+                        contentItems: [{ type: "inputText", text: `lookup:${JSON.stringify(args)}` }],
+                    }),
+                },
+            },
+            toolTimeoutMs: 100,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+
+        const model = provider.languageModel("gpt-5.1-codex");
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        });
+
+        await readAll(stream);
+
+        const threadStartMsg = transport.sentMessages.find(
+            (m) => "method" in m && m.method === "thread/start",
+        );
+
+        expect(threadStartMsg).toBeDefined();
+        expect((threadStartMsg as { params?: { dynamicTools?: unknown[] } }).params?.dynamicTools).toEqual([
+            {
+                name: "lookup",
+                description: "Look up a record by id.",
+                inputSchema: {
+                    type: "object",
+                    properties: { id: { type: "string" } },
+                    required: ["id"],
+                },
+            },
+        ]);
     });
 });
