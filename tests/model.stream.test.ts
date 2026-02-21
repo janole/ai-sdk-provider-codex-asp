@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createCodexAppServer } from '../src/provider';
 import type { JsonRpcMessage } from '../src/client/transport';
+import { createCodexAppServer } from '../src/provider';
 import { MockTransport } from './helpers/mock-transport';
 
 class ScriptedTransport extends MockTransport {

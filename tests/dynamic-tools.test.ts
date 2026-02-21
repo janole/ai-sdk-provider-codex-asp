@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { AppServerClient } from '../src/client/app-server-client';
+import type { JsonRpcMessage } from '../src/client/transport';
 import { DynamicToolsDispatcher } from '../src/dynamic-tools';
 import { createCodexAppServer } from '../src/provider';
-import type { JsonRpcMessage } from '../src/client/transport';
 import { MockTransport } from './helpers/mock-transport';
 
 class ScriptedDynamicTransport extends MockTransport {

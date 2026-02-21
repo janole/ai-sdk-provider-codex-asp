@@ -200,7 +200,7 @@ export class AppServerClient {
     const hasRequestId = 'id' in message && message.id !== undefined;
 
     if (hasRequestId) {
-      await this.handleInboundRequest(message as JsonRpcRequest);
+      await this.handleInboundRequest(message);
       return;
     }
 
@@ -221,7 +221,7 @@ export class AppServerClient {
       return;
     }
 
-    pending.resolve((message as JsonRpcSuccessResponse).result);
+    pending.resolve((message).result);
   }
 
   private async handleNotification(method: string, params: unknown): Promise<void> {

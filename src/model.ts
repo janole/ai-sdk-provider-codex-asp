@@ -16,8 +16,8 @@ import {
   type WebSocketTransportSettings,
 } from './client/transport-websocket';
 import {
-  DynamicToolsDispatcher,
   type DynamicToolHandler,
+  DynamicToolsDispatcher,
 } from './dynamic-tools';
 import { CodexProviderError } from './errors';
 import { CodexEventMapper } from './protocol/event-mapper';

@@ -1,10 +1,10 @@
 import { NoSuchModelError, type ProviderV3 } from '@ai-sdk/provider';
 
-import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from './model';
 import type { CodexTransport } from './client/transport';
 import type { StdioTransportSettings } from './client/transport-stdio';
 import type { WebSocketTransportSettings } from './client/transport-websocket';
 import type { DynamicToolHandler } from './dynamic-tools';
+import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from './model';
 
 const PROVIDER_ID = 'codex-app-server' as const;
 

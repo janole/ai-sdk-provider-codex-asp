@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from 'node:child_process';
+import { type ChildProcessWithoutNullStreams, spawn, type SpawnOptionsWithoutStdio } from 'node:child_process';
 
 import type {
   CodexTransport,
