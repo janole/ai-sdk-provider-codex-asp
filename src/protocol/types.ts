@@ -9,7 +9,11 @@
  * The generated types land in src/protocol/app-server-protocol/ (gitignored)
  * and serve as the authoritative reference. V2 types (camelCase) are in the v2/ subdirectory.
  */
-import type { JSONValue } from "@ai-sdk/provider";
+import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
+import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
+
+export type { AskForApproval };
+export type { SandboxMode };
 
 export interface JsonRpcMessageBase {
     id?: number | string;
@@ -46,13 +50,10 @@ export interface CodexInitializedNotification {
     params?: Record<string, never>;
 }
 
-export type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
-export type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
-
 export interface CodexDynamicToolDefinition {
     name: string;
     description?: string;
-    inputSchema: JSONValue;
+    inputSchema: Record<string, unknown>;
 }
 
 export interface CodexThreadStartParams {
