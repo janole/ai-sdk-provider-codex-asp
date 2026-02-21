@@ -1,5 +1,5 @@
 {
-  "name": "codex-ai-sdk-provider",
+  "name": "@janole/codex-ai-sdk-provider",
   "version": "0.1.0",
   "description": "Vercel AI SDK v6 custom provider for the Codex App Server Protocol.",
   "license": "MIT",
