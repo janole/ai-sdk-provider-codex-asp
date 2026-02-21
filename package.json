@@ -1,0 +1,71 @@
+{
+  "name": "codex-ai-sdk-provider",
+  "version": "0.1.0",
+  "description": "Vercel AI SDK v6 custom provider for the Codex App Server Protocol.",
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rimraf dist",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build && npm run typecheck && npm run test"
+  },
+  "keywords": [
+    "ai",
+    "sdk",
+    "vercel",
+    "provider",
+    "typescript",
+    "codex"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/codex-ai-sdk-provider.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/codex-ai-sdk-provider/issues"
+  },
+  "homepage": "https://github.com/your-org/codex-ai-sdk-provider#readme",
+  "peerDependencies": {
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@typescript-eslint/parser": "^8.25.0",
+    "eslint": "^9.21.0",
+    "eslint-config-prettier": "^10.0.1",
+    "prettier": "^3.5.2",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
