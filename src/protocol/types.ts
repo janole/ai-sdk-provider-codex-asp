@@ -1,0 +1,176 @@
+import type { JSONValue } from '@ai-sdk/provider';
+
+export interface JsonRpcMessageBase {
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
+}
+
+export interface CodexInitializeParams {
+  clientInfo: {
+    name: string;
+    version: string;
+    title?: string;
+  };
+  capabilities?: {
+    experimentalApi?: boolean;
+  };
+}
+
+export interface CodexInitializeResult {
+  serverInfo?: {
+    name: string;
+    version: string;
+  };
+}
+
+export interface CodexInitializedNotification {
+  method: 'initialized';
+  params?: Record<string, never>;
+}
+
+export interface CodexDynamicToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema: JSONValue;
+}
+
+export interface CodexThreadStartParams {
+  model?: string;
+  cwd?: string;
+  approvalMode?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
+  sandboxMode?: 'read-only' | 'workspace-write' | 'full-access';
+  dynamicTools?: CodexDynamicToolDefinition[];
+}
+
+export interface CodexThreadStartResult {
+  threadId: string;
+  tools?: CodexDynamicToolDefinition[];
+}
+
+export interface CodexTurnInputText {
+  type: 'inputText';
+  text: string;
+}
+
+export interface CodexTurnInputImage {
+  type: 'inputImage';
+  imageUrl: string;
+}
+
+export type CodexTurnInputItem = CodexTurnInputText | CodexTurnInputImage;
+
+export interface CodexTurnStartParams {
+  threadId: string;
+  input: CodexTurnInputItem[];
+}
+
+export interface CodexTurnStartResult {
+  turnId: string;
+}
+
+export interface CodexTurnStartedNotification {
+  method: 'turn/started';
+  params: {
+    threadId: string;
+    turnId: string;
+  };
+}
+
+export interface CodexTurnCompletedNotification {
+  method: 'turn/completed';
+  params: {
+    threadId: string;
+    turnId: string;
+    status: 'completed' | 'interrupted' | 'failed';
+  };
+}
+
+export interface CodexItemStartedNotification {
+  method: 'item/started';
+  params: {
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    itemType: string;
+  };
+}
+
+export interface CodexItemCompletedNotification {
+  method: 'item/completed';
+  params: {
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    itemType: string;
+  };
+}
+
+export interface CodexAgentMessageDeltaNotification {
+  method: 'item/agentMessage/delta';
+  params: {
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    delta: string;
+  };
+}
+
+export interface CodexToolCallStartedNotification {
+  method: 'item/tool/callStarted';
+  params: {
+    callId: string;
+    tool: string;
+  };
+}
+
+export interface CodexToolCallDeltaNotification {
+  method: 'item/tool/callDelta';
+  params: {
+    callId: string;
+    delta: string;
+  };
+}
+
+export interface CodexToolCallFinishedNotification {
+  method: 'item/tool/callFinished';
+  params: {
+    callId: string;
+  };
+}
+
+export interface CodexToolCallRequestParams {
+  threadId?: string;
+  turnId?: string;
+  callId?: string;
+  tool?: string;
+  toolName?: string;
+  arguments?: unknown;
+  input?: unknown;
+}
+
+export type CodexToolResultContentItem =
+  | { type: 'inputText'; text: string }
+  | { type: 'inputImage'; imageUrl: string };
+
+export interface CodexToolCallResult {
+  success: boolean;
+  contentItems: CodexToolResultContentItem[];
+}
+
+export type CodexNotification =
+  | CodexInitializedNotification
+  | CodexTurnStartedNotification
+  | CodexTurnCompletedNotification
+  | CodexItemStartedNotification
+  | CodexItemCompletedNotification
+  | CodexAgentMessageDeltaNotification
+  | CodexToolCallStartedNotification
+  | CodexToolCallDeltaNotification
+  | CodexToolCallFinishedNotification;

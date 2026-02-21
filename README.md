@@ -1,8 +1,14 @@
 # codex-ai-sdk-provider
 
-`codex-ai-sdk-provider` is a TypeScript library scaffold for building a custom provider for **Vercel AI SDK v6** that targets the **Codex App Server Protocol**.
+`codex-ai-sdk-provider` is a Vercel AI SDK v6 custom provider for the Codex App Server Protocol.
 
-This repository currently focuses on production-ready package infrastructure (build, tests, linting, formatting, and strict typing). The provider implementation is intentionally minimal and will be expanded in future steps.
+Status: POC feature-complete for language model usage.
+
+- `LanguageModelV3` provider implementation
+- `doStream` via Codex app-server lifecycle
+- `doGenerate` via stream aggregation
+- `stdio` and `websocket` transports
+- dynamicTools dispatcher (experimental)
 
 ## Installation
 
@@ -10,63 +16,170 @@ This repository currently focuses on production-ready package infrastructure (bu
 npm install codex-ai-sdk-provider ai
 ```
 
-## Basic Usage
+## Quick Start
+
+### 1. Non-streaming (`generateText`)
 
 ```ts
-import { createCodexProvider, createCodexStream } from 'codex-ai-sdk-provider';
+import { generateText } from 'ai';
+import { createCodexAppServer } from 'codex-ai-sdk-provider';
 
-const provider = createCodexProvider({
-  baseUrl: 'https://your-codex-server.example.com',
-  apiKey: process.env.CODEX_API_KEY,
+const codex = createCodexAppServer({
+  defaultModel: 'gpt-5.1-codex',
+  clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
-for await (const chunk of createCodexStream()) {
-  console.log(chunk);
-}
+const result = await generateText({
+  model: codex.languageModel('gpt-5.1-codex'),
+  prompt: 'Write a short release note title for websocket support.',
+});
 
-console.log(provider.name);
+console.log(result.text);
 ```
+
+### 2. Streaming (`streamText`)
+
+```ts
+import { streamText } from 'ai';
+import { createCodexAppServer } from 'codex-ai-sdk-provider';
+
+const codex = createCodexAppServer({
+  defaultModel: 'gpt-5.1-codex',
+  clientInfo: { name: 'my-app', version: '0.1.0' },
+});
+
+const result = streamText({
+  model: codex('gpt-5.1-codex'),
+  prompt: 'Explain JSON-RPC in one paragraph.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Transport Options
+
+### Stdio (default)
+
+Uses:
+
+```bash
+codex app-server --listen stdio://
+```
+
+Config:
+
+```ts
+const codex = createCodexAppServer({
+  transport: {
+    type: 'stdio',
+    stdio: {
+      command: 'codex',
+      args: ['app-server', '--listen', 'stdio://'],
+      cwd: process.cwd(),
+    },
+  },
+});
+```
+
+### WebSocket
+
+Connects to a running app-server websocket endpoint.
+
+```ts
+const codex = createCodexAppServer({
+  transport: {
+    type: 'websocket',
+    websocket: {
+      url: 'ws://localhost:3000',
+      headers: {
+        Authorization: 'Bearer <token>',
+      },
+    },
+  },
+});
+```
+
+## dynamicTools (Experimental)
+
+Codex can send inbound `item/tool/call` requests to the client. Register handlers with `toolHandlers`.
+
+```ts
+import { streamText } from 'ai';
+import { createCodexAppServer } from 'codex-ai-sdk-provider';
+
+const codex = createCodexAppServer({
+  experimentalApi: true,
+  toolTimeoutMs: 30_000,
+  toolHandlers: {
+    lookup_ticket: async (args) => {
+      const id = (args as { id?: string }).id ?? 'unknown';
+      return {
+        success: true,
+        contentItems: [{ type: 'inputText', text: `Ticket ${id} is open.` }],
+      };
+    },
+  },
+});
+
+const result = streamText({
+  model: codex('gpt-5.1-codex'),
+  prompt: 'Check ticket ABC-123 and summarize status.',
+});
+```
+
+## API Reference
+
+`createCodexAppServer(settings?)`
+
+- `defaultModel?: string`
+- `clientInfo?: { name: string; version: string; title?: string }`
+- `experimentalApi?: boolean`
+- `defaultThreadSettings?: {`
+- `  cwd?: string`
+- `  approvalMode?: 'never' | 'on-request' | 'on-failure' | 'untrusted'`
+- `  sandboxMode?: 'read-only' | 'workspace-write' | 'full-access'`
+- `}`
+- `transport?: {`
+- `  type?: 'stdio' | 'websocket'`
+- `  stdio?: { command?: string; args?: string[]; cwd?: string; env?: NodeJS.ProcessEnv }`
+- `  websocket?: { url?: string; headers?: Record<string, string> }`
+- `}`
+- `toolHandlers?: Record<string, DynamicToolHandler>`
+- `toolTimeoutMs?: number` (default `30000`)
+- `transportFactory?: () => CodexTransport` (advanced testing/injection)
+
+Provider methods:
+
+- `provider(modelId)`
+- `provider.languageModel(modelId)`
+- `provider.chat(modelId)`
+
+## Examples
+
+- Basic local stdio generation: see tests `tests/model.stream.test.ts`
+- WebSocket transport exchange: see `tests/transport-websocket.test.ts`
+- Dynamic tool dispatching: see `tests/dynamic-tools.test.ts`
+
+## Troubleshooting
+
+- `No such file or command: codex`:
+  - Install Codex CLI and ensure `codex` is in `PATH`.
+- `WebSocket is not available in this runtime`:
+  - Use Node.js 18+ with global WebSocket support, or use `stdio` transport.
+- Request timeouts:
+  - Increase `toolTimeoutMs` for long-running dynamic tools.
+- Empty generated text:
+  - Verify Codex emits `item/agentMessage/delta` and `turn/completed` notifications.
 
 ## Development
 
-### Prerequisites
-
-- Node.js 18+
-- npm 9+
-
-### Setup
-
 ```bash
 npm install
-```
-
-### Scripts
-
-- `npm run build` - bundle to `dist/` using `tsup`
-- `npm run dev` - watch mode build
-- `npm run typecheck` - TypeScript checks with strict settings
-- `npm run test` - run test suite with Vitest
-- `npm run test:watch` - run tests in watch mode
-- `npm run lint` - lint code with ESLint
-- `npm run lint:fix` - auto-fix lint issues
-- `npm run format` - check formatting with Prettier
-- `npm run format:write` - write formatting with Prettier
-
-## Publishing
-
-`prepublishOnly` runs clean build, typecheck, and tests before publish.
-
-Before first publish, update metadata fields in `package.json`:
-
-- `author`
-- `repository.url`
-- `bugs.url`
-- `homepage`
-
-Then publish:
-
-```bash
-npm publish --access public
+npm run typecheck
+npm run test
+npm run build
 ```
 
 ## License
