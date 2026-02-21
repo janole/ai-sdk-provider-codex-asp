@@ -46,6 +46,12 @@ export interface CodexInitializedNotification {
     params?: Record<string, never>;
 }
 
+// Copied from generated v2/AskForApproval.ts
+export type AskForApproval = "untrusted" | "on-failure" | "on-request" | "never";
+
+// Copied from generated v2/SandboxMode.ts
+export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
 export interface CodexDynamicToolDefinition {
     name: string;
     description?: string;
@@ -55,8 +61,8 @@ export interface CodexDynamicToolDefinition {
 export interface CodexThreadStartParams {
     model?: string;
     cwd?: string;
-    approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+    approvalPolicy?: AskForApproval;
+    sandbox?: SandboxMode;
     dynamicTools?: CodexDynamicToolDefinition[];
 }
 

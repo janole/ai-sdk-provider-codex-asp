@@ -36,6 +36,7 @@ export type { CodexEventMapperInput } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
 export { mapPromptToTurnInput } from "./protocol/prompt-mapper";
 export type {
+    AskForApproval,
     CodexAgentMessageDeltaNotification,
     CodexDynamicToolDefinition,
     CodexInitializedNotification,
@@ -63,6 +64,7 @@ export type {
     CodexTurnStartParams,
     CodexTurnStartResult,
     JsonRpcMessageBase,
+    SandboxMode,
 } from "./protocol/types";
 export type {
     CodexProvider,

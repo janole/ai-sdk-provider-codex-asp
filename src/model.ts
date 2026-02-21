@@ -24,11 +24,13 @@ import { CodexProviderError } from "./errors";
 import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput } from "./protocol/prompt-mapper";
 import type {
+    AskForApproval,
     CodexInitializeParams,
     CodexInitializeResult,
     CodexThreadStartParams,
     CodexThreadStartResult,
     CodexTurnStartResult,
+    SandboxMode,
 } from "./protocol/types";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -38,8 +40,8 @@ export interface CodexLanguageModelSettings {
 
 export interface CodexThreadDefaults {
     cwd?: string;
-    approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+    approvalPolicy?: AskForApproval;
+    sandbox?: SandboxMode;
 }
 
 export interface CodexModelConfig {
