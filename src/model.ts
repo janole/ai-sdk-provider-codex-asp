@@ -38,8 +38,8 @@ export interface CodexLanguageModelSettings {
 
 export interface CodexThreadDefaults {
     cwd?: string;
-    approvalMode?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandboxMode?: "read-only" | "workspace-write" | "full-access";
+    approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
+    sandbox?: "read-only" | "workspace-write" | "full-access";
 }
 
 export interface CodexModelConfig {
@@ -405,16 +405,16 @@ export class CodexLanguageModel implements LanguageModelV3
                             ...(this.config.providerSettings.defaultThreadSettings?.cwd
                                 ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
                                 : {}),
-                            ...(this.config.providerSettings.defaultThreadSettings?.approvalMode
+                            ...(this.config.providerSettings.defaultThreadSettings?.approvalPolicy
                                 ? {
-                                    approvalMode:
-                      this.config.providerSettings.defaultThreadSettings.approvalMode,
+                                    approvalPolicy:
+                      this.config.providerSettings.defaultThreadSettings.approvalPolicy,
                                 }
                                 : {}),
-                            ...(this.config.providerSettings.defaultThreadSettings?.sandboxMode
+                            ...(this.config.providerSettings.defaultThreadSettings?.sandbox
                                 ? {
-                                    sandboxMode:
-                      this.config.providerSettings.defaultThreadSettings.sandboxMode,
+                                    sandbox:
+                      this.config.providerSettings.defaultThreadSettings.sandbox,
                                 }
                                 : {}),
                         };

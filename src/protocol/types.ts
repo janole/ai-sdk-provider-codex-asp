@@ -55,8 +55,8 @@ export interface CodexDynamicToolDefinition {
 export interface CodexThreadStartParams {
     model?: string;
     cwd?: string;
-    approvalMode?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandboxMode?: "read-only" | "workspace-write" | "full-access";
+    approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
+    sandbox?: "read-only" | "workspace-write" | "full-access";
     dynamicTools?: CodexDynamicToolDefinition[];
 }
 
