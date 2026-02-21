@@ -25,6 +25,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "codex:generate-types": "codex app-server generate-ts --experimental -o src/protocol/app-server-protocol",
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rimraf dist",

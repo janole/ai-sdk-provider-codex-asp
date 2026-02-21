@@ -20,6 +20,6 @@
     "resolveJsonModule": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "tests", "examples", "vitest.config.ts", "tsup.config.ts"],
+  "include": ["src", "tests", "examples", "vitest.config.ts", "tsup.config.ts", "src/protocol/app-server-protocol"],
   "exclude": ["dist", "node_modules"]
 }

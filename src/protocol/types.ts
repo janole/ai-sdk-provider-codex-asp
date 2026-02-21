@@ -1,3 +1,14 @@
+/**
+ * Hand-maintained subset of the Codex app-server protocol types.
+ *
+ * Only includes types this provider actively uses. When adding new types,
+ * check the full generated set first:
+ *
+ *   npm run codex:generate-types
+ *
+ * The generated types land in src/protocol/app-server-protocol/ (gitignored)
+ * and serve as the authoritative reference. V2 types (camelCase) are in the v2/ subdirectory.
+ */
 import type { JSONValue } from "@ai-sdk/provider";
 
 export interface JsonRpcMessageBase {
