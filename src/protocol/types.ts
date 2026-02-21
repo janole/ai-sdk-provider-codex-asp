@@ -46,11 +46,8 @@ export interface CodexInitializedNotification {
     params?: Record<string, never>;
 }
 
-// Copied from generated v2/AskForApproval.ts
-export type AskForApproval = "untrusted" | "on-failure" | "on-request" | "never";
-
-// Copied from generated v2/SandboxMode.ts
-export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
+export type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
 
 export interface CodexDynamicToolDefinition {
     name: string;
