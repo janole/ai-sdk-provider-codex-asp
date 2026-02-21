@@ -39,7 +39,7 @@ export interface CodexLanguageModelSettings {
 export interface CodexThreadDefaults {
     cwd?: string;
     approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandbox?: "read-only" | "workspace-write" | "full-access";
+    sandbox?: "read-only" | "workspace-write" | "danger-full-access";
 }
 
 export interface CodexModelConfig {

@@ -56,7 +56,7 @@ export interface CodexThreadStartParams {
     model?: string;
     cwd?: string;
     approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted";
-    sandbox?: "read-only" | "workspace-write" | "full-access";
+    sandbox?: "read-only" | "workspace-write" | "danger-full-access";
     dynamicTools?: CodexDynamicToolDefinition[];
 }
 
