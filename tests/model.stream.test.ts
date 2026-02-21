@@ -21,7 +21,13 @@ class ScriptedTransport extends MockTransport
             return;
         }
 
-        if (message.method === "thread/start") 
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
+            return;
+        }
+
+        if (message.method === "thread/resume")
         {
             this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
             return;
@@ -136,6 +142,7 @@ describe("CodexLanguageModel.doStream", () =>
                         reasoning: undefined,
                     },
                 },
+                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
             },
         ]);
 
@@ -153,5 +160,44 @@ describe("CodexLanguageModel.doStream", () =>
         expect(turnStartMessage?.params).toMatchObject({
             input: [{ type: "text", text: "hi", text_elements: [] }],
         });
+    });
+
+    it("resumes an existing thread when providerMetadata carries a threadId", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        const model = provider.languageModel("gpt-5.1-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { "codex-app-server": { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual(["initialize", "initialized", "thread/resume", "turn/start"]);
+
+        const resumeMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/resume",
+        );
+        expect(resumeMessage?.params).toMatchObject({ threadId: "thr_existing" });
     });
 });

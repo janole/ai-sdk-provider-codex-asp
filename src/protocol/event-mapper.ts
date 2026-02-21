@@ -52,10 +52,16 @@ function toFinishReason(status: TurnCompletedLike["status"]): LanguageModelV3Fin
     }
 }
 
-export class CodexEventMapper 
+export class CodexEventMapper
 {
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
+    private threadId: string | undefined;
+
+    setThreadId(threadId: string): void
+    {
+        this.threadId = threadId;
+    }
 
     map(event: CodexEventMapperInput): LanguageModelV3StreamPart[] 
     {
@@ -158,6 +164,9 @@ export class CodexEventMapper
                     type: "finish",
                     finishReason: toFinishReason(completed.status),
                     usage: EMPTY_USAGE,
+                    ...(this.threadId
+                        ? { providerMetadata: { "codex-app-server": { threadId: this.threadId } } }
+                        : {}),
                 });
                 break;
             }

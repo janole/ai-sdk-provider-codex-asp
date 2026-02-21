@@ -69,6 +69,18 @@ export interface CodexThreadStartResult {
     tools?: CodexDynamicToolDefinition[];
 }
 
+export interface CodexThreadResumeParams {
+    threadId: string;
+    persistExtendedHistory: boolean;
+}
+
+export interface CodexThreadResumeResult {
+    thread?: {
+        id?: string;
+    };
+    threadId?: string;
+}
+
 export interface CodexTurnInputText {
     type: "text";
     text: string;

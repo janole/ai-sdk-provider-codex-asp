@@ -27,6 +27,8 @@ import type {
     AskForApproval,
     CodexInitializeParams,
     CodexInitializeResult,
+    CodexThreadResumeParams,
+    CodexThreadResumeResult,
     CodexThreadStartParams,
     CodexThreadStartResult,
     CodexTurnStartResult,
@@ -119,6 +121,23 @@ function extractTurnId(result: TurnStartResultLike): string
         throw new CodexProviderError("turn/start response does not include a turn id.");
     }
     return turnId;
+}
+
+function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): string | undefined
+{
+    for (let i = prompt.length - 1; i >= 0; i--)
+    {
+        const message = prompt[i];
+        if (message?.role === "assistant")
+        {
+            const meta = message.providerOptions?.["codex-app-server"];
+            if (meta && typeof meta["threadId"] === "string")
+            {
+                return meta["threadId"];
+            }
+        }
+    }
+    return undefined;
 }
 
 function isPassThroughContentPart(
@@ -401,31 +420,51 @@ export class CodexLanguageModel implements LanguageModelV3
                             }))
                             : undefined;
 
-                        const threadStartParams: CodexThreadStartParams = {
-                            model: this.config.providerSettings.defaultModel ?? this.modelId,
-                            ...(dynamicTools ? { dynamicTools } : {}),
-                            ...(this.config.providerSettings.defaultThreadSettings?.cwd
-                                ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
-                                : {}),
-                            ...(this.config.providerSettings.defaultThreadSettings?.approvalPolicy
-                                ? {
-                                    approvalPolicy:
-                      this.config.providerSettings.defaultThreadSettings.approvalPolicy,
-                                }
-                                : {}),
-                            ...(this.config.providerSettings.defaultThreadSettings?.sandbox
-                                ? {
-                                    sandbox:
-                      this.config.providerSettings.defaultThreadSettings.sandbox,
-                                }
-                                : {}),
-                        };
+                        const resumeThreadId = extractResumeThreadId(options.prompt);
 
-                        const threadStartResult = await client.request<ThreadStartResultLike>(
-                            "thread/start",
-                            threadStartParams,
-                        );
-                        const threadId = extractThreadId(threadStartResult);
+                        let threadId: string;
+
+                        if (resumeThreadId)
+                        {
+                            const resumeParams: CodexThreadResumeParams = {
+                                threadId: resumeThreadId,
+                                persistExtendedHistory: false,
+                            };
+                            const resumeResult = await client.request<CodexThreadResumeResult>(
+                                "thread/resume",
+                                resumeParams,
+                            );
+                            threadId = resumeResult.threadId ?? resumeResult.thread?.id ?? resumeThreadId;
+                        }
+                        else
+                        {
+                            const threadStartParams: CodexThreadStartParams = {
+                                model: this.config.providerSettings.defaultModel ?? this.modelId,
+                                ...(dynamicTools ? { dynamicTools } : {}),
+                                ...(this.config.providerSettings.defaultThreadSettings?.cwd
+                                    ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
+                                    : {}),
+                                ...(this.config.providerSettings.defaultThreadSettings?.approvalPolicy
+                                    ? {
+                                        approvalPolicy:
+                          this.config.providerSettings.defaultThreadSettings.approvalPolicy,
+                                    }
+                                    : {}),
+                                ...(this.config.providerSettings.defaultThreadSettings?.sandbox
+                                    ? {
+                                        sandbox:
+                          this.config.providerSettings.defaultThreadSettings.sandbox,
+                                    }
+                                    : {}),
+                            };
+                            const threadStartResult = await client.request<ThreadStartResultLike>(
+                                "thread/start",
+                                threadStartParams,
+                            );
+                            threadId = extractThreadId(threadStartResult);
+                        }
+
+                        mapper.setThreadId(threadId);
 
                         const turnStartResult = await client.request<TurnStartResultLike>("turn/start", {
                             threadId,

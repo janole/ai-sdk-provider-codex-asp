@@ -45,6 +45,8 @@ export type {
     CodexItemCompletedNotification,
     CodexItemStartedNotification,
     CodexNotification,
+    CodexThreadResumeParams,
+    CodexThreadResumeResult,
     CodexThreadStartParams,
     CodexThreadStartResult,
     CodexToolCallDeltaNotification,
