@@ -1,89 +1,89 @@
-import type { JSONValue } from '@ai-sdk/provider';
+import type { JSONValue } from "@ai-sdk/provider";
 
 export interface JsonRpcMessageBase {
-  id?: number | string;
-  method?: string;
-  params?: unknown;
-  result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
+    id?: number | string;
+    method?: string;
+    params?: unknown;
+    result?: unknown;
+    error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+    };
 }
 
 export interface CodexInitializeParams {
-  clientInfo: {
-    name: string;
-    version: string;
-    title?: string;
-  };
-  capabilities?: {
-    experimentalApi?: boolean;
-  };
+    clientInfo: {
+        name: string;
+        version: string;
+        title?: string;
+    };
+    capabilities?: {
+        experimentalApi?: boolean;
+    };
 }
 
 export interface CodexInitializeResult {
-  serverInfo?: {
-    name: string;
-    version: string;
-  };
+    serverInfo?: {
+        name: string;
+        version: string;
+    };
 }
 
 export interface CodexInitializedNotification {
-  method: 'initialized';
-  params?: Record<string, never>;
+    method: "initialized";
+    params?: Record<string, never>;
 }
 
 export interface CodexDynamicToolDefinition {
-  name: string;
-  description?: string;
-  inputSchema: JSONValue;
+    name: string;
+    description?: string;
+    inputSchema: JSONValue;
 }
 
 export interface CodexThreadStartParams {
-  model?: string;
-  cwd?: string;
-  approvalMode?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
-  sandboxMode?: 'read-only' | 'workspace-write' | 'full-access';
-  dynamicTools?: CodexDynamicToolDefinition[];
+    model?: string;
+    cwd?: string;
+    approvalMode?: "never" | "on-request" | "on-failure" | "untrusted";
+    sandboxMode?: "read-only" | "workspace-write" | "full-access";
+    dynamicTools?: CodexDynamicToolDefinition[];
 }
 
 export interface CodexThreadStartResult {
-  threadId: string;
-  tools?: CodexDynamicToolDefinition[];
+    threadId: string;
+    tools?: CodexDynamicToolDefinition[];
 }
 
 export interface CodexTurnInputText {
-  type: 'text';
-  text: string;
-  text_elements: Array<{
-    start: number;
-    end: number;
-    type: 'mention' | 'skill';
-  }>;
+    type: "text";
+    text: string;
+    text_elements: Array<{
+        start: number;
+        end: number;
+        type: "mention" | "skill";
+    }>;
 }
 
 export interface CodexTurnInputImage {
-  type: 'image';
-  url: string;
+    type: "image";
+    url: string;
 }
 
 export interface CodexTurnInputLocalImage {
-  type: 'localImage';
-  path: string;
+    type: "localImage";
+    path: string;
 }
 
 export interface CodexTurnInputSkill {
-  type: 'skill';
-  name: string;
-  path: string;
+    type: "skill";
+    name: string;
+    path: string;
 }
 
 export interface CodexTurnInputMention {
-  type: 'mention';
-  name: string;
-  path: string;
+    type: "mention";
+    name: string;
+    path: string;
 }
 
 export type CodexTurnInputItem =
@@ -94,101 +94,101 @@ export type CodexTurnInputItem =
   | CodexTurnInputMention;
 
 export interface CodexTurnStartParams {
-  threadId: string;
-  input: CodexTurnInputItem[];
+    threadId: string;
+    input: CodexTurnInputItem[];
 }
 
 export interface CodexTurnStartResult {
-  turnId: string;
+    turnId: string;
 }
 
 export interface CodexTurnStartedNotification {
-  method: 'turn/started';
-  params: {
-    threadId: string;
-    turnId: string;
-  };
+    method: "turn/started";
+    params: {
+        threadId: string;
+        turnId: string;
+    };
 }
 
 export interface CodexTurnCompletedNotification {
-  method: 'turn/completed';
-  params: {
-    threadId: string;
-    turnId: string;
-    status: 'completed' | 'interrupted' | 'failed';
-  };
+    method: "turn/completed";
+    params: {
+        threadId: string;
+        turnId: string;
+        status: "completed" | "interrupted" | "failed";
+    };
 }
 
 export interface CodexItemStartedNotification {
-  method: 'item/started';
-  params: {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    itemType: string;
-  };
+    method: "item/started";
+    params: {
+        threadId: string;
+        turnId: string;
+        itemId: string;
+        itemType: string;
+    };
 }
 
 export interface CodexItemCompletedNotification {
-  method: 'item/completed';
-  params: {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    itemType: string;
-  };
+    method: "item/completed";
+    params: {
+        threadId: string;
+        turnId: string;
+        itemId: string;
+        itemType: string;
+    };
 }
 
 export interface CodexAgentMessageDeltaNotification {
-  method: 'item/agentMessage/delta';
-  params: {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    delta: string;
-  };
+    method: "item/agentMessage/delta";
+    params: {
+        threadId: string;
+        turnId: string;
+        itemId: string;
+        delta: string;
+    };
 }
 
 export interface CodexToolCallStartedNotification {
-  method: 'item/tool/callStarted';
-  params: {
-    callId: string;
-    tool: string;
-  };
+    method: "item/tool/callStarted";
+    params: {
+        callId: string;
+        tool: string;
+    };
 }
 
 export interface CodexToolCallDeltaNotification {
-  method: 'item/tool/callDelta';
-  params: {
-    callId: string;
-    delta: string;
-  };
+    method: "item/tool/callDelta";
+    params: {
+        callId: string;
+        delta: string;
+    };
 }
 
 export interface CodexToolCallFinishedNotification {
-  method: 'item/tool/callFinished';
-  params: {
-    callId: string;
-  };
+    method: "item/tool/callFinished";
+    params: {
+        callId: string;
+    };
 }
 
 export interface CodexToolCallRequestParams {
-  threadId?: string;
-  turnId?: string;
-  callId?: string;
-  tool?: string;
-  toolName?: string;
-  arguments?: unknown;
-  input?: unknown;
+    threadId?: string;
+    turnId?: string;
+    callId?: string;
+    tool?: string;
+    toolName?: string;
+    arguments?: unknown;
+    input?: unknown;
 }
 
 export type CodexToolResultContentItem =
-  | { type: 'inputText'; text: string }
-  | { type: 'inputImage'; imageUrl: string };
+  | { type: "inputText"; text: string }
+  | { type: "inputImage"; imageUrl: string };
 
 export interface CodexToolCallResult {
-  success: boolean;
-  contentItems: CodexToolResultContentItem[];
+    success: boolean;
+    contentItems: CodexToolResultContentItem[];
 }
 
 export type CodexNotification =
