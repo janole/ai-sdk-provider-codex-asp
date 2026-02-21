@@ -36,11 +36,11 @@ export class StdioTransport implements CodexTransport
         this.settings = settings;
     }
 
-    async connect(): Promise<void> 
+    connect(): Promise<void>
     {
-        if (this.process !== null) 
+        if (this.process !== null)
         {
-            return;
+            return Promise.resolve();
         }
 
         const options: SpawnOptionsWithoutStdio = {
@@ -74,11 +74,13 @@ export class StdioTransport implements CodexTransport
             this.emit("error", error);
         });
 
-        child.on("close", (code, signal) => 
+        child.on("close", (code, signal) =>
         {
             this.process = null;
             this.emit("close", code, signal);
         });
+
+        return Promise.resolve();
     }
 
     async disconnect(): Promise<void> 

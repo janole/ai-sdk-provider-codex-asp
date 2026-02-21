@@ -120,7 +120,7 @@ describe("DynamicToolsDispatcher", () =>
         const client = new AppServerClient(transport);
         const dispatcher = new DynamicToolsDispatcher({
             handlers: {
-                lookup: async (args) => ({
+                lookup: (args) => Promise.resolve({
                     success: true,
                     contentItems: [{ type: "inputText", text: `ok:${JSON.stringify(args)}` }],
                 }),
@@ -173,10 +173,7 @@ describe("DynamicToolsDispatcher", () =>
     {
         const dispatcher = new DynamicToolsDispatcher({
             handlers: {
-                broken: async () =>
-                {
-                    throw new Error("boom");
-                },
+                broken: () => Promise.reject(new Error("boom")),
             },
             timeoutMs: 100,
         });
@@ -212,7 +209,7 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
             experimentalApi: true,
             transportFactory: () => transport,
             toolHandlers: {
-                lookup: async (args) => ({
+                lookup: (args) => Promise.resolve({
                     success: true,
                     contentItems: [{ type: "inputText", text: `lookup:${JSON.stringify(args)}` }],
                 }),

@@ -17,25 +17,31 @@ export class MockTransport implements CodexTransport
         close: new Set(),
     };
 
-    async connect(): Promise<void> 
+    connect(): Promise<void>
     {
         this.connected = true;
+
+        return Promise.resolve();
     }
 
-    async disconnect(): Promise<void> 
+    disconnect(): Promise<void>
     {
         this.connected = false;
         this.emit("close", null, null);
+
+        return Promise.resolve();
     }
 
-    async sendMessage(message: JsonRpcMessage): Promise<void> 
+    sendMessage(message: JsonRpcMessage): Promise<void>
     {
-        if (!this.connected) 
+        if (!this.connected)
         {
-            throw new Error("MockTransport is not connected.");
+            return Promise.reject(new Error("MockTransport is not connected."));
         }
 
         this.sentMessages.push(message);
+
+        return Promise.resolve();
     }
 
     async sendNotification(method: string, params?: unknown): Promise<void> 

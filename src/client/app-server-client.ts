@@ -39,7 +39,7 @@ type AnyNotificationHandler = (
 type RequestHandler = (
     params: unknown,
     request: JsonRpcRequest,
-) => unknown | Promise<unknown>;
+) => unknown;
 type ToolCallRequestHandler = (
     params: CodexToolCallRequestParams,
     request: JsonRpcRequest,

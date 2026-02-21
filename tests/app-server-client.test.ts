@@ -58,10 +58,7 @@ describe("AppServerClient", () =>
 
         await client.connect();
 
-        client.onRequest("item/tool/call", async (params) => 
-        {
-            return { ok: true, params };
-        });
+        client.onRequest("item/tool/call", (params) => ({ ok: true, params }));
 
         transport.emitMessage({
             id: 99,

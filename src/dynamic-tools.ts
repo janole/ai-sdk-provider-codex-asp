@@ -44,10 +44,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T>
                 clearTimeout(timer);
                 resolve(value);
             })
-            .catch((error) => 
+            .catch((error) =>
             {
                 clearTimeout(timer);
-                reject(error);
+                reject(error instanceof Error ? error : new Error(String(error)));
             });
     });
 }

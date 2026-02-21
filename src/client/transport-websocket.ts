@@ -123,14 +123,16 @@ export class WebSocketTransport implements CodexTransport
         this.socket = null;
     }
 
-    async sendMessage(message: JsonRpcMessage): Promise<void> 
+    sendMessage(message: JsonRpcMessage): Promise<void>
     {
-        if (!this.socket || this.socket.readyState !== this.socket.OPEN) 
+        if (!this.socket || this.socket.readyState !== this.socket.OPEN)
         {
-            throw new Error("WebSocketTransport is not connected.");
+            return Promise.reject(new Error("WebSocketTransport is not connected."));
         }
 
         this.socket.send(JSON.stringify(message));
+
+        return Promise.resolve();
     }
 
     async sendNotification(method: string, params?: unknown): Promise<void> 

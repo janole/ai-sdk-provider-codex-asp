@@ -28,9 +28,9 @@ class MockGenerateModel extends CodexLanguageModel
         super("gpt-5.1-codex", {}, { provider: "codex-app-server", providerSettings: {} });
     }
 
-    override async doStream(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> 
+    override doStream(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
-        return this.result;
+        return Promise.resolve(this.result);
     }
 }
 

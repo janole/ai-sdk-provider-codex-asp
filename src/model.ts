@@ -30,8 +30,9 @@ import type {
     CodexTurnStartResult,
 } from "./protocol/types";
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CodexLanguageModelSettings {
-    // PR3 keeps model-level settings intentionally minimal.
+    // intentionally empty — settings will be added as the API evolves
 }
 
 export interface CodexThreadDefaults {
@@ -261,7 +262,7 @@ export class CodexLanguageModel implements LanguageModelV3
         };
     }
 
-    async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> 
+    doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> 
     {
         const transport = this.config.providerSettings.transportFactory
             ? this.config.providerSettings.transportFactory()
@@ -428,6 +429,6 @@ export class CodexLanguageModel implements LanguageModelV3
             },
         });
 
-        return { stream };
+        return Promise.resolve({ stream });
     }
 }

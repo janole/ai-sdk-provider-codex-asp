@@ -8,32 +8,32 @@ const codex = createCodexAppServer({
 
     // Register your tool handlers
     toolHandlers: {
-        lookup_ticket: async (args, context) =>
+        lookup_ticket: (args, context) =>
         {
             const id = (args as { id?: string }).id ?? "unknown";
             console.log(`[${context.threadId}] Looking up ticket: ${id}`);
 
-            return {
+            return Promise.resolve({
                 success: true,
                 contentItems: [{
                     type: "inputText",
                     text: `Ticket ${id} is open and assigned to team Alpha.`,
                 }],
-            };
+            });
         },
 
-        check_weather: async (args, context) =>
+        check_weather: (args, context) =>
         {
             const location = (args as { location?: string }).location ?? "unknown";
             console.log(`[${context.turnId}] Checking weather in: ${location}`);
 
-            return {
+            return Promise.resolve({
                 success: true,
                 contentItems: [{
                     type: "inputText",
                     text: `Weather in ${location}: 22°C, sunny ☀️`,
                 }],
-            };
+            });
         },
     },
 
@@ -44,7 +44,7 @@ const codex = createCodexAppServer({
 });
 
 // Codex can now call these tools during generation
-const result = await streamText({
+const result = streamText({
     model: codex("gpt-5.3-codex"),
     prompt: "Can you check ticket 15 with the lookup_ticket tool?",
 });
