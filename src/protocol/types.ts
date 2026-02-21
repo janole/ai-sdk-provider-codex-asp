@@ -55,16 +55,43 @@ export interface CodexThreadStartResult {
 }
 
 export interface CodexTurnInputText {
-  type: 'inputText';
+  type: 'text';
   text: string;
+  text_elements: Array<{
+    start: number;
+    end: number;
+    type: 'mention' | 'skill';
+  }>;
 }
 
 export interface CodexTurnInputImage {
-  type: 'inputImage';
-  imageUrl: string;
+  type: 'image';
+  url: string;
 }
 
-export type CodexTurnInputItem = CodexTurnInputText | CodexTurnInputImage;
+export interface CodexTurnInputLocalImage {
+  type: 'localImage';
+  path: string;
+}
+
+export interface CodexTurnInputSkill {
+  type: 'skill';
+  name: string;
+  path: string;
+}
+
+export interface CodexTurnInputMention {
+  type: 'mention';
+  name: string;
+  path: string;
+}
+
+export type CodexTurnInputItem =
+  | CodexTurnInputText
+  | CodexTurnInputImage
+  | CodexTurnInputLocalImage
+  | CodexTurnInputSkill
+  | CodexTurnInputMention;
 
 export interface CodexTurnStartParams {
   threadId: string;

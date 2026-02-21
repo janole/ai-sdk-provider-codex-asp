@@ -132,5 +132,14 @@ describe('CodexLanguageModel.doStream', () => {
       .map((message) => message.method);
 
     expect(methods).toEqual(['initialize', 'initialized', 'thread/start', 'turn/start']);
+
+    const turnStartMessage = transport.sentMessages.find(
+      (message): message is { method: string; params?: unknown } =>
+        'method' in message && message.method === 'turn/start',
+    );
+    expect(turnStartMessage).toBeDefined();
+    expect(turnStartMessage?.params).toMatchObject({
+      input: [{ type: 'text', text: 'hi', text_elements: [] }],
+    });
   });
 });

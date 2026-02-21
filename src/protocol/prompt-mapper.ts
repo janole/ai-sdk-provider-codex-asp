@@ -3,7 +3,7 @@ import type { LanguageModelV3Prompt } from '@ai-sdk/provider';
 import type { CodexTurnInputItem } from './types';
 
 /**
- * Minimal POC mapper: flattens system and user text parts into a single inputText item.
+ * Minimal POC mapper: flattens system and user text parts into a single text input item.
  */
 export function mapPromptToTurnInput(prompt: LanguageModelV3Prompt): CodexTurnInputItem[] {
   const chunks: string[] = [];
@@ -35,5 +35,5 @@ export function mapPromptToTurnInput(prompt: LanguageModelV3Prompt): CodexTurnIn
     }
   }
 
-  return [{ type: 'inputText', text: chunks.join('\n\n') }];
+  return [{ type: 'text', text: chunks.join('\n\n'), text_elements: [] }];
 }
