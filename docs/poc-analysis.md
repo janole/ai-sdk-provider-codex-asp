@@ -1,6 +1,6 @@
 # PoC Analysis: codex-ai-sdk-provider
 
-_Compared against the working implementation in `chat-server/packages/ai-tools/codex/`._
+_Compared against the working implementation in `@janole/chat-server/packages/ai-tools/codex/`._
 
 ---
 
@@ -17,13 +17,13 @@ from the `ai` package can drop it in with zero changes to its AI layer.
 │  CodexLanguageModel  (LanguageModelV3)                  │
 │   doGenerate()  ──────────────────────────┐             │
 │   doStream()  ─────────────────────────┐  │ (aggregates)│
-├───────────────────────────────────────┼──┴─────────────┤
-│  AppServerClient  (JSON-RPC 2.0)      │                 │
-│   request / notification / onRequest  │                 │
-├───────────────────────────────────────┼─────────────────┤
-│  Transport layer                      │                 │
-│   StdioTransport  │  WebSocketTransport│                 │
-└───────────────────┴────────────────────┘
+├────────────────────────────────────────┼──┴─────────────┤
+│  AppServerClient  (JSON-RPC 2.0)       │                │
+│   request / notification / onRequest   │                │
+├────────────────────────────────────────┼────────────────┤
+│  Transport layer                       │                │
+│   StdioTransport  │ WebSocketTransport │                │
+└───────────────────┴────────────────────┴────────────────┘
          │ stdin/stdout or WebSocket
          ▼
     codex app-server
@@ -157,9 +157,9 @@ The two implementations serve very different purposes and operate at different l
 │   WorkspaceManager  (git clones, state machine)     │
 ├─────────────────────────────────────────────────────┤
 │  CodexWorker  (one process per worker, persistent)  │
-│   JSON-RPC over stdin/stdout (line-delimited)        │
-│   Approval interrupt/resume state machine            │
-│   Tool call routing → codex-document-tools           │
+│   JSON-RPC over stdin/stdout (line-delimited)       │
+│   Approval interrupt/resume state machine           │
+│   Tool call routing → codex-document-tools          │
 ├─────────────────────────────────────────────────────┤
 │  codex app-server  (long-lived process per worker)  │
 └─────────────────────────────────────────────────────┘
