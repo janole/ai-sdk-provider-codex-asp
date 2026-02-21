@@ -1,6 +1,6 @@
 import { streamText } from "ai";
 
-import { createCodexAppServer } from "./provider";
+import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
     defaultModel: "gpt-5.3-codex",

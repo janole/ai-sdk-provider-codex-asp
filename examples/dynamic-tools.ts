@@ -1,6 +1,6 @@
 import { streamText } from "ai";
 
-import { createCodexAppServer } from "./provider";
+import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
     // Enable experimental API (required for dynamicTools)
