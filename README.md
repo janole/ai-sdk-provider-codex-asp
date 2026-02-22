@@ -146,6 +146,12 @@ const result = streamText({
 - `  stdio?: { command?: string; args?: string[]; cwd?: string; env?: NodeJS.ProcessEnv }`
 - `  websocket?: { url?: string; headers?: Record<string, string> }`
 - `}`
+- `persistent?: {`
+- `  poolSize?: number`
+- `  idleTimeoutMs?: number`
+- `  scope?: 'provider' | 'global'` (default `'provider'`)
+- `  key?: string` (global pool key, default `'default'`)
+- `}`
 - `toolHandlers?: Record<string, DynamicToolHandler>`
 - `toolTimeoutMs?: number` (default `30000`)
 - `transportFactory?: () => CodexTransport` (advanced testing/injection)

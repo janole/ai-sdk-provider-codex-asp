@@ -1,12 +1,15 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
 import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
+import {
+    acquirePersistentPool,
+    type PersistentPoolHandle,
+} from "./client/persistent-pool-registry";
 import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import { WebSocketTransport } from "./client/transport-websocket";
-import { CodexWorkerPool } from "./client/worker-pool";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
 
@@ -39,6 +42,8 @@ export interface CodexProviderSettings {
     persistent?: {
         poolSize?: number;
         idleTimeoutMs?: number;
+        scope?: "provider" | "global";
+        key?: string;
     };
 }
 
@@ -64,30 +69,34 @@ export function createCodexAppServer(
     settings: CodexProviderSettings = {},
 ): CodexProvider 
 {
-    let pool: CodexWorkerPool | null = null;
+    let persistentPoolHandle: PersistentPoolHandle | null = null;
 
     const baseTransportFactory = settings.transportFactory;
 
     if (settings.persistent)
     {
+        const scope = settings.persistent.scope ?? "provider";
+        const poolSize = settings.persistent.poolSize ?? 1;
+        const idleTimeoutMs = settings.persistent.idleTimeoutMs ?? 300_000;
         const poolTransportFactory = baseTransportFactory
             ?? (settings.transport?.type === "websocket"
                 ? () => new WebSocketTransport(settings.transport?.websocket)
                 : () => new StdioTransport(settings.transport?.stdio));
 
-        pool = new CodexWorkerPool({
-            ...(settings.persistent.poolSize !== undefined
-                ? { poolSize: settings.persistent.poolSize }
+        persistentPoolHandle = acquirePersistentPool({
+            scope,
+            ...(settings.persistent.key !== undefined
+                ? { key: settings.persistent.key }
                 : {}),
+            poolSize,
+            idleTimeoutMs,
             transportFactory: poolTransportFactory,
-            ...(settings.persistent.idleTimeoutMs !== undefined
-                ? { idleTimeoutMs: settings.persistent.idleTimeoutMs }
-                : {}),
         });
     }
 
-    const effectiveTransportFactory = pool
-        ? () => new PersistentTransport({ pool: pool })
+    const persistentPool = persistentPoolHandle?.pool ?? null;
+    const effectiveTransportFactory = persistentPool
+        ? () => new PersistentTransport({ pool: persistentPool })
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze({
@@ -173,10 +182,14 @@ export function createCodexAppServer(
         },
         async shutdown(): Promise<void>
         {
-            if (pool)
+            if (!persistentPoolHandle)
             {
-                await pool.shutdown();
+                return;
             }
+
+            const handle = persistentPoolHandle;
+            persistentPoolHandle = null;
+            await handle.release();
         },
     });
 
