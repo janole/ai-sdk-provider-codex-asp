@@ -1,12 +1,21 @@
 import type {
     CodexTransport,
     CodexTransportEventMap,
+    JsonRpcId,
     JsonRpcMessage,
 } from "./transport";
 
 export interface CodexWorkerSettings {
     transportFactory: () => CodexTransport;
     idleTimeoutMs: number;
+}
+
+export interface PendingToolCall {
+    requestId: JsonRpcId;
+    callId: string;
+    toolName: string;
+    args: unknown;
+    threadId: string;
 }
 
 type SessionListenerEntry<K extends keyof CodexTransportEventMap> = {
@@ -20,6 +29,7 @@ export class CodexWorker
     state: "idle" | "busy" | "disconnected" = "disconnected";
     initialized = false;
     initializeResult: unknown = undefined;
+    pendingToolCall: PendingToolCall | null = null;
 
     private inner: CodexTransport | null = null;
     private readonly settings: CodexWorkerSettings;

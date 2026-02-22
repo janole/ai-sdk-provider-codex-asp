@@ -1,3 +1,16 @@
+/**
+ * Demonstrates provider-level dynamic tools with inline execution.
+ *
+ * Tools are registered on the provider with full schema + execute handlers.
+ * When Codex calls a tool, the provider executes the handler inline and
+ * returns the result within the same turn — no cross-call needed.
+ *
+ * Requires experimentalApi: true (Codex feature flag for dynamicTools).
+ *
+ * Run with:
+ *   npx tsx examples/dynamic-tools.ts
+ */
+
 import { streamText } from "ai";
 
 import { createCodexAppServer } from "../src/provider";
@@ -66,10 +79,13 @@ const codex = createCodexAppServer({
 // Codex can now call these tools during generation
 const result = streamText({
     model: codex("gpt-5.3-codex"),
-    prompt: "Can you check ticket 15 with the lookup_ticket tool?",
+    prompt: "Can you check ticket 15 and also the weather in Berlin?",
 });
 
 for await (const chunk of result.textStream)
 {
     process.stdout.write(chunk);
 }
+
+console.log("\n");
+await codex.shutdown();

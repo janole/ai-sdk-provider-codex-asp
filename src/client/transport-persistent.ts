@@ -1,8 +1,11 @@
+import type { CodexToolCallResult } from "../protocol/types";
 import type {
     CodexTransport,
     CodexTransportEventMap,
     JsonRpcMessage,
+    JsonRpcSuccessResponse,
 } from "./transport";
+import type { PendingToolCall } from "./worker";
 import type { CodexWorker } from "./worker";
 import type { CodexWorkerPool } from "./worker-pool";
 
@@ -164,6 +167,36 @@ export class PersistentTransport implements CodexTransport
         }
 
         return this.worker.onSession(event, listener);
+    }
+
+    getPendingToolCall(): PendingToolCall | null
+    {
+        return this.worker?.pendingToolCall ?? null;
+    }
+
+    async respondToToolCall(result: CodexToolCallResult): Promise<void>
+    {
+        if (!this.worker?.pendingToolCall)
+        {
+            throw new Error("No pending tool call to respond to.");
+        }
+
+        const { requestId } = this.worker.pendingToolCall;
+        this.worker.pendingToolCall = null;
+
+        await this.worker.sendMessage({
+            id: requestId,
+            result,
+        } as JsonRpcSuccessResponse);
+    }
+
+    parkToolCall(pending: PendingToolCall): void
+    {
+        if (!this.worker)
+        {
+            throw new Error("PersistentTransport is not connected.");
+        }
+        this.worker.pendingToolCall = pending;
     }
 }
 

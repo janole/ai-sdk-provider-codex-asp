@@ -25,7 +25,7 @@ export type { StdioTransportSettings } from "./client/transport-stdio";
 export { StdioTransport } from "./client/transport-stdio";
 export type { WebSocketTransportSettings } from "./client/transport-websocket";
 export { WebSocketTransport } from "./client/transport-websocket";
-export type { CodexWorkerSettings } from "./client/worker";
+export type { CodexWorkerSettings, PendingToolCall } from "./client/worker";
 export { CodexWorker } from "./client/worker";
 export type { CodexWorkerPoolSettings } from "./client/worker-pool";
 export { CodexWorkerPool } from "./client/worker-pool";

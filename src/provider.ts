@@ -3,11 +3,11 @@ import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
-import type { StdioTransportSettings } from "./client/transport-stdio";
+import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
+import { WebSocketTransport } from "./client/transport-websocket";
 import { CodexWorkerPool } from "./client/worker-pool";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import { CodexProviderError } from "./errors";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
 
 const PROVIDER_ID = "codex-app-server" as const;
@@ -70,18 +70,16 @@ export function createCodexAppServer(
 
     if (settings.persistent)
     {
-        if (!baseTransportFactory)
-        {
-            throw new CodexProviderError(
-                "persistent mode requires a transportFactory to be set.",
-            );
-        }
+        const poolTransportFactory = baseTransportFactory
+            ?? (settings.transport?.type === "websocket"
+                ? () => new WebSocketTransport(settings.transport?.websocket)
+                : () => new StdioTransport(settings.transport?.stdio));
 
         pool = new CodexWorkerPool({
             ...(settings.persistent.poolSize !== undefined
                 ? { poolSize: settings.persistent.poolSize }
                 : {}),
-            transportFactory: baseTransportFactory,
+            transportFactory: poolTransportFactory,
             ...(settings.persistent.idleTimeoutMs !== undefined
                 ? { idleTimeoutMs: settings.persistent.idleTimeoutMs }
                 : {}),

@@ -15,6 +15,7 @@ import {
 } from "./approvals";
 import { AppServerClient } from "./client/app-server-client";
 import type { CodexTransport } from "./client/transport";
+import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
 import {
     WebSocketTransport,
@@ -36,6 +37,9 @@ import type {
     CodexThreadResumeResult,
     CodexThreadStartParams,
     CodexThreadStartResult,
+    CodexToolCallRequestParams,
+    CodexToolCallResult,
+    CodexToolResultContentItem,
     CodexTurnStartResult,
     SandboxMode,
 } from "./protocol/types";
@@ -147,6 +151,63 @@ function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): st
         }
     }
     return undefined;
+}
+
+function extractToolResults(
+    prompt: LanguageModelV3CallOptions["prompt"],
+): CodexToolCallResult | undefined
+{
+    for (let i = prompt.length - 1; i >= 0; i--)
+    {
+        const message = prompt[i];
+        if (message?.role === "tool")
+        {
+            const contentItems: CodexToolResultContentItem[] = [];
+            let success = true;
+
+            for (const part of message.content)
+            {
+                if (part.type === "tool-result")
+                {
+                    if (part.output.type === "text")
+                    {
+                        contentItems.push({ type: "inputText", text: part.output.value });
+                    }
+                    else if (part.output.type === "json")
+                    {
+                        contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
+                    }
+                    else if (part.output.type === "execution-denied")
+                    {
+                        success = false;
+                        contentItems.push({
+                            type: "inputText",
+                            text: part.output.reason ?? "Tool execution was denied.",
+                        });
+                    }
+                }
+            }
+
+            if (contentItems.length > 0)
+            {
+                return { success, contentItems };
+            }
+        }
+    }
+    return undefined;
+}
+
+function sdkToolsToCodexDynamicTools(
+    tools: NonNullable<LanguageModelV3CallOptions["tools"]>,
+): { name: string; description?: string; inputSchema: Record<string, unknown> }[]
+{
+    return tools
+        .filter((t): t is Extract<typeof t, { type: "function" }> => t.type === "function")
+        .map((t) => ({
+            name: t.name,
+            ...(t.description ? { description: t.description } : {}),
+            inputSchema: t.inputSchema as Record<string, unknown>,
+        }));
 }
 
 function isPassThroughContentPart(
@@ -297,7 +358,55 @@ export class CodexLanguageModel implements LanguageModelV3
         };
     }
 
-    doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> 
+    private registerCrossCallToolHandler(
+        client: AppServerClient,
+        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
+        mapper: CodexEventMapper,
+        persistentTransport: PersistentTransport,
+        threadId: string,
+        closeSuccessfully: () => Promise<void>,
+    ): void
+    {
+        client.onToolCallRequest((params: CodexToolCallRequestParams, request) =>
+        {
+            const toolName = params.tool ?? params.toolName ?? "unknown";
+            const callId = params.callId ?? `call_${Date.now()}`;
+            const args = params.arguments ?? params.input ?? {};
+
+            // Park the tool call on the worker for cross-call resumption.
+            // Return a never-resolving promise so AppServerClient does NOT
+            // auto-send a JSON-RPC response — we respond manually on the
+            // next doStream() via persistentTransport.respondToToolCall().
+            persistentTransport.parkToolCall({
+                requestId: request.id,
+                callId,
+                toolName,
+                args,
+                threadId,
+            });
+
+            controller.enqueue({
+                type: "tool-call",
+                toolCallId: callId,
+                toolName,
+                input: typeof args === "string" ? args : JSON.stringify(args),
+            });
+
+            controller.enqueue({
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: "tool-calls" },
+                usage: createEmptyUsage(),
+                providerMetadata: { "codex-app-server": { threadId } },
+            });
+
+            void closeSuccessfully();
+
+            // Return a never-resolving promise to prevent auto-response
+            return new Promise<CodexToolCallResult>(() => {});
+        });
+    }
+
+    doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
         const transport = this.config.providerSettings.transportFactory
             ? this.config.providerSettings.transportFactory()
@@ -367,12 +476,61 @@ export class CodexLanguageModel implements LanguageModelV3
                     options.abortSignal.addEventListener("abort", abortHandler, { once: true });
                 }
 
-                void (async () => 
+                void (async () =>
                 {
-                    try 
+                    try
                     {
                         await client.connect();
 
+                        // ── Tool-result continuation (cross-call) ──
+                        // If the transport has a pending tool call from a previous
+                        // doStream(), respond with the tool results and let Codex continue.
+                        const persistentTransport = transport instanceof PersistentTransport
+                            ? transport
+                            : null;
+                        const pendingToolCall = persistentTransport?.getPendingToolCall() ?? null;
+
+                        if (pendingToolCall && persistentTransport)
+                        {
+                            const toolResult = extractToolResults(options.prompt);
+                            mapper.setThreadId(pendingToolCall.threadId);
+
+                            client.onAnyNotification((method, params) =>
+                            {
+                                const parts = mapper.map({ method, params });
+                                for (const part of parts)
+                                {
+                                    controller.enqueue(part);
+                                    if (part.type === "finish")
+                                    {
+                                        void closeSuccessfully();
+                                    }
+                                }
+                            });
+
+                            // Register cross-call handler again for chained tool calls
+                            this.registerCrossCallToolHandler(
+                                client, controller, mapper, persistentTransport,
+                                pendingToolCall.threadId, closeSuccessfully,
+                            );
+
+                            const approvalsDispatcher = new ApprovalsDispatcher({
+                                ...(this.config.providerSettings.approvals?.onCommandApproval
+                                    ? { onCommandApproval: this.config.providerSettings.approvals.onCommandApproval }
+                                    : {}),
+                                ...(this.config.providerSettings.approvals?.onFileChangeApproval
+                                    ? { onFileChangeApproval: this.config.providerSettings.approvals.onFileChangeApproval }
+                                    : {}),
+                            });
+                            approvalsDispatcher.attach(client);
+
+                            await persistentTransport.respondToToolCall(
+                                toolResult ?? { success: true, contentItems: [] },
+                            );
+                            return;
+                        }
+
+                        // ── Normal flow ──
                         const dynamicToolsEnabled =
                             this.config.providerSettings.experimentalApi === true;
                         if (dynamicToolsEnabled)
@@ -401,46 +559,56 @@ export class CodexLanguageModel implements LanguageModelV3
                         });
                         approvalsDispatcher.attach(client);
 
-                        client.onAnyNotification((method, params) => 
+                        client.onAnyNotification((method, params) =>
                         {
                             const parts = mapper.map({ method, params });
 
-                            for (const part of parts) 
+                            for (const part of parts)
                             {
                                 controller.enqueue(part);
 
-                                if (part.type === "finish") 
+                                if (part.type === "finish")
                                 {
                                     void closeSuccessfully();
                                 }
                             }
                         });
 
+                        // Merge provider-level tools with SDK tools from options
+                        const providerToolDefs = this.config.providerSettings.tools;
+                        const providerDynamicTools = providerToolDefs
+                            ? Object.entries(providerToolDefs).map(([name, def]) => ({
+                                name,
+                                description: def.description,
+                                inputSchema: def.inputSchema,
+                            }))
+                            : [];
+
+                        const sdkDynamicTools = options.tools
+                            ? sdkToolsToCodexDynamicTools(options.tools)
+                            : [];
+
+                        const allDynamicTools = [...providerDynamicTools, ...sdkDynamicTools];
+                        const dynamicTools = allDynamicTools.length > 0 ? allDynamicTools : undefined;
+
+                        const hasSdkTools = sdkDynamicTools.length > 0;
+
+                        // Auto-enable experimentalApi when any dynamic tools are present
+                        const needsExperimentalApi =
+                            this.config.providerSettings.experimentalApi === true || dynamicTools !== undefined;
+
                         const initializeParams: CodexInitializeParams = {
                             clientInfo: this.config.providerSettings.clientInfo ?? {
                                 name: "codex-ai-sdk-provider",
                                 version: "0.1.0",
                             },
-                            ...(this.config.providerSettings.experimentalApi !== undefined
-                                ? {
-                                    capabilities: {
-                                        experimentalApi: this.config.providerSettings.experimentalApi,
-                                    },
-                                }
+                            ...(needsExperimentalApi
+                                ? { capabilities: { experimentalApi: true } }
                                 : {}),
                         };
 
                         await client.request<CodexInitializeResult>("initialize", initializeParams);
                         await client.notification("initialized");
-
-                        const toolDefs = this.config.providerSettings.tools;
-                        const dynamicTools = toolDefs
-                            ? Object.entries(toolDefs).map(([name, def]) => ({
-                                name,
-                                description: def.description,
-                                inputSchema: def.inputSchema,
-                            }))
-                            : undefined;
 
                         const resumeThreadId = extractResumeThreadId(options.prompt);
                         const developerInstructions = mapSystemPrompt(options.prompt);
@@ -491,6 +659,15 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         mapper.setThreadId(threadId);
 
+                        // Register cross-call tool handler for SDK tools
+                        if (hasSdkTools && persistentTransport)
+                        {
+                            this.registerCrossCallToolHandler(
+                                client, controller, mapper, persistentTransport,
+                                threadId, closeSuccessfully,
+                            );
+                        }
+
                         const turnStartResult = await client.request<TurnStartResultLike>("turn/start", {
                             threadId,
                             input: mapPromptToTurnInput(options.prompt, !!resumeThreadId),
@@ -498,7 +675,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         extractTurnId(turnStartResult);
                     }
-                    catch (error) 
+                    catch (error)
                     {
                         await closeWithError(error);
                     }
