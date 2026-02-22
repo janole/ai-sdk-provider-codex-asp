@@ -1,5 +1,6 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
+import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
 import type { StdioTransportSettings } from "./client/transport-stdio";
@@ -31,6 +32,10 @@ export interface CodexProviderSettings {
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
     toolHandlers?: Record<string, DynamicToolHandler>;
     toolTimeoutMs?: number;
+    approvals?: {
+        onCommandApproval?: CommandApprovalHandler;
+        onFileChangeApproval?: FileChangeApprovalHandler;
+    };
     persistent?: {
         poolSize?: number;
         idleTimeoutMs?: number;
@@ -84,7 +89,7 @@ export function createCodexAppServer(
     }
 
     const effectiveTransportFactory = pool
-        ? () => new PersistentTransport({ pool: pool! })
+        ? () => new PersistentTransport({ pool: pool })
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze({
@@ -126,6 +131,9 @@ export function createCodexAppServer(
             : {}),
         ...(settings.toolTimeoutMs !== undefined
             ? { toolTimeoutMs: settings.toolTimeoutMs }
+            : {}),
+        ...(settings.approvals
+            ? { approvals: { ...settings.approvals } }
             : {}),
     });
 

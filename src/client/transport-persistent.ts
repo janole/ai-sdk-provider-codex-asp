@@ -1,10 +1,10 @@
-import type { CodexWorkerPool } from "./worker-pool";
-import type { CodexWorker } from "./worker";
 import type {
     CodexTransport,
     CodexTransportEventMap,
     JsonRpcMessage,
 } from "./transport";
+import type { CodexWorker } from "./worker";
+import type { CodexWorkerPool } from "./worker-pool";
 
 export interface PersistentTransportSettings {
     pool: CodexWorkerPool;
@@ -34,7 +34,7 @@ export class PersistentTransport implements CodexTransport
         await this.worker.ensureConnected();
     }
 
-    async disconnect(): Promise<void>
+    disconnect(): Promise<void>
     {
         if (this.worker)
         {
@@ -45,6 +45,7 @@ export class PersistentTransport implements CodexTransport
             this.closeListeners.clear();
             this.pool.release(w);
         }
+        return Promise.resolve();
     }
 
     async sendMessage(message: JsonRpcMessage): Promise<void>

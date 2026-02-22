@@ -1,3 +1,11 @@
+export type {
+    ApprovalsDispatcherSettings,
+    CodexCommandApprovalRequest,
+    CodexFileChangeApprovalRequest,
+    CommandApprovalHandler,
+    FileChangeApprovalHandler,
+} from "./approvals";
+export { ApprovalsDispatcher } from "./approvals";
 export type { AppServerClientSettings } from "./client/app-server-client";
 export { AppServerClient, JsonRpcError } from "./client/app-server-client";
 export type {
@@ -71,6 +79,12 @@ export type {
     CodexTurnStartedNotification,
     CodexTurnStartParams,
     CodexTurnStartResult,
+    CommandExecutionApprovalDecision,
+    CommandExecutionRequestApprovalParams,
+    CommandExecutionRequestApprovalResponse,
+    FileChangeApprovalDecision,
+    FileChangeRequestApprovalParams,
+    FileChangeRequestApprovalResponse,
     JsonRpcMessageBase,
     SandboxMode,
 } from "./protocol/types";
