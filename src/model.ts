@@ -8,6 +8,11 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import {
+    ApprovalsDispatcher,
+    type CommandApprovalHandler,
+    type FileChangeApprovalHandler,
+} from "./approvals";
 import { AppServerClient } from "./client/app-server-client";
 import type { CodexTransport } from "./client/transport";
 import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
@@ -66,6 +71,10 @@ export interface CodexModelConfig {
         tools?: Record<string, DynamicToolDefinition>;
         toolHandlers?: Record<string, DynamicToolHandler>;
         toolTimeoutMs?: number;
+        approvals?: {
+            onCommandApproval?: CommandApprovalHandler;
+            onFileChangeApproval?: FileChangeApprovalHandler;
+        };
     };
 }
 
@@ -381,6 +390,16 @@ export class CodexLanguageModel implements LanguageModelV3
                             });
                             dispatcher.attach(client);
                         }
+
+                        const approvalsDispatcher = new ApprovalsDispatcher({
+                            ...(this.config.providerSettings.approvals?.onCommandApproval
+                                ? { onCommandApproval: this.config.providerSettings.approvals.onCommandApproval }
+                                : {}),
+                            ...(this.config.providerSettings.approvals?.onFileChangeApproval
+                                ? { onFileChangeApproval: this.config.providerSettings.approvals.onFileChangeApproval }
+                                : {}),
+                        });
+                        approvalsDispatcher.attach(client);
 
                         client.onAnyNotification((method, params) => 
                         {

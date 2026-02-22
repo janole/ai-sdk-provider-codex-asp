@@ -10,9 +10,21 @@
  * and serve as the authoritative reference. V2 types (camelCase) are in the v2/ subdirectory.
  */
 import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
+import type { CommandExecutionApprovalDecision } from "./app-server-protocol/v2/CommandExecutionApprovalDecision";
+import type { CommandExecutionRequestApprovalParams } from "./app-server-protocol/v2/CommandExecutionRequestApprovalParams";
+import type { CommandExecutionRequestApprovalResponse } from "./app-server-protocol/v2/CommandExecutionRequestApprovalResponse";
+import type { FileChangeApprovalDecision } from "./app-server-protocol/v2/FileChangeApprovalDecision";
+import type { FileChangeRequestApprovalParams } from "./app-server-protocol/v2/FileChangeRequestApprovalParams";
+import type { FileChangeRequestApprovalResponse } from "./app-server-protocol/v2/FileChangeRequestApprovalResponse";
 import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
 
 export type { AskForApproval };
+export type { CommandExecutionApprovalDecision };
+export type { CommandExecutionRequestApprovalParams };
+export type { CommandExecutionRequestApprovalResponse };
+export type { FileChangeApprovalDecision };
+export type { FileChangeRequestApprovalParams };
+export type { FileChangeRequestApprovalResponse };
 export type { SandboxMode };
 
 export interface JsonRpcMessageBase {

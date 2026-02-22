@@ -5,6 +5,7 @@ import { PersistentTransport } from "./client/transport-persistent";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import { CodexWorkerPool } from "./client/worker-pool";
+import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
@@ -31,6 +32,10 @@ export interface CodexProviderSettings {
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
     toolHandlers?: Record<string, DynamicToolHandler>;
     toolTimeoutMs?: number;
+    approvals?: {
+        onCommandApproval?: CommandApprovalHandler;
+        onFileChangeApproval?: FileChangeApprovalHandler;
+    };
     persistent?: {
         poolSize?: number;
         idleTimeoutMs?: number;
@@ -126,6 +131,9 @@ export function createCodexAppServer(
             : {}),
         ...(settings.toolTimeoutMs !== undefined
             ? { toolTimeoutMs: settings.toolTimeoutMs }
+            : {}),
+        ...(settings.approvals
+            ? { approvals: { ...settings.approvals } }
             : {}),
     });
 
