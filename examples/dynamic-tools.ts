@@ -73,3 +73,6 @@ for await (const chunk of result.textStream)
 {
     process.stdout.write(chunk);
 }
+
+console.log("\n");
+await codex.shutdown();
