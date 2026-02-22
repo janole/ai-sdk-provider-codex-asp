@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
-import { CodexWorkerPool } from "../src/client/worker-pool";
 import { PersistentTransport } from "../src/client/transport-persistent";
+import { CodexWorkerPool } from "../src/client/worker-pool";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 

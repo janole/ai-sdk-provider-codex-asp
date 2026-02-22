@@ -6,21 +6,21 @@ const codex = createCodexAppServer({
     defaultModel: "gpt-5.3-codex",
     clientInfo: { name: "@janole/codex-ai-sdk-provider", version: "0.1.0" },
     approvals: {
-        onCommandApproval: async (req) =>
+        onCommandApproval: (req) =>
         {
             console.log(`\n[APPROVAL] Command: ${req.command}`);
             console.log(`[APPROVAL]     cwd: ${req.cwd}`);
-            console.log(`[APPROVAL] → auto-accepting\n`);
+            console.log("[APPROVAL] → auto-accepting\n");
             return "accept";
         },
-        onFileChangeApproval: async (req) =>
+        onFileChangeApproval: (req) =>
         {
-            console.log(`\n[APPROVAL] File change requested`);
+            console.log("\n[APPROVAL] File change requested");
             if (req.reason)
             {
                 console.log(`[APPROVAL]  reason: ${req.reason}`);
             }
-            console.log(`[APPROVAL] → auto-accepting\n`);
+            console.log("[APPROVAL] → auto-accepting\n");
             return "accept";
         },
     },

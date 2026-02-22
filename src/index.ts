@@ -51,9 +51,6 @@ export { CodexEventMapper } from "./protocol/event-mapper";
 export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 export type {
     AskForApproval,
-    CommandExecutionApprovalDecision,
-    CommandExecutionRequestApprovalParams,
-    CommandExecutionRequestApprovalResponse,
     CodexAgentMessageDeltaNotification,
     CodexDynamicToolDefinition,
     CodexInitializedNotification,
@@ -82,6 +79,9 @@ export type {
     CodexTurnStartedNotification,
     CodexTurnStartParams,
     CodexTurnStartResult,
+    CommandExecutionApprovalDecision,
+    CommandExecutionRequestApprovalParams,
+    CommandExecutionRequestApprovalResponse,
     FileChangeApprovalDecision,
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,

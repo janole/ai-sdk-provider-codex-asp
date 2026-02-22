@@ -1,11 +1,11 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
+import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import { CodexWorkerPool } from "./client/worker-pool";
-import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
@@ -89,7 +89,7 @@ export function createCodexAppServer(
     }
 
     const effectiveTransportFactory = pool
-        ? () => new PersistentTransport({ pool: pool! })
+        ? () => new PersistentTransport({ pool: pool })
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze({
