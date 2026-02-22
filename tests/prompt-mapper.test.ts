@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { mapPromptToTurnInput } from "../src/protocol/prompt-mapper";
+import { mapPromptToTurnInput, mapSystemPrompt } from "../src/protocol/prompt-mapper";
 
 describe("mapPromptToTurnInput", () =>
 {
-    it("maps prompt text to v2 text user input", () =>
+    it("maps user text to v2 text input, excluding system messages", () =>
     {
         const result = mapPromptToTurnInput([
             { role: "system", content: " Be concise. " },
@@ -21,7 +21,7 @@ describe("mapPromptToTurnInput", () =>
         expect(result).toEqual([
             {
                 type: "text",
-                text: "Be concise.\n\nHello",
+                text: "Hello",
                 text_elements: [],
             },
         ]);
@@ -44,5 +44,28 @@ describe("mapPromptToTurnInput", () =>
         expect(result).toEqual([
             { type: "text", text: "third message", text_elements: [] },
         ]);
+    });
+});
+
+describe("mapSystemPrompt", () =>
+{
+    it("extracts and concatenates system messages", () =>
+    {
+        const result = mapSystemPrompt([
+            { role: "system", content: " Be concise. " },
+            { role: "user", content: [{ type: "text", text: "Hello" }] },
+            { role: "system", content: " Use JSON. " },
+        ]);
+
+        expect(result).toBe("Be concise.\n\nUse JSON.");
+    });
+
+    it("returns undefined when there are no system messages", () =>
+    {
+        const result = mapSystemPrompt([
+            { role: "user", content: [{ type: "text", text: "Hello" }] },
+        ]);
+
+        expect(result).toBeUndefined();
     });
 });

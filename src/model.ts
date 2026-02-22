@@ -22,7 +22,7 @@ import {
 } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { mapPromptToTurnInput } from "./protocol/prompt-mapper";
+import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import type {
     AskForApproval,
     CodexInitializeParams,
@@ -424,6 +424,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             : undefined;
 
                         const resumeThreadId = extractResumeThreadId(options.prompt);
+                        const developerInstructions = mapSystemPrompt(options.prompt);
 
                         let threadId: string;
 
@@ -432,6 +433,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             const resumeParams: CodexThreadResumeParams = {
                                 threadId: resumeThreadId,
                                 persistExtendedHistory: false,
+                                ...(developerInstructions ? { developerInstructions } : {}),
                             };
                             const resumeResult = await client.request<CodexThreadResumeResult>(
                                 "thread/resume",
@@ -444,6 +446,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             const threadStartParams: CodexThreadStartParams = {
                                 model: this.config.providerSettings.defaultModel ?? this.modelId,
                                 ...(dynamicTools ? { dynamicTools } : {}),
+                                ...(developerInstructions ? { developerInstructions } : {}),
                                 ...(this.config.providerSettings.defaultThreadSettings?.cwd
                                     ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
                                     : {}),

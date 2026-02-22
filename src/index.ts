@@ -34,7 +34,7 @@ export type {
 export { CodexLanguageModel } from "./model";
 export type { CodexEventMapperInput } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
-export { mapPromptToTurnInput } from "./protocol/prompt-mapper";
+export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 export type {
     AskForApproval,
     CodexAgentMessageDeltaNotification,

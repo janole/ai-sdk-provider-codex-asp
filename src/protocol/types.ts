@@ -62,6 +62,7 @@ export interface CodexThreadStartParams {
     approvalPolicy?: AskForApproval;
     sandbox?: SandboxMode;
     dynamicTools?: CodexDynamicToolDefinition[];
+    developerInstructions?: string;
 }
 
 export interface CodexThreadStartResult {
@@ -72,6 +73,7 @@ export interface CodexThreadStartResult {
 export interface CodexThreadResumeParams {
     threadId: string;
     persistExtendedHistory: boolean;
+    developerInstructions?: string;
 }
 
 export interface CodexThreadResumeResult {

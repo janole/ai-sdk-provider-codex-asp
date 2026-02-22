@@ -208,4 +208,42 @@ describe("CodexLanguageModel.doStream", () =>
             input: [{ type: "text", text: "continue", text_elements: [] }],
         });
     });
+
+    it("passes system messages as developerInstructions on thread/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        const model = provider.languageModel("gpt-5.1-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "system", content: "Be concise." },
+                { role: "user", content: [{ type: "text", text: "hello" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const threadStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/start",
+        );
+        expect(threadStartMessage?.params).toMatchObject({
+            developerInstructions: "Be concise.",
+        });
+
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+        expect(turnStartMessage?.params).toMatchObject({
+            input: [{ type: "text", text: "hello", text_elements: [] }],
+        });
+    });
 });
