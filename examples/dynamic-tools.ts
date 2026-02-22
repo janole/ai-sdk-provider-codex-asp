@@ -1,3 +1,16 @@
+/**
+ * Demonstrates provider-level dynamic tools with inline execution.
+ *
+ * Tools are registered on the provider with full schema + execute handlers.
+ * When Codex calls a tool, the provider executes the handler inline and
+ * returns the result within the same turn — no cross-call needed.
+ *
+ * Requires experimentalApi: true (Codex feature flag for dynamicTools).
+ *
+ * Run with:
+ *   npx tsx examples/dynamic-tools.ts
+ */
+
 import { streamText } from "ai";
 
 import { createCodexAppServer } from "../src/provider";
