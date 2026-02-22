@@ -22,7 +22,7 @@ const codex = createCodexAppServer({
 
 const result = streamText({
     model: codex("gpt-5.3-codex"),
-    prompt: "Can you check ticket TICK-42 and also the weather in Berlin?",
+    prompt: "Can you check ticket 15 and also the weather in Berlin?",
     tools: {
         lookup_ticket: tool({
             description: "Look up the current status of a support ticket by its ID.",
