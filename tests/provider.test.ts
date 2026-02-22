@@ -1,8 +1,101 @@
 import { NoSuchModelError } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 
+import type { JsonRpcMessage } from "../src/client/transport";
 import { CodexLanguageModel } from "../src/model";
 import { createCodexAppServer } from "../src/provider";
+import { MockTransport } from "./helpers/mock-transport";
+
+class ScriptedTransport extends MockTransport
+{
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        await super.sendMessage(message);
+
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            return;
+        }
+
+        if (message.method === "initialize")
+        {
+            this.emitMessage({ id: message.id, result: { serverInfo: { name: "codex", version: "test" } } });
+            return;
+        }
+
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
+            return;
+        }
+
+        if (message.method === "turn/start")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
+
+            queueMicrotask(() =>
+            {
+                this.emitMessage({
+                    method: "turn/started",
+                    params: { threadId: "thr_1", turnId: "turn_1" },
+                });
+                this.emitMessage({
+                    method: "item/started",
+                    params: {
+                        threadId: "thr_1",
+                        turnId: "turn_1",
+                        itemId: "item_1",
+                        itemType: "assistantMessage",
+                    },
+                });
+                this.emitMessage({
+                    method: "item/agentMessage/delta",
+                    params: {
+                        threadId: "thr_1",
+                        turnId: "turn_1",
+                        itemId: "item_1",
+                        delta: "ok",
+                    },
+                });
+                this.emitMessage({
+                    method: "item/completed",
+                    params: {
+                        threadId: "thr_1",
+                        turnId: "turn_1",
+                        itemId: "item_1",
+                        itemType: "assistantMessage",
+                    },
+                });
+                this.emitMessage({
+                    method: "turn/completed",
+                    params: {
+                        threadId: "thr_1",
+                        turnId: "turn_1",
+                        status: "completed",
+                    },
+                });
+            });
+        }
+    }
+}
+
+async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]>
+{
+    const reader = stream.getReader();
+    const parts: unknown[] = [];
+
+    while (true)
+    {
+        const { done, value } = await reader.read();
+        if (done)
+        {
+            break;
+        }
+        parts.push(value);
+    }
+
+    return parts;
+}
 
 describe("createCodexAppServer", () => 
 {
@@ -43,5 +136,150 @@ describe("createCodexAppServer", () =>
         expect(() => provider.imageModel("image-model")).toThrowError(
             NoSuchModelError,
         );
+    });
+
+    it("uses separate persistent pools by default", async () =>
+    {
+        const transports: ScriptedTransport[] = [];
+        let factoryCalls = 0;
+        const factory = () =>
+        {
+            factoryCalls++;
+            const transport = new ScriptedTransport();
+            transports.push(transport);
+            return transport;
+        };
+
+        const providerOne = createCodexAppServer({
+            transportFactory: factory,
+            persistent: { poolSize: 1 },
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+        const providerTwo = createCodexAppServer({
+            transportFactory: factory,
+            persistent: { poolSize: 1 },
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        try
+        {
+            const modelOne = providerOne.languageModel("gpt-5.1-codex");
+            const modelTwo = providerTwo.languageModel("gpt-5.1-codex");
+
+            const { stream: streamOne } = await modelOne.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],
+            });
+            await readAll(streamOne);
+
+            const { stream: streamTwo } = await modelTwo.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "second" }] }],
+            });
+            await readAll(streamTwo);
+
+            const initializeCount = transports
+                .flatMap((transport) => transport.sentMessages)
+                .filter((msg) => "method" in msg && msg.method === "initialize")
+                .length;
+
+            expect(factoryCalls).toBe(2);
+            expect(initializeCount).toBe(2);
+        }
+        finally
+        {
+            await providerOne.shutdown();
+            await providerTwo.shutdown();
+        }
+    });
+
+    it("shares a global persistent pool when configured", async () =>
+    {
+        const transports: ScriptedTransport[] = [];
+        let factoryCalls = 0;
+        const factory = () =>
+        {
+            factoryCalls++;
+            const transport = new ScriptedTransport();
+            transports.push(transport);
+            return transport;
+        };
+
+        const providerOne = createCodexAppServer({
+            transportFactory: factory,
+            persistent: { scope: "global", key: "provider-test-shared", poolSize: 1 },
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+        const providerTwo = createCodexAppServer({
+            transportFactory: factory,
+            persistent: { scope: "global", key: "provider-test-shared", poolSize: 1 },
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        try
+        {
+            const modelOne = providerOne.languageModel("gpt-5.1-codex");
+            const modelTwo = providerTwo.languageModel("gpt-5.1-codex");
+
+            const { stream: streamOne } = await modelOne.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],
+            });
+            await readAll(streamOne);
+
+            await providerOne.shutdown();
+
+            const { stream: streamTwo } = await modelTwo.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "second" }] }],
+            });
+            await readAll(streamTwo);
+
+            const initializeCount = transports
+                .flatMap((transport) => transport.sentMessages)
+                .filter((msg) => "method" in msg && msg.method === "initialize")
+                .length;
+
+            expect(factoryCalls).toBe(1);
+            expect(initializeCount).toBe(1);
+        }
+        finally
+        {
+            await providerTwo.shutdown();
+        }
+    });
+
+    it("throws when reusing a global key with different pool settings", async () =>
+    {
+        const providerOne = createCodexAppServer({
+            transportFactory: () => new ScriptedTransport(),
+            persistent: {
+                scope: "global",
+                key: "provider-test-mismatch",
+                poolSize: 1,
+                idleTimeoutMs: 60_000,
+            },
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        try
+        {
+            expect(() =>
+                createCodexAppServer({
+                    transportFactory: () => new ScriptedTransport(),
+                    persistent: {
+                        scope: "global",
+                        key: "provider-test-mismatch",
+                        poolSize: 2,
+                        idleTimeoutMs: 60_000,
+                    },
+                }),
+            ).toThrow(/already exists with different settings/i);
+        }
+        finally
+        {
+            await providerOne.shutdown();
+        }
     });
 });
