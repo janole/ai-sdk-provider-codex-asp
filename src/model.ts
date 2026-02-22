@@ -196,6 +196,7 @@ export class CodexLanguageModel implements LanguageModelV3
             raw: undefined,
         };
         let usage: LanguageModelV3Usage = createEmptyUsage();
+        let providerMetadata: LanguageModelV3GenerateResult["providerMetadata"];
 
         while (true) 
         {
@@ -235,10 +236,11 @@ export class CodexLanguageModel implements LanguageModelV3
                 continue;
             }
 
-            if (value.type === "finish") 
+            if (value.type === "finish")
             {
                 finishReason = value.finishReason;
                 usage = value.usage;
+                providerMetadata = value.providerMetadata;
                 continue;
             }
 
@@ -281,6 +283,7 @@ export class CodexLanguageModel implements LanguageModelV3
             finishReason,
             usage,
             warnings,
+            ...(providerMetadata ? { providerMetadata } : {}),
             ...(streamResult.request ? { request: streamResult.request } : {}),
         };
     }
@@ -468,7 +471,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         const turnStartResult = await client.request<TurnStartResultLike>("turn/start", {
                             threadId,
-                            input: mapPromptToTurnInput(options.prompt),
+                            input: mapPromptToTurnInput(options.prompt, !!resumeThreadId),
                         });
 
                         extractTurnId(turnStartResult);

@@ -199,5 +199,13 @@ describe("CodexLanguageModel.doStream", () =>
                 "method" in message && message.method === "thread/resume",
         );
         expect(resumeMessage?.params).toMatchObject({ threadId: "thr_existing" });
+
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+        expect(turnStartMessage?.params).toMatchObject({
+            input: [{ type: "text", text: "continue", text_elements: [] }],
+        });
     });
 });
