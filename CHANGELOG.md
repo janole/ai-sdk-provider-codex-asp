@@ -2,7 +2,7 @@
 
 ## 0.1.0
 
-Initial release of `ai-sdk-provider-codex-asp`.
+Initial release of `@janole/ai-sdk-provider-codex-asp`.
 
 - Vercel AI SDK v6 custom provider for the Codex App Server Protocol
 - Support for streaming text generation and tool calls
