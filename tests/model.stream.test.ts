@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
 import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
@@ -258,6 +258,128 @@ describe("CodexLanguageModel.doStream", () =>
         );
         expect(turnStartMessage?.params).toMatchObject({
             input: [{ type: "text", text: "hello", text_elements: [] }],
+        });
+    });
+
+    it("emits debug events through the logger when logPackets is enabled", async () =>
+    {
+        const transport = new ScriptedTransport();
+        const loggerSpy = vi.fn();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            debug: { logPackets: true, logger: loggerSpy },
+        });
+
+        const model = provider.languageModel("gpt-5.1-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        });
+
+        await readAll(stream);
+
+        const debugEvents = loggerSpy.mock.calls
+            .map((call: unknown[]) => call[0] as { direction: string; message: unknown })
+            .filter((packet) =>
+                typeof packet.message === "object"
+                && packet.message !== null
+                && "debug" in packet.message,
+            );
+
+        const debugLabels = debugEvents.map(
+            (e) => (e.message as { debug: string }).debug,
+        );
+
+        expect(debugLabels).toContain("prompt");
+        expect(debugLabels).toContain("extractResumeThreadId");
+        expect(debugLabels).toContain("thread/start");
+        expect(debugLabels).toContain("turn/start");
+
+        const promptEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "prompt",
+        );
+        expect(promptEvent?.direction).toBe("inbound");
+
+        const extractEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "extractResumeThreadId",
+        );
+        expect(extractEvent?.direction).toBe("inbound");
+        expect((extractEvent?.message as { data: unknown }).data).toEqual({
+            resumeThreadId: undefined,
+        });
+
+        const threadStartEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "thread/start",
+        );
+        expect(threadStartEvent?.direction).toBe("outbound");
+
+        const turnStartEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "turn/start",
+        );
+        expect(turnStartEvent?.direction).toBe("outbound");
+        expect((turnStartEvent?.message as { data: { threadId: string } }).data).toMatchObject({
+            threadId: "thr_1",
+        });
+    });
+
+    it("emits thread/resume debug event when resuming a thread", async () =>
+    {
+        const transport = new ScriptedTransport();
+        const loggerSpy = vi.fn();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            debug: { logPackets: true, logger: loggerSpy },
+        });
+
+        const model = provider.languageModel("gpt-5.1-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { "codex-app-server": { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const debugEvents = loggerSpy.mock.calls
+            .map((call: unknown[]) => call[0] as { direction: string; message: unknown })
+            .filter((packet) =>
+                typeof packet.message === "object"
+                && packet.message !== null
+                && "debug" in packet.message,
+            );
+
+        const debugLabels = debugEvents.map(
+            (e) => (e.message as { debug: string }).debug,
+        );
+
+        expect(debugLabels).toContain("extractResumeThreadId");
+        expect(debugLabels).toContain("thread/resume");
+        expect(debugLabels).not.toContain("thread/start");
+
+        const extractEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "extractResumeThreadId",
+        );
+        expect((extractEvent?.message as { data: unknown }).data).toEqual({
+            resumeThreadId: "thr_existing",
+        });
+
+        const resumeEvent = debugEvents.find(
+            (e) => (e.message as { debug: string }).debug === "thread/resume",
+        );
+        expect(resumeEvent?.direction).toBe("outbound");
+        expect((resumeEvent?.message as { data: { threadId: string } }).data).toMatchObject({
+            threadId: "thr_existing",
         });
     });
 });

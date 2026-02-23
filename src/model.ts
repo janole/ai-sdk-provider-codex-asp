@@ -429,6 +429,13 @@ export class CodexLanguageModel implements LanguageModelV3
             })
             : undefined;
 
+        const debugLog = packetLogger
+            ? (direction: "inbound" | "outbound", label: string, data?: unknown) =>
+            {
+                packetLogger({ direction, message: { debug: label, data } });
+            }
+            : undefined;
+
         const client = new AppServerClient(transport, stripUndefined({
             onPacket: packetLogger,
         }));
@@ -612,7 +619,11 @@ export class CodexLanguageModel implements LanguageModelV3
                         await client.request<CodexInitializeResult>("initialize", initializeParams);
                         await client.notification("initialized");
 
+                        debugLog?.("inbound", "prompt", options.prompt);
+
                         const resumeThreadId = extractResumeThreadId(options.prompt);
+                        debugLog?.("inbound", "extractResumeThreadId", { resumeThreadId });
+
                         const developerInstructions = mapSystemPrompt(options.prompt);
 
                         let threadId: string;
@@ -624,6 +635,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 persistExtendedHistory: false,
                                 developerInstructions,
                             });
+                            debugLog?.("outbound", "thread/resume", resumeParams);
                             const resumeResult = await client.request<CodexThreadResumeResult>(
                                 "thread/resume",
                                 resumeParams,
@@ -640,6 +652,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 approvalPolicy: this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
                                 sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
                             });
+                            debugLog?.("outbound", "thread/start", threadStartParams);
                             const threadStartResult = await client.request<ThreadStartResultLike>(
                                 "thread/start",
                                 threadStartParams,
@@ -658,9 +671,12 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                         }
 
+                        const turnInput = mapPromptToTurnInput(options.prompt, !!resumeThreadId);
+                        debugLog?.("outbound", "turn/start", { threadId, input: turnInput });
+
                         const turnStartResult = await client.request<TurnStartResultLike>("turn/start", {
                             threadId,
-                            input: mapPromptToTurnInput(options.prompt, !!resumeThreadId),
+                            input: turnInput,
                         });
 
                         extractTurnId(turnStartResult);
