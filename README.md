@@ -104,47 +104,24 @@ await codex.shutdown();
 
 ## API Reference
 
-### `createCodexAppServer(settings?)`
+```ts
+const codex = createCodexAppServer({
+  defaultModel?: string,
+  clientInfo?: { name, version, title? },  // defaults to package.json
+  transport?: { type: 'stdio' | 'websocket', stdio?, websocket? },
+  persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
+  defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
+  approvals?: { onCommandApproval?, onFileChangeApproval? },
+  toolTimeoutMs?: number,                  // default: 30000
+});
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `defaultModel` | `string` | — | Model ID used when none is passed to `codex()` |
-| `clientInfo` | `{ name, version, title? }` | from `package.json` | Client identity sent to Codex during `initialize` |
-| `experimentalApi` | `boolean` | `false` | Enable experimental Codex capabilities (auto-enabled when tools are registered) |
-| `toolHandlers` | `Record<string, DynamicToolHandler>` | — | Handler-only tools (not advertised to Codex) |
-| `toolTimeoutMs` | `number` | `30000` | Timeout per dynamic tool call |
-| `transportFactory` | `() => CodexTransport` | — | Custom transport factory for testing/injection |
+codex(modelId)                // returns a language model instance
+codex.languageModel(modelId)  // explicit alias
+codex.chat(modelId)           // explicit alias
+codex.shutdown()              // clean up persistent workers
+```
 
-**`defaultThreadSettings`**
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `cwd` | `string` | Working directory for the Codex thread |
-| `approvalMode` | `'never' \| 'on-request' \| 'on-failure' \| 'untrusted'` | When to request approval for commands |
-| `sandboxMode` | `'read-only' \| 'workspace-write' \| 'full-access'` | File system access level |
-
-**`transport`**
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `type` | `'stdio' \| 'websocket'` | Transport type (default: `'stdio'`) |
-| `stdio` | `{ command?, args?, cwd?, env? }` | Stdio transport settings |
-| `websocket` | `{ url?, headers? }` | WebSocket transport settings |
-
-**`persistent`**
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `poolSize` | `number` | `1` | Number of persistent workers |
-| `idleTimeoutMs` | `number` | `300000` | Idle timeout before worker shutdown |
-| `scope` | `'provider' \| 'global'` | `'provider'` | Pool sharing scope |
-| `key` | `string` | `'default'` | Global pool key (when scope is `'global'`) |
-
-### Provider methods
-
-- `provider(modelId)` — returns a language model instance
-- `provider.languageModel(modelId)` — same as above (explicit)
-- `provider.chat(modelId)` — alias for `languageModel`
+See [`src/provider.ts`](src/provider.ts) for full type definitions.
 
 ## Examples
 
