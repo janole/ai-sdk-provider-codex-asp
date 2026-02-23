@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
@@ -126,18 +127,18 @@ describe("CodexLanguageModel.doStream", () =>
             {
                 type: "text-start",
                 id: "item_1",
-                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
             },
             {
                 type: "text-delta",
                 id: "item_1",
                 delta: "Hello",
-                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
             },
             {
                 type: "text-end",
                 id: "item_1",
-                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
             },
             {
                 type: "finish",
@@ -155,7 +156,7 @@ describe("CodexLanguageModel.doStream", () =>
                         reasoning: undefined,
                     },
                 },
-                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
             },
         ]);
 

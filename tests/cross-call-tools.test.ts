@@ -2,6 +2,7 @@ import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { PersistentTransport } from "../src/client/transport-persistent";
 import { CodexWorkerPool } from "../src/client/worker-pool";
 import { createCodexAppServer } from "../src/provider";
@@ -275,7 +276,7 @@ describe("Cross-call tool support", () =>
 
             // threadId in providerMetadata
             const meta = finish?.providerMetadata as Record<string, Record<string, unknown>> | undefined;
-            expect(meta?.["codex-app-server"]?.threadId).toBe("thr_1");
+            expect(meta?.[CODEX_PROVIDER_ID]?.threadId).toBe("thr_1");
         }
         finally
         {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AppServerClient } from "../src/client/app-server-client";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { DynamicToolsDispatcher } from "../src/dynamic-tools";
 import { createCodexAppServer } from "../src/provider";
@@ -279,7 +280,7 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
             type: "text-delta",
             id: "item_1",
             delta: "Done",
-            providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+            providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
         });
 
         const toolResponse = transport.sentMessages.find(
