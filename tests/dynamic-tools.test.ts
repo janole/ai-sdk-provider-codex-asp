@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AppServerClient } from "../src/client/app-server-client";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { DynamicToolsDispatcher } from "../src/dynamic-tools";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
@@ -275,7 +276,12 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
 
         const parts = await readAll(stream);
 
-        expect(parts).toContainEqual({ type: "text-delta", id: "item_1", delta: "Done" });
+        expect((parts as { type?: string }[]).find((part) => part.type === "text-delta")).toMatchObject({
+            type: "text-delta",
+            id: "item_1",
+            delta: "Done",
+            providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+        });
 
         const toolResponse = transport.sentMessages.find(
             (message) => "id" in message && message.id === 77,

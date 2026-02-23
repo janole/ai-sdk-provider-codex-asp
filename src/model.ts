@@ -8,27 +8,17 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
-import {
-    ApprovalsDispatcher,
-    type CommandApprovalHandler,
-    type FileChangeApprovalHandler,
-} from "./approvals";
+import { ApprovalsDispatcher, type CommandApprovalHandler, type FileChangeApprovalHandler } from "./approvals";
 import { AppServerClient } from "./client/app-server-client";
 import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
-import {
-    WebSocketTransport,
-    type WebSocketTransportSettings,
-} from "./client/transport-websocket";
-import {
-    type DynamicToolDefinition,
-    type DynamicToolHandler,
-    DynamicToolsDispatcher,
-} from "./dynamic-tools";
+import { WebSocketTransport, type WebSocketTransportSettings } from "./client/transport-websocket";
+import { type DynamicToolDefinition, type DynamicToolHandler, DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
+import { withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     AskForApproval,
     CodexInitializeParams,
@@ -45,17 +35,20 @@ import type {
 } from "./protocol/types";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface CodexLanguageModelSettings {
+export interface CodexLanguageModelSettings
+{
     // intentionally empty — settings will be added as the API evolves
 }
 
-export interface CodexThreadDefaults {
+export interface CodexThreadDefaults
+{
     cwd?: string;
     approvalPolicy?: AskForApproval;
     sandbox?: SandboxMode;
 }
 
-export interface CodexModelConfig {
+export interface CodexModelConfig
+{
     provider: string;
     providerSettings: {
         defaultModel?: string;
@@ -82,13 +75,15 @@ export interface CodexModelConfig {
     };
 }
 
-interface ThreadStartResultLike extends CodexThreadStartResult {
+interface ThreadStartResultLike extends CodexThreadStartResult
+{
     thread?: {
         id?: string;
     };
 }
 
-interface TurnStartResultLike extends CodexTurnStartResult {
+interface TurnStartResultLike extends CodexTurnStartResult
+{
     turn?: {
         id?: string;
     };
@@ -361,7 +356,6 @@ export class CodexLanguageModel implements LanguageModelV3
     private registerCrossCallToolHandler(
         client: AppServerClient,
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
-        mapper: CodexEventMapper,
         persistentTransport: PersistentTransport,
         threadId: string,
         closeSuccessfully: () => Promise<void>,
@@ -372,6 +366,8 @@ export class CodexLanguageModel implements LanguageModelV3
             const toolName = params.tool ?? params.toolName ?? "unknown";
             const callId = params.callId ?? `call_${Date.now()}`;
             const args = params.arguments ?? params.input ?? {};
+
+            const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T => withProviderMetadata(part, threadId);
 
             // Park the tool call on the worker for cross-call resumption.
             // Return a never-resolving promise so AppServerClient does NOT
@@ -385,24 +381,23 @@ export class CodexLanguageModel implements LanguageModelV3
                 threadId,
             });
 
-            controller.enqueue({
+            controller.enqueue(withMeta({
                 type: "tool-call",
                 toolCallId: callId,
                 toolName,
                 input: typeof args === "string" ? args : JSON.stringify(args),
-            });
+            }));
 
-            controller.enqueue({
+            controller.enqueue(withMeta({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
                 usage: createEmptyUsage(),
-                providerMetadata: { "codex-app-server": { threadId } },
-            });
+            }));
 
             void closeSuccessfully();
 
             // Return a never-resolving promise to prevent auto-response
-            return new Promise<CodexToolCallResult>(() => {});
+            return new Promise<CodexToolCallResult>(() => { });
         });
     }
 
@@ -510,7 +505,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                             // Register cross-call handler again for chained tool calls
                             this.registerCrossCallToolHandler(
-                                client, controller, mapper, persistentTransport,
+                                client, controller, persistentTransport,
                                 pendingToolCall.threadId, closeSuccessfully,
                             );
 
@@ -640,13 +635,13 @@ export class CodexLanguageModel implements LanguageModelV3
                                 ...(this.config.providerSettings.defaultThreadSettings?.approvalPolicy
                                     ? {
                                         approvalPolicy:
-                          this.config.providerSettings.defaultThreadSettings.approvalPolicy,
+                                            this.config.providerSettings.defaultThreadSettings.approvalPolicy,
                                     }
                                     : {}),
                                 ...(this.config.providerSettings.defaultThreadSettings?.sandbox
                                     ? {
                                         sandbox:
-                          this.config.providerSettings.defaultThreadSettings.sandbox,
+                                            this.config.providerSettings.defaultThreadSettings.sandbox,
                                     }
                                     : {}),
                             };
@@ -663,7 +658,7 @@ export class CodexLanguageModel implements LanguageModelV3
                         if (hasSdkTools && persistentTransport)
                         {
                             this.registerCrossCallToolHandler(
-                                client, controller, mapper, persistentTransport,
+                                client, controller, persistentTransport,
                                 threadId, closeSuccessfully,
                             );
                         }

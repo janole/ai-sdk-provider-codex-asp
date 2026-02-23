@@ -4,22 +4,28 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
-export interface CodexEventMapperInput {
+import { withProviderMetadata } from "./provider-metadata";
+
+export interface CodexEventMapperInput
+{
     method: string;
     params?: unknown;
 }
 
-interface ItemLike {
+interface ItemLike
+{
     itemId?: string;
     itemType?: string;
 }
 
-interface DeltaLike {
+interface DeltaLike
+{
     itemId?: string;
     delta?: string;
 }
 
-interface TurnCompletedLike {
+interface TurnCompletedLike
+{
     status?: "completed" | "interrupted" | "failed";
 }
 
@@ -63,9 +69,13 @@ export class CodexEventMapper
         this.threadId = threadId;
     }
 
-    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[] 
+    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
     {
         const parts: LanguageModelV3StreamPart[] = [];
+
+        const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T =>
+            withProviderMetadata(part, this.threadId);
+
         const pushStreamStart = () => 
         {
             if (!this.streamStarted) 
@@ -88,7 +98,7 @@ export class CodexEventMapper
                 {
                     pushStreamStart();
                     this.openTextParts.add(item.itemId);
-                    parts.push({ type: "text-start", id: item.itemId });
+                    parts.push(withMeta({ type: "text-start", id: item.itemId }));
                 }
                 break;
             }
@@ -105,10 +115,10 @@ export class CodexEventMapper
                 if (!this.openTextParts.has(delta.itemId)) 
                 {
                     this.openTextParts.add(delta.itemId);
-                    parts.push({ type: "text-start", id: delta.itemId });
+                    parts.push(withMeta({ type: "text-start", id: delta.itemId }));
                 }
 
-                parts.push({ type: "text-delta", id: delta.itemId, delta: delta.delta });
+                parts.push(withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
                 break;
             }
 
@@ -116,7 +126,7 @@ export class CodexEventMapper
                 const item = (event.params ?? {}) as ItemLike;
                 if (item.itemType === "assistantMessage" && item.itemId && this.openTextParts.has(item.itemId)) 
                 {
-                    parts.push({ type: "text-end", id: item.itemId });
+                    parts.push(withMeta({ type: "text-end", id: item.itemId }));
                     this.openTextParts.delete(item.itemId);
                 }
                 break;
@@ -127,7 +137,7 @@ export class CodexEventMapper
                 if (params.callId && params.tool) 
                 {
                     pushStreamStart();
-                    parts.push({ type: "tool-input-start", id: params.callId, toolName: params.tool, dynamic: true });
+                    parts.push(withMeta({ type: "tool-input-start", id: params.callId, toolName: params.tool, dynamic: true }));
                 }
                 break;
             }
@@ -136,7 +146,7 @@ export class CodexEventMapper
                 const params = (event.params ?? {}) as { callId?: string; delta?: string };
                 if (params.callId && params.delta) 
                 {
-                    parts.push({ type: "tool-input-delta", id: params.callId, delta: params.delta });
+                    parts.push(withMeta({ type: "tool-input-delta", id: params.callId, delta: params.delta }));
                 }
                 break;
             }
@@ -145,7 +155,7 @@ export class CodexEventMapper
                 const params = (event.params ?? {}) as { callId?: string };
                 if (params.callId) 
                 {
-                    parts.push({ type: "tool-input-end", id: params.callId });
+                    parts.push(withMeta({ type: "tool-input-end", id: params.callId }));
                 }
                 break;
             }
@@ -155,19 +165,12 @@ export class CodexEventMapper
 
                 for (const itemId of this.openTextParts) 
                 {
-                    parts.push({ type: "text-end", id: itemId });
+                    parts.push(withMeta({ type: "text-end", id: itemId }));
                 }
                 this.openTextParts.clear();
 
                 const completed = (event.params ?? {}) as TurnCompletedLike;
-                parts.push({
-                    type: "finish",
-                    finishReason: toFinishReason(completed.status),
-                    usage: EMPTY_USAGE,
-                    ...(this.threadId
-                        ? { providerMetadata: { "codex-app-server": { threadId: this.threadId } } }
-                        : {}),
-                });
+                parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.status), usage: EMPTY_USAGE }));
                 break;
             }
 
