@@ -8,6 +8,7 @@ import type {
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,
 } from "./protocol/types";
+import { stripUndefined } from "./utils/object";
 
 export interface CodexCommandApprovalRequest {
     threadId: string;
@@ -58,15 +59,15 @@ export class ApprovalsDispatcher
             async (params: unknown, _request: JsonRpcRequest) =>
             {
                 const p = params as CommandExecutionRequestApprovalParams;
-                const request: CodexCommandApprovalRequest = {
+                const request: CodexCommandApprovalRequest = stripUndefined({
                     threadId: p.threadId,
                     turnId: p.turnId,
                     itemId: p.itemId,
-                    ...(p.approvalId !== undefined ? { approvalId: p.approvalId } : {}),
-                    ...(p.reason !== undefined ? { reason: p.reason } : {}),
-                    ...(p.command !== undefined ? { command: p.command } : {}),
-                    ...(p.cwd !== undefined ? { cwd: p.cwd } : {}),
-                };
+                    approvalId: p.approvalId,
+                    reason: p.reason,
+                    command: p.command,
+                    cwd: p.cwd,
+                });
 
                 const decision = await this.onCommandApproval(request);
                 return { decision } satisfies CommandExecutionRequestApprovalResponse;
@@ -78,13 +79,13 @@ export class ApprovalsDispatcher
             async (params: unknown, _request: JsonRpcRequest) =>
             {
                 const p = params as FileChangeRequestApprovalParams;
-                const request: CodexFileChangeApprovalRequest = {
+                const request: CodexFileChangeApprovalRequest = stripUndefined({
                     threadId: p.threadId,
                     turnId: p.turnId,
                     itemId: p.itemId,
-                    ...(p.reason !== undefined ? { reason: p.reason } : {}),
-                    ...(p.grantRoot !== undefined ? { grantRoot: p.grantRoot } : {}),
-                };
+                    reason: p.reason,
+                    grantRoot: p.grantRoot,
+                });
 
                 const decision = await this.onFileChangeApproval(request);
                 return { decision } satisfies FileChangeRequestApprovalResponse;
