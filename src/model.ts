@@ -207,9 +207,9 @@ function sdkToolsToCodexDynamicTools(
 {
     return tools
         .filter((t): t is Extract<typeof t, { type: "function" }> => t.type === "function")
-        .map((t) => ({
+        .map((t) => stripUndefined({
             name: t.name,
-            ...(t.description ? { description: t.description } : {}),
+            description: t.description,
             inputSchema: t.inputSchema as Record<string, unknown>,
         }));
 }
@@ -352,14 +352,14 @@ export class CodexLanguageModel implements LanguageModelV3
             })
             .filter((part): part is Extract<LanguageModelV3Content, { type: "text" }> => part !== null);
 
-        return {
+        return stripUndefined({
             content: [...textContent, ...passThroughContent],
             finishReason,
             usage,
             warnings,
-            ...(providerMetadata ? { providerMetadata } : {}),
-            ...(streamResult.request ? { request: streamResult.request } : {}),
-        };
+            providerMetadata,
+            request: streamResult.request,
+        });
     }
 
     private registerCrossCallToolHandler(
@@ -532,14 +532,10 @@ export class CodexLanguageModel implements LanguageModelV3
                                 pendingToolCall.threadId, closeSuccessfully,
                             );
 
-                            const approvalsDispatcher = new ApprovalsDispatcher({
-                                ...(this.config.providerSettings.approvals?.onCommandApproval
-                                    ? { onCommandApproval: this.config.providerSettings.approvals.onCommandApproval }
-                                    : {}),
-                                ...(this.config.providerSettings.approvals?.onFileChangeApproval
-                                    ? { onFileChangeApproval: this.config.providerSettings.approvals.onFileChangeApproval }
-                                    : {}),
-                            });
+                            const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
+                                onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
+                                onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
+                            }));
                             approvalsDispatcher.attach(client);
 
                             await persistentTransport.respondToToolCall(
@@ -553,28 +549,18 @@ export class CodexLanguageModel implements LanguageModelV3
                             this.config.providerSettings.experimentalApi === true;
                         if (dynamicToolsEnabled)
                         {
-                            const dispatcher = new DynamicToolsDispatcher({
-                                ...(this.config.providerSettings.tools
-                                    ? { tools: this.config.providerSettings.tools }
-                                    : {}),
-                                ...(this.config.providerSettings.toolHandlers
-                                    ? { handlers: this.config.providerSettings.toolHandlers }
-                                    : {}),
-                                ...(this.config.providerSettings.toolTimeoutMs !== undefined
-                                    ? { timeoutMs: this.config.providerSettings.toolTimeoutMs }
-                                    : {}),
-                            });
+                            const dispatcher = new DynamicToolsDispatcher(stripUndefined({
+                                tools: this.config.providerSettings.tools,
+                                handlers: this.config.providerSettings.toolHandlers,
+                                timeoutMs: this.config.providerSettings.toolTimeoutMs,
+                            }));
                             dispatcher.attach(client);
                         }
 
-                        const approvalsDispatcher = new ApprovalsDispatcher({
-                            ...(this.config.providerSettings.approvals?.onCommandApproval
-                                ? { onCommandApproval: this.config.providerSettings.approvals.onCommandApproval }
-                                : {}),
-                            ...(this.config.providerSettings.approvals?.onFileChangeApproval
-                                ? { onFileChangeApproval: this.config.providerSettings.approvals.onFileChangeApproval }
-                                : {}),
-                        });
+                        const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
+                            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
+                            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
+                        }));
                         approvalsDispatcher.attach(client);
 
                         client.onAnyNotification((method, params) =>
@@ -615,15 +601,13 @@ export class CodexLanguageModel implements LanguageModelV3
                         const needsExperimentalApi =
                             this.config.providerSettings.experimentalApi === true || dynamicTools !== undefined;
 
-                        const initializeParams: CodexInitializeParams = {
+                        const initializeParams: CodexInitializeParams = stripUndefined({
                             clientInfo: this.config.providerSettings.clientInfo ?? {
                                 name: PACKAGE_NAME,
                                 version: PACKAGE_VERSION,
                             },
-                            ...(needsExperimentalApi
-                                ? { capabilities: { experimentalApi: true } }
-                                : {}),
-                        };
+                            capabilities: needsExperimentalApi ? { experimentalApi: true } : undefined,
+                        });
 
                         await client.request<CodexInitializeResult>("initialize", initializeParams);
                         await client.notification("initialized");
@@ -635,11 +619,11 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         if (resumeThreadId)
                         {
-                            const resumeParams: CodexThreadResumeParams = {
+                            const resumeParams: CodexThreadResumeParams = stripUndefined({
                                 threadId: resumeThreadId,
                                 persistExtendedHistory: false,
-                                ...(developerInstructions ? { developerInstructions } : {}),
-                            };
+                                developerInstructions,
+                            });
                             const resumeResult = await client.request<CodexThreadResumeResult>(
                                 "thread/resume",
                                 resumeParams,
@@ -648,26 +632,14 @@ export class CodexLanguageModel implements LanguageModelV3
                         }
                         else
                         {
-                            const threadStartParams: CodexThreadStartParams = {
+                            const threadStartParams: CodexThreadStartParams = stripUndefined({
                                 model: this.config.providerSettings.defaultModel ?? this.modelId,
-                                ...(dynamicTools ? { dynamicTools } : {}),
-                                ...(developerInstructions ? { developerInstructions } : {}),
-                                ...(this.config.providerSettings.defaultThreadSettings?.cwd
-                                    ? { cwd: this.config.providerSettings.defaultThreadSettings.cwd }
-                                    : {}),
-                                ...(this.config.providerSettings.defaultThreadSettings?.approvalPolicy
-                                    ? {
-                                        approvalPolicy:
-                                            this.config.providerSettings.defaultThreadSettings.approvalPolicy,
-                                    }
-                                    : {}),
-                                ...(this.config.providerSettings.defaultThreadSettings?.sandbox
-                                    ? {
-                                        sandbox:
-                                            this.config.providerSettings.defaultThreadSettings.sandbox,
-                                    }
-                                    : {}),
-                            };
+                                dynamicTools,
+                                developerInstructions,
+                                cwd: this.config.providerSettings.defaultThreadSettings?.cwd,
+                                approvalPolicy: this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
+                            });
                             const threadStartResult = await client.request<ThreadStartResultLike>(
                                 "thread/start",
                                 threadStartParams,
