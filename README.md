@@ -25,12 +25,12 @@ import { generateText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.1-codex',
+  defaultModel: 'gpt-5.3-codex',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = await generateText({
-  model: codex.languageModel('gpt-5.1-codex'),
+  model: codex.languageModel('gpt-5.3-codex'),
   prompt: 'Write a short release note title for websocket support.',
 });
 
@@ -44,12 +44,12 @@ import { streamText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.1-codex',
+  defaultModel: 'gpt-5.3-codex',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = streamText({
-  model: codex('gpt-5.1-codex'),
+  model: codex('gpt-5.3-codex'),
   prompt: 'Explain JSON-RPC in one paragraph.',
 });
 
@@ -124,7 +124,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-  model: codex('gpt-5.1-codex'),
+  model: codex('gpt-5.3-codex'),
   prompt: 'Check ticket ABC-123 and summarize status.',
 });
 ```
