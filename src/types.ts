@@ -9,7 +9,7 @@ export interface CodexProviderConfig {
 
 export interface CodexProvider {
     /** Provider name used for diagnostics and identification. */
-    readonly name: "codex-ai-sdk-provider";
+    readonly name: "ai-sdk-provider-codex-asp";
     /** Immutable provider configuration. */
     readonly config: Readonly<CodexProviderConfig>;
 }

@@ -73,7 +73,7 @@ const codex = createCodexAppServer({
     // Optional: set timeout for tool execution (default: 30s)
     toolTimeoutMs: 30000,
 
-    clientInfo: { name: "@janole/codex-ai-sdk-provider", version: "0.1.0" },
+    clientInfo: { name: "ai-sdk-provider-codex-asp", version: "0.1.0" },
 });
 
 // Codex can now call these tools during generation
