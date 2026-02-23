@@ -46,6 +46,7 @@ export type {
     CodexThreadDefaults,
 } from "./model";
 export { CodexLanguageModel } from "./model";
+export { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 export type { CodexEventMapperInput } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
 export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";

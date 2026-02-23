@@ -16,6 +16,7 @@ import { StdioTransport, type StdioTransportSettings } from "./client/transport-
 import { WebSocketTransport, type WebSocketTransportSettings } from "./client/transport-websocket";
 import { type DynamicToolDefinition, type DynamicToolHandler, DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
+import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import { withProviderMetadata } from "./protocol/provider-metadata";
@@ -594,8 +595,8 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         const initializeParams: CodexInitializeParams = {
                             clientInfo: this.config.providerSettings.clientInfo ?? {
-                                name: "codex-ai-sdk-provider",
-                                version: "0.1.0",
+                                name: PACKAGE_NAME,
+                                version: PACKAGE_VERSION,
                             },
                             ...(needsExperimentalApi
                                 ? { capabilities: { experimentalApi: true } }

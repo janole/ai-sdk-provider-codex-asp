@@ -1,9 +1,9 @@
 {
-  "name": "@janole/codex-ai-sdk-provider",
+  "name": "@janole/ai-sdk-provider-codex-asp",
   "version": "0.1.0",
   "description": "Vercel AI SDK v6 custom provider for the Codex App Server Protocol.",
   "license": "MIT",
-  "author": "",
+  "author": "Jan Ole Suhr",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -47,12 +47,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/codex-ai-sdk-provider.git"
+    "url": "https://github.com/janole/ai-sdk-provider-codex-asp.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/codex-ai-sdk-provider/issues"
+    "url": "https://github.com/janole/ai-sdk-provider-codex-asp/issues"
   },
-  "homepage": "https://github.com/your-org/codex-ai-sdk-provider#readme",
+  "homepage": "https://github.com/janole/ai-sdk-provider-codex-asp#readme",
   "peerDependencies": {
     "ai": "^6.0.0"
   },

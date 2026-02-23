@@ -1,6 +1,6 @@
-# codex-ai-sdk-provider
+# @janole/ai-sdk-provider-codex-asp
 
-`codex-ai-sdk-provider` is a Vercel AI SDK v6 custom provider for the Codex App Server Protocol.
+`@janole/ai-sdk-provider-codex-asp` is a Vercel AI SDK v6 custom provider for the Codex App Server Protocol.
 
 Status: POC feature-complete for language model usage.
 
@@ -13,7 +13,7 @@ Status: POC feature-complete for language model usage.
 ## Installation
 
 ```bash
-npm install codex-ai-sdk-provider ai
+npm install @janole/ai-sdk-provider-codex-asp ai
 ```
 
 ## Quick Start
@@ -22,7 +22,7 @@ npm install codex-ai-sdk-provider ai
 
 ```ts
 import { generateText } from 'ai';
-import { createCodexAppServer } from 'codex-ai-sdk-provider';
+import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
   defaultModel: 'gpt-5.1-codex',
@@ -41,7 +41,7 @@ console.log(result.text);
 
 ```ts
 import { streamText } from 'ai';
-import { createCodexAppServer } from 'codex-ai-sdk-provider';
+import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
   defaultModel: 'gpt-5.1-codex',
@@ -107,7 +107,7 @@ Codex can send inbound `item/tool/call` requests to the client. Register handler
 
 ```ts
 import { streamText } from 'ai';
-import { createCodexAppServer } from 'codex-ai-sdk-provider';
+import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
   experimentalApi: true,

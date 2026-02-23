@@ -4,7 +4,6 @@ import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
     defaultModel: "gpt-5.3-codex",
-    clientInfo: { name: "@janole/codex-ai-sdk-provider", version: "0.1.0" },
 });
 
 const result = streamText({

@@ -1,4 +1,4 @@
-# PoC Analysis: codex-ai-sdk-provider
+# PoC Analysis: @janole/ai-sdk-provider-codex-asp
 
 _Compared against the working implementation in `@janole/chat-server/packages/ai-tools/codex/`._
 
@@ -6,8 +6,8 @@ _Compared against the working implementation in `@janole/chat-server/packages/ai
 
 ## 1. What We Built
 
-`codex-ai-sdk-provider` is a **Vercel AI SDK v3 provider** (`LanguageModelV3`) that speaks the
-Codex App Server JSON-RPC protocol. Any app that already uses `generateText()` / `streamText()`
+`@janole/ai-sdk-provider-codex-asp` is a **Vercel AI SDK v3 provider** (`LanguageModelV3`) that speaks
+the Codex App Server JSON-RPC protocol. Any app that already uses `generateText()` / `streamText()`
 from the `ai` package can drop it in with zero changes to its AI layer.
 
 ```
@@ -167,7 +167,7 @@ The two implementations serve very different purposes and operate at different l
 
 ### Key differences
 
-| Aspect | codex-ai-sdk-provider | chat-server daemon |
+| Aspect | @janole/ai-sdk-provider-codex-asp | chat-server daemon |
 |---|---|---|
 | **Codex process** | Spawned per request, dies after turn | Long-lived, reused across turns |
 | **Threading** | Stateless — new thread every call | Persistent — resumes threads across requests |
