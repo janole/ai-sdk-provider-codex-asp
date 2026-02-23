@@ -2,11 +2,11 @@
 
 [A brief, one-sentence summary of the release.]
 
+**Full Changelog:** [`v[PREV]...v[VERSION]`](https://github.com/janole/ai-sdk-provider-codex-asp/compare/v[PREV]...v[VERSION])
+
 ### 🚀 Published
 
 - **npm:** [`@janole/ai-sdk-provider-codex-asp`](https://www.npmjs.com/package/@janole/ai-sdk-provider-codex-asp/v/[VERSION]) (v[VERSION])
-
-**Full Changelog:** [`v[PREV]...v[VERSION]`](https://github.com/janole/ai-sdk-provider-codex-asp/compare/v[PREV]...v[VERSION])
 
 ### Breaking Changes
 
