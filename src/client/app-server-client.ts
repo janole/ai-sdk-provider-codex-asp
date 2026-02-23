@@ -3,6 +3,7 @@ import type {
     CodexToolCallRequestParams,
     CodexToolCallResult,
 } from "../protocol/types";
+import { stripUndefined } from "../utils/object";
 import type {
     CodexTransport,
     JsonRpcErrorResponse,
@@ -27,8 +28,13 @@ export class JsonRpcError extends CodexProviderError
     }
 }
 
-export interface AppServerClientSettings {
+export interface AppServerClientSettings
+{
     requestTimeoutMs?: number;
+    onPacket?: (packet: {
+        direction: "inbound" | "outbound";
+        message: JsonRpcMessage;
+    }) => void;
 }
 
 type NotificationHandler = (params: unknown) => void | Promise<void>;
@@ -49,9 +55,9 @@ function isResponse(message: JsonRpcMessage): message is JsonRpcResponse
 {
     return (
         "id" in message &&
-    message.id !== undefined &&
-    ("result" in message || "error" in message) &&
-    !("method" in message)
+        message.id !== undefined &&
+        ("result" in message || "error" in message) &&
+        !("method" in message)
     );
 }
 
@@ -66,6 +72,7 @@ export class AppServerClient
 {
     private readonly transport: CodexTransport;
     private readonly requestTimeoutMs: number;
+    private readonly onPacket?: AppServerClientSettings["onPacket"];
     private nextId = 1;
 
     private readonly pendingRequests = new Map<
@@ -88,6 +95,7 @@ export class AppServerClient
     {
         this.transport = transport;
         this.requestTimeoutMs = settings.requestTimeoutMs ?? 30_000;
+        this.onPacket = settings.onPacket;
     }
 
     async connect(): Promise<void> 
@@ -163,12 +171,15 @@ export class AppServerClient
             });
         });
 
+        this.onPacket?.({ direction: "outbound", message });
         await this.transport.sendMessage(message);
         return promise;
     }
 
     async notification(method: string, params?: unknown): Promise<void> 
     {
+        const message = stripUndefined({ method, params });
+        this.onPacket?.({ direction: "outbound", message });
         await this.transport.sendNotification(method, params);
     }
 
@@ -216,6 +227,8 @@ export class AppServerClient
 
     private async handleMessage(message: JsonRpcMessage): Promise<void> 
     {
+        this.onPacket?.({ direction: "inbound", message });
+
         if (isResponse(message)) 
         {
             this.handleResponse(message);
@@ -281,35 +294,41 @@ export class AppServerClient
 
         if (!handler) 
         {
-            await this.transport.sendMessage({
+            const notFoundResponse = {
                 id: request.id,
                 error: {
                     code: -32601,
                     message: `Method not found: ${request.method}`,
                 },
-            } as JsonRpcErrorResponse);
+            } as JsonRpcErrorResponse;
+            this.onPacket?.({ direction: "outbound", message: notFoundResponse });
+            await this.transport.sendMessage(notFoundResponse);
             return;
         }
 
         try 
         {
             const result = await handler(request.params, request);
-            await this.transport.sendMessage({
+            const response = {
                 id: request.id,
                 result,
-            } as JsonRpcSuccessResponse);
+            } as JsonRpcSuccessResponse;
+            this.onPacket?.({ direction: "outbound", message: response });
+            await this.transport.sendMessage(response);
         }
         catch (error) 
         {
             try 
             {
-                await this.transport.sendMessage({
+                const errorResponse = {
                     id: request.id,
                     error: {
                         code: -32000,
                         message: error instanceof Error ? error.message : "Request handler failed",
                     },
-                } as JsonRpcErrorResponse);
+                } as JsonRpcErrorResponse;
+                this.onPacket?.({ direction: "outbound", message: errorResponse });
+                await this.transport.sendMessage(errorResponse);
             }
             catch 
             {

@@ -34,6 +34,7 @@ import type {
     CodexTurnStartResult,
     SandboxMode,
 } from "./protocol/types";
+import { stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CodexLanguageModelSettings
@@ -72,6 +73,13 @@ export interface CodexModelConfig
         approvals?: {
             onCommandApproval?: CommandApprovalHandler;
             onFileChangeApproval?: FileChangeApprovalHandler;
+        };
+        debug?: {
+            logPackets?: boolean;
+            logger?: (packet: {
+                direction: "inbound" | "outbound";
+                message: unknown;
+            }) => void;
         };
     };
 }
@@ -410,7 +418,21 @@ export class CodexLanguageModel implements LanguageModelV3
                 ? new WebSocketTransport(this.config.providerSettings.transport.websocket)
                 : new StdioTransport(this.config.providerSettings.transport?.stdio);
 
-        const client = new AppServerClient(transport);
+        const packetLogger = this.config.providerSettings.debug?.logPackets === true
+            ? this.config.providerSettings.debug.logger
+            ?? ((packet: { direction: "inbound" | "outbound"; message: unknown }) =>
+            {
+                if (packet.direction === "inbound")
+                {
+                    console.debug("[codex packet]", packet.message);
+                }
+            })
+            : undefined;
+
+        const client = new AppServerClient(transport, stripUndefined({
+            onPacket: packetLogger,
+        }));
+
         const mapper = new CodexEventMapper();
 
         const stream = new ReadableStream<LanguageModelV3StreamPart>({

@@ -12,6 +12,7 @@ import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import { WebSocketTransport } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
+import { stripUndefined } from "./utils/object";
 
 const PROVIDER_ID = "codex-app-server" as const;
 
@@ -38,6 +39,15 @@ export interface CodexProviderSettings {
     approvals?: {
         onCommandApproval?: CommandApprovalHandler;
         onFileChangeApproval?: FileChangeApprovalHandler;
+    };
+    debug?: {
+        /** Log all JSON-RPC packets exchanged with Codex. */
+        logPackets?: boolean;
+        /** Optional packet logger (defaults to console.debug for inbound packets). */
+        logger?: (packet: {
+            direction: "inbound" | "outbound";
+            message: unknown;
+        }) => void;
     };
     persistent?: {
         poolSize?: number;
@@ -85,9 +95,7 @@ export function createCodexAppServer(
 
         persistentPoolHandle = acquirePersistentPool({
             scope,
-            ...(settings.persistent.key !== undefined
-                ? { key: settings.persistent.key }
-                : {}),
+            ...stripUndefined({ key: settings.persistent.key }),
             poolSize,
             idleTimeoutMs,
             transportFactory: poolTransportFactory,
@@ -99,50 +107,37 @@ export function createCodexAppServer(
         ? () => new PersistentTransport({ pool: persistentPool })
         : baseTransportFactory;
 
-    const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze({
-        ...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
-        ...(settings.experimentalApi !== undefined
-            ? { experimentalApi: settings.experimentalApi }
-            : {}),
-        ...(settings.clientInfo
-            ? {
-                clientInfo: {
-                    ...settings.clientInfo,
-                },
-            }
-            : {}),
-        ...(settings.transport
-            ? {
-                transport: {
-                    ...(settings.transport.type ? { type: settings.transport.type } : {}),
-                    ...(settings.transport.stdio
-                        ? { stdio: { ...settings.transport.stdio } }
-                        : {}),
-                    ...(settings.transport.websocket
-                        ? { websocket: { ...settings.transport.websocket } }
-                        : {}),
-                },
-            }
-            : {}),
-        ...(settings.defaultThreadSettings
-            ? { defaultThreadSettings: { ...settings.defaultThreadSettings } }
-            : {}),
-        ...(effectiveTransportFactory
-            ? { transportFactory: effectiveTransportFactory }
-            : {}),
-        ...(settings.tools
-            ? { tools: { ...settings.tools } }
-            : {}),
-        ...(settings.toolHandlers
-            ? { toolHandlers: { ...settings.toolHandlers } }
-            : {}),
-        ...(settings.toolTimeoutMs !== undefined
-            ? { toolTimeoutMs: settings.toolTimeoutMs }
-            : {}),
-        ...(settings.approvals
-            ? { approvals: { ...settings.approvals } }
-            : {}),
-    });
+    const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze(stripUndefined({
+        defaultModel: settings.defaultModel,
+        experimentalApi: settings.experimentalApi,
+        clientInfo: settings.clientInfo
+            ? stripUndefined({
+                name: settings.clientInfo.name,
+                version: settings.clientInfo.version,
+                title: settings.clientInfo.title,
+            })
+            : undefined,
+        transport: settings.transport
+            ? stripUndefined({
+                type: settings.transport.type,
+                stdio: settings.transport.stdio
+                    ? { ...settings.transport.stdio }
+                    : undefined,
+                websocket: settings.transport.websocket
+                    ? { ...settings.transport.websocket }
+                    : undefined,
+            })
+            : undefined,
+        defaultThreadSettings: settings.defaultThreadSettings
+            ? { ...settings.defaultThreadSettings }
+            : undefined,
+        transportFactory: effectiveTransportFactory,
+        tools: settings.tools ? { ...settings.tools } : undefined,
+        toolHandlers: settings.toolHandlers ? { ...settings.toolHandlers } : undefined,
+        toolTimeoutMs: settings.toolTimeoutMs,
+        approvals: settings.approvals ? { ...settings.approvals } : undefined,
+        debug: settings.debug ? { ...settings.debug } : undefined,
+    }));
 
     const createLanguageModel = (
         modelId: string,

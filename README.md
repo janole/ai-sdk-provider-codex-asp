@@ -110,6 +110,7 @@ const codex = createCodexAppServer({
   clientInfo?: { name, version, title? },  // defaults to package.json
   transport?: { type: 'stdio' | 'websocket', stdio?, websocket? },
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
+  debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
   defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000
