@@ -178,9 +178,8 @@ npx tsx examples/stream-text.ts
 
 ```bash
 npm install
-npm run typecheck
-npm run test
-npm run build
+npm run build        # ESM + CJS + .d.ts via tsup
+npm run qa           # lint + typecheck + test (all-in-one)
 ```
 
 ## License
