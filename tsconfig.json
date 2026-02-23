@@ -8,6 +8,7 @@
     "exactOptionalPropertyTypes": true,
     "useUnknownInCatchVariables": true,
     "noImplicitOverride": true,
+    "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
