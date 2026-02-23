@@ -74,10 +74,6 @@ describe("CodexEventMapper", () =>
                 params: { threadId: "thr", turnId: "turn", itemId: "plan_1", delta: "1. Inspect code" },
             },
             {
-                method: "item/commandExecution/outputDelta",
-                params: { threadId: "thr", turnId: "turn", itemId: "cmd_1", delta: "npm test\\n" },
-            },
-            {
                 method: "item/fileChange/outputDelta",
                 params: { threadId: "thr", turnId: "turn", itemId: "file_1", delta: "Updated src/model.ts" },
             },
@@ -103,17 +99,179 @@ describe("CodexEventMapper", () =>
             { type: "reasoning-delta", id: "reason_1", delta: "Thinking" },
             { type: "reasoning-start", id: "plan_1" },
             { type: "reasoning-delta", id: "plan_1", delta: "1. Inspect code" },
-            { type: "reasoning-start", id: "cmd_1" },
-            { type: "reasoning-delta", id: "cmd_1", delta: "npm test\\n" },
             { type: "reasoning-start", id: "file_1" },
             { type: "reasoning-delta", id: "file_1", delta: "Updated src/model.ts" },
             { type: "reasoning-start", id: "mcp_1" },
             { type: "reasoning-delta", id: "mcp_1", delta: "Searching docs..." },
             { type: "reasoning-end", id: "reason_1" },
             { type: "reasoning-end", id: "plan_1" },
-            { type: "reasoning-end", id: "cmd_1" },
             { type: "reasoning-end", id: "file_1" },
             { type: "reasoning-end", id: "mcp_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: {
+                    inputTokens: {
+                        total: undefined,
+                        noCache: undefined,
+                        cacheRead: undefined,
+                        cacheWrite: undefined,
+                    },
+                    outputTokens: {
+                        total: undefined,
+                        text: undefined,
+                        reasoning: undefined,
+                    },
+                },
+            },
+        ]);
+    });
+
+    it("maps commandExecution to provider-executed tool-call and tool-result stream", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            {
+                method: "item/started",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    itemId: "cmd_1",
+                    itemType: "commandExecution",
+                    command: ["npm", "test"],
+                    cwd: "/project",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_1", delta: "PASS " },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_1", delta: "src/test.ts" },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    itemId: "cmd_1",
+                    itemType: "commandExecution",
+                    exitCode: 0,
+                    status: "completed",
+                    aggregatedOutput: "PASS src/test.ts",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "cmd_1",
+                toolName: "codex_command_execution",
+                input: JSON.stringify({ command: ["npm", "test"], cwd: "/project" }),
+                providerExecuted: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "cmd_1",
+                toolName: "codex_command_execution",
+                result: { output: "PASS " },
+                preliminary: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "cmd_1",
+                toolName: "codex_command_execution",
+                result: { output: "PASS src/test.ts" },
+                preliminary: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "cmd_1",
+                toolName: "codex_command_execution",
+                result: { output: "PASS src/test.ts", exitCode: 0, status: "completed" },
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: {
+                    inputTokens: {
+                        total: undefined,
+                        noCache: undefined,
+                        cacheRead: undefined,
+                        cacheWrite: undefined,
+                    },
+                    outputTokens: {
+                        total: undefined,
+                        text: undefined,
+                        reasoning: undefined,
+                    },
+                },
+            },
+        ]);
+    });
+
+    it("cleans up orphaned command tool calls on turn/completed", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            {
+                method: "item/started",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    itemId: "cmd_orphan",
+                    itemType: "commandExecution",
+                    command: "ls -la",
+                    cwd: "/tmp",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_orphan", delta: "file1.txt\n" },
+            },
+            {
+                method: "turn/completed",
+                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "cmd_orphan",
+                toolName: "codex_command_execution",
+                input: JSON.stringify({ command: "ls -la", cwd: "/tmp" }),
+                providerExecuted: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "cmd_orphan",
+                toolName: "codex_command_execution",
+                result: { output: "file1.txt\n" },
+                preliminary: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "cmd_orphan",
+                toolName: "codex_command_execution",
+                result: { output: "file1.txt\n" },
+            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },

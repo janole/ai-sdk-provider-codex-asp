@@ -18,6 +18,22 @@ interface ItemLike
     itemType?: string;
 }
 
+interface CommandExecutionItemLike extends ItemLike
+{
+    command?: string | string[];
+    cwd?: string;
+    item?: {
+        command?: string | string[];
+        cwd?: string;
+        exitCode?: number;
+        status?: string;
+        aggregatedOutput?: string;
+    };
+    exitCode?: number;
+    status?: string;
+    aggregatedOutput?: string;
+}
+
 interface DeltaLike
 {
     itemId?: string;
@@ -68,6 +84,7 @@ export class CodexEventMapper
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
+    private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
     private threadId: string | undefined;
 
     setThreadId(threadId: string): void
@@ -118,17 +135,33 @@ export class CodexEventMapper
 
             case "item/started": {
                 const item = (event.params ?? {}) as ItemLike;
-                if (item.itemType === "assistantMessage" && item.itemId) 
+                if (item.itemType === "assistantMessage" && item.itemId)
                 {
                     pushStreamStart();
                     this.openTextParts.add(item.itemId);
                     parts.push(withMeta({ type: "text-start", id: item.itemId }));
                 }
+                else if (item.itemType === "commandExecution" && item.itemId)
+                {
+                    pushStreamStart();
+                    const cmdItem = event.params as CommandExecutionItemLike;
+                    const command = cmdItem.command ?? cmdItem.item?.command;
+                    const cwd = cmdItem.cwd ?? cmdItem.item?.cwd;
+                    const toolName = "codex_command_execution";
+
+                    this.openToolCalls.set(item.itemId, { toolName, output: "" });
+                    parts.push(withMeta({
+                        type: "tool-call",
+                        toolCallId: item.itemId,
+                        toolName,
+                        input: JSON.stringify({ command, cwd }),
+                        providerExecuted: true,
+                    }));
+                }
                 else if (
                     item.itemId
                     && (item.itemType === "reasoning"
                         || item.itemType === "plan"
-                        || item.itemType === "commandExecution"
                         || item.itemType === "fileChange"
                         || item.itemType === "mcpToolCall")
                 )
@@ -159,17 +192,32 @@ export class CodexEventMapper
 
             case "item/completed": {
                 const item = (event.params ?? {}) as ItemLike;
-                if (item.itemType === "assistantMessage" && item.itemId && this.openTextParts.has(item.itemId)) 
+                if (item.itemType === "assistantMessage" && item.itemId && this.openTextParts.has(item.itemId))
                 {
                     parts.push(withMeta({ type: "text-end", id: item.itemId }));
                     this.openTextParts.delete(item.itemId);
+                }
+                else if (item.itemType === "commandExecution" && item.itemId && this.openToolCalls.has(item.itemId))
+                {
+                    const tracked = this.openToolCalls.get(item.itemId)!;
+                    const cmdItem = event.params as CommandExecutionItemLike;
+                    const output = cmdItem.aggregatedOutput ?? cmdItem.item?.aggregatedOutput ?? tracked.output;
+                    const exitCode = cmdItem.exitCode ?? cmdItem.item?.exitCode;
+                    const status = cmdItem.status ?? cmdItem.item?.status;
+
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId: item.itemId,
+                        toolName: tracked.toolName,
+                        result: { output, exitCode, status },
+                    }));
+                    this.openToolCalls.delete(item.itemId);
                 }
                 else if (
                     item.itemId
                     && this.openReasoningParts.has(item.itemId)
                     && (item.itemType === "reasoning"
                         || item.itemType === "plan"
-                        || item.itemType === "commandExecution"
                         || item.itemType === "fileChange"
                         || item.itemType === "mcpToolCall")
                 )
@@ -183,12 +231,28 @@ export class CodexEventMapper
             case "item/reasoning/textDelta":
             case "item/reasoning/summaryTextDelta":
             case "item/plan/delta":
-            case "item/commandExecution/outputDelta":
             case "item/fileChange/outputDelta": {
                 const delta = (event.params ?? {}) as DeltaLike;
                 if (delta.itemId && delta.delta)
                 {
                     pushReasoningDelta(delta.itemId, delta.delta);
+                }
+                break;
+            }
+
+            case "item/commandExecution/outputDelta": {
+                const delta = (event.params ?? {}) as DeltaLike;
+                if (delta.itemId && delta.delta && this.openToolCalls.has(delta.itemId))
+                {
+                    const tracked = this.openToolCalls.get(delta.itemId)!;
+                    tracked.output += delta.delta;
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId: delta.itemId,
+                        toolName: tracked.toolName,
+                        result: { output: tracked.output },
+                        preliminary: true,
+                    }));
                 }
                 break;
             }
@@ -244,6 +308,17 @@ export class CodexEventMapper
                     parts.push(withMeta({ type: "reasoning-end", id: itemId }));
                 }
                 this.openReasoningParts.clear();
+
+                for (const [itemId, tracked] of this.openToolCalls)
+                {
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId: itemId,
+                        toolName: tracked.toolName,
+                        result: { output: tracked.output },
+                    }));
+                }
+                this.openToolCalls.clear();
 
                 const completed = (event.params ?? {}) as TurnCompletedLike;
                 parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.status), usage: EMPTY_USAGE }));
