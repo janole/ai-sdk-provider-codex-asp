@@ -1,6 +1,6 @@
 # @janole/ai-sdk-provider-codex-asp
 
-`@janole/ai-sdk-provider-codex-asp` is a Vercel AI SDK v6 custom provider for the Codex App Server Protocol.
+`@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) v6 custom provider for the Codex App Server Protocol.
 
 Status: POC feature-complete for language model usage.
 
