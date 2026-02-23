@@ -19,7 +19,7 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
-import { withProviderMetadata } from "./protocol/provider-metadata";
+import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     AskForApproval,
     CodexInitializeParams,
@@ -140,6 +140,18 @@ function extractTurnId(result: TurnStartResultLike): string
     return turnId;
 }
 
+function extractThreadIdFromProviderOptions(
+    providerOptions: Record<string, unknown> | undefined,
+): string | undefined
+{
+    const meta = providerOptions?.[CODEX_PROVIDER_ID];
+    if (meta && typeof meta === "object" && "threadId" in meta && typeof (meta as Record<string, unknown>)["threadId"] === "string")
+    {
+        return (meta as Record<string, unknown>)["threadId"] as string;
+    }
+    return undefined;
+}
+
 function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): string | undefined
 {
     for (let i = prompt.length - 1; i >= 0; i--)
@@ -147,10 +159,28 @@ function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): st
         const message = prompt[i];
         if (message?.role === "assistant")
         {
-            const meta = message.providerOptions?.["codex-app-server"];
-            if (meta && typeof meta["threadId"] === "string")
+            // Check message-level providerOptions
+            const messageThreadId = extractThreadIdFromProviderOptions(
+                message.providerOptions as Record<string, unknown> | undefined,
+            );
+            if (messageThreadId)
             {
-                return meta["threadId"];
+                return messageThreadId;
+            }
+
+            // Check content-part-level providerOptions
+            if (Array.isArray(message.content))
+            {
+                for (const part of message.content)
+                {
+                    const partThreadId = extractThreadIdFromProviderOptions(
+                        (part as { providerOptions?: Record<string, unknown> }).providerOptions,
+                    );
+                    if (partThreadId)
+                    {
+                        return partThreadId;
+                    }
+                }
             }
         }
     }
