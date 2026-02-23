@@ -594,7 +594,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         const initializeParams: CodexInitializeParams = {
                             clientInfo: this.config.providerSettings.clientInfo ?? {
-                                name: "ai-sdk-provider-codex-asp",
+                                name: "@janole/ai-sdk-provider-codex-asp",
                                 version: "0.1.0",
                             },
                             ...(needsExperimentalApi
