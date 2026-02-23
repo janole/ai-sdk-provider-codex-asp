@@ -275,7 +275,12 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
 
         const parts = await readAll(stream);
 
-        expect(parts).toContainEqual({ type: "text-delta", id: "item_1", delta: "Done" });
+        expect((parts as { type?: string }[]).find((part) => part.type === "text-delta")).toMatchObject({
+            type: "text-delta",
+            id: "item_1",
+            delta: "Done",
+            providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+        });
 
         const toolResponse = transport.sentMessages.find(
             (message) => "id" in message && message.id === 77,
