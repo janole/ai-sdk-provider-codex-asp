@@ -16,7 +16,7 @@ import { z } from "zod";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    persistent: { poolSize: 1, idleTimeoutMs: 60_000 },
+    persistent: { scope: "global", poolSize: 1, idleTimeoutMs: 60_000 },
     clientInfo: { name: "@janole/codex-ai-sdk-provider", version: "0.1.0" },
 });
 
