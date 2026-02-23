@@ -390,6 +390,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 toolCallId: callId,
                 toolName,
                 input: typeof args === "string" ? args : JSON.stringify(args),
+                providerMetadata: { "codex-app-server": { threadId } },
             });
 
             controller.enqueue({
