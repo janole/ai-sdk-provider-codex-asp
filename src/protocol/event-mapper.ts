@@ -23,6 +23,11 @@ interface DeltaLike
     itemId?: string;
     delta?: string;
 }
+interface ProgressLike
+{
+    itemId?: string;
+    message?: string;
+}
 
 interface TurnCompletedLike
 {
@@ -62,6 +67,7 @@ export class CodexEventMapper
 {
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
+    private readonly openReasoningParts = new Set<string>();
     private threadId: string | undefined;
 
     setThreadId(threadId: string): void
@@ -85,6 +91,24 @@ export class CodexEventMapper
             }
         };
 
+        const pushReasoningDelta = (id: string, delta: string) =>
+        {
+            pushStreamStart();
+
+            if (!this.openReasoningParts.has(id))
+            {
+                this.openReasoningParts.add(id);
+                parts.push(withMeta({ type: "reasoning-start", id }));
+            }
+
+            if (!delta)
+            {
+                return;
+            }
+
+            parts.push(withMeta({ type: "reasoning-delta", id, delta }));
+        };
+
         switch (event.method) 
         {
             case "turn/started": {
@@ -99,6 +123,17 @@ export class CodexEventMapper
                     pushStreamStart();
                     this.openTextParts.add(item.itemId);
                     parts.push(withMeta({ type: "text-start", id: item.itemId }));
+                }
+                else if (
+                    item.itemId
+                    && (item.itemType === "reasoning"
+                        || item.itemType === "plan"
+                        || item.itemType === "commandExecution"
+                        || item.itemType === "fileChange"
+                        || item.itemType === "mcpToolCall")
+                )
+                {
+                    pushReasoningDelta(item.itemId, "");
                 }
                 break;
             }
@@ -128,6 +163,41 @@ export class CodexEventMapper
                 {
                     parts.push(withMeta({ type: "text-end", id: item.itemId }));
                     this.openTextParts.delete(item.itemId);
+                }
+                else if (
+                    item.itemId
+                    && this.openReasoningParts.has(item.itemId)
+                    && (item.itemType === "reasoning"
+                        || item.itemType === "plan"
+                        || item.itemType === "commandExecution"
+                        || item.itemType === "fileChange"
+                        || item.itemType === "mcpToolCall")
+                )
+                {
+                    parts.push(withMeta({ type: "reasoning-end", id: item.itemId }));
+                    this.openReasoningParts.delete(item.itemId);
+                }
+                break;
+            }
+
+            case "item/reasoning/textDelta":
+            case "item/reasoning/summaryTextDelta":
+            case "item/plan/delta":
+            case "item/commandExecution/outputDelta":
+            case "item/fileChange/outputDelta": {
+                const delta = (event.params ?? {}) as DeltaLike;
+                if (delta.itemId && delta.delta)
+                {
+                    pushReasoningDelta(delta.itemId, delta.delta);
+                }
+                break;
+            }
+
+            case "item/mcpToolCall/progress": {
+                const params = (event.params ?? {}) as ProgressLike;
+                if (params.itemId && params.message)
+                {
+                    pushReasoningDelta(params.itemId, params.message);
                 }
                 break;
             }
@@ -168,6 +238,12 @@ export class CodexEventMapper
                     parts.push(withMeta({ type: "text-end", id: itemId }));
                 }
                 this.openTextParts.clear();
+
+                for (const itemId of this.openReasoningParts)
+                {
+                    parts.push(withMeta({ type: "reasoning-end", id: itemId }));
+                }
+                this.openReasoningParts.clear();
 
                 const completed = (event.params ?? {}) as TurnCompletedLike;
                 parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.status), usage: EMPTY_USAGE }));
