@@ -1,3 +1,10 @@
+/**
+ * Streaming text generation with streamText().
+ *
+ * Run with:
+ *   npx tsx examples/stream-text.ts
+ */
+
 import { streamText } from "ai";
 
 import { createCodexAppServer } from "../src/provider";

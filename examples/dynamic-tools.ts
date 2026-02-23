@@ -1,5 +1,5 @@
 /**
- * Demonstrates provider-level dynamic tools with inline execution.
+ * Provider-level dynamic tools with inline execution.
  *
  * Tools are registered on the provider with full schema + execute handlers.
  * When Codex calls a tool, the provider executes the handler inline and

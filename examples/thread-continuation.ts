@@ -1,5 +1,5 @@
 /**
- * Demonstrates thread continuation via providerMetadata.
+ * Thread continuation via providerMetadata.
  *
  * Turn 1 — tells Codex a secret number.
  * Turn 2 — asks Codex to recall it, using thread/resume so no history is re-sent.
@@ -70,3 +70,5 @@ const turn2 = await generateText({
 });
 
 console.log("Codex:", turn2.text);
+
+await codex.shutdown();

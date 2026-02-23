@@ -1,3 +1,10 @@
+/**
+ * Non-streaming text generation with generateText().
+ *
+ * Run with:
+ *   npx tsx examples/generate-text.ts
+ */
+
 import { generateText } from "ai";
 
 import { createCodexAppServer } from "../src/provider";

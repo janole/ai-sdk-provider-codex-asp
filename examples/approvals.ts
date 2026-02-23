@@ -1,3 +1,13 @@
+/**
+ * Command and file-change approval handling.
+ *
+ * Registers approval handlers that auto-accept all requests.
+ * In production you'd prompt the user or apply policy checks.
+ *
+ * Run with:
+ *   npx tsx examples/approvals.ts
+ */
+
 import { streamText } from "ai";
 
 import { createCodexAppServer } from "../src/provider";

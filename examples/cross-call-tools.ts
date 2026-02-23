@@ -1,8 +1,7 @@
 /**
- * Demonstrates AI SDK native cross-call tools with the Codex provider.
+ * AI SDK native cross-call tools with the Codex provider.
  *
- * Same lookup_ticket / check_weather idea as dynamic-tools.ts, but using
- * the standard AI SDK `tool()` helper passed to `streamText({ tools })`.
+ * Uses the standard AI SDK tool() helper passed to streamText({ tools }).
  * The AI SDK handles execution locally and feeds results back to Codex
  * via the cross-call mechanism (requires persistent transport).
  *
