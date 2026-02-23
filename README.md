@@ -148,9 +148,20 @@ await codex.shutdown();
 
 ## Examples
 
-- Basic local stdio generation: see tests `tests/model.stream.test.ts`
-- WebSocket transport exchange: see `tests/transport-websocket.test.ts`
-- Dynamic tool dispatching: see `tests/dynamic-tools.test.ts`
+See the [`examples/`](examples/) directory:
+
+- [`generate-text.ts`](examples/generate-text.ts) — Non-streaming text generation
+- [`stream-text.ts`](examples/stream-text.ts) — Streaming text generation
+- [`cross-call-tools.ts`](examples/cross-call-tools.ts) — Standard AI SDK tools via Codex
+- [`dynamic-tools.ts`](examples/dynamic-tools.ts) — Provider-level dynamic tools
+- [`thread-continuation.ts`](examples/thread-continuation.ts) — Multi-turn thread resumption
+- [`approvals.ts`](examples/approvals.ts) — Command and file-change approval handling
+
+Run any example with:
+
+```bash
+npx tsx examples/stream-text.ts
+```
 
 ## Troubleshooting
 
