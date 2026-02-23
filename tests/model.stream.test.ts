@@ -47,10 +47,9 @@ class ScriptedTransport extends MockTransport
                 this.emitMessage({
                     method: "item/started",
                     params: {
+                        item: { type: "agentMessage", id: "item_1", text: "" },
                         threadId: "thr_1",
                         turnId: "turn_1",
-                        itemId: "item_1",
-                        itemType: "assistantMessage",
                     },
                 });
                 this.emitMessage({
@@ -65,18 +64,16 @@ class ScriptedTransport extends MockTransport
                 this.emitMessage({
                     method: "item/completed",
                     params: {
+                        item: { type: "agentMessage", id: "item_1", text: "Hello" },
                         threadId: "thr_1",
                         turnId: "turn_1",
-                        itemId: "item_1",
-                        itemType: "assistantMessage",
                     },
                 });
                 this.emitMessage({
                     method: "turn/completed",
                     params: {
                         threadId: "thr_1",
-                        turnId: "turn_1",
-                        status: "completed",
+                        turn: { id: "turn_1", items: [], status: "completed", error: null },
                     },
                 });
             });

@@ -142,7 +142,7 @@ class ToolCallTransport extends MockTransport
             {
                 this.emitMessage({
                     method: "item/started",
-                    params: { threadId: "thr_1", turnId: "turn_1", itemId: "item_msg", itemType: "assistantMessage" },
+                    params: { item: { type: "agentMessage", id: "item_msg", text: "" }, threadId: "thr_1", turnId: "turn_1" },
                 });
                 this.emitMessage({
                     method: "item/agentMessage/delta",
@@ -150,11 +150,11 @@ class ToolCallTransport extends MockTransport
                 });
                 this.emitMessage({
                     method: "item/completed",
-                    params: { threadId: "thr_1", turnId: "turn_1", itemId: "item_msg", itemType: "assistantMessage" },
+                    params: { item: { type: "agentMessage", id: "item_msg", text: this.finalMessage }, threadId: "thr_1", turnId: "turn_1" },
                 });
                 this.emitMessage({
                     method: "turn/completed",
-                    params: { threadId: "thr_1", turnId: "turn_1", status: "completed" },
+                    params: { threadId: "thr_1", turn: { id: "turn_1", items: [], status: "completed", error: null } },
                 });
             });
         }
