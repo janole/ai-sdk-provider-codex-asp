@@ -4,7 +4,7 @@ import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
     defaultModel: "gpt-5.3-codex",
-    clientInfo: { name: "ai-sdk-provider-codex-asp", version: "0.1.0" },
+    clientInfo: { name: "@janole/ai-sdk-provider-codex-asp", version: "0.1.0" },
 });
 
 const result = await generateText({

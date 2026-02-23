@@ -17,7 +17,7 @@ import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
     persistent: { scope: "global", poolSize: 1, idleTimeoutMs: 60_000 },
-    clientInfo: { name: "ai-sdk-provider-codex-asp", version: "0.1.0" },
+    clientInfo: { name: "@janole/ai-sdk-provider-codex-asp", version: "0.1.0" },
 });
 
 const result = streamText({
