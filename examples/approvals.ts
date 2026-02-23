@@ -36,3 +36,4 @@ for await (const chunk of result.textStream)
 }
 
 console.log("\n");
+await codex.shutdown();

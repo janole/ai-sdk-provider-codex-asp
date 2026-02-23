@@ -8,10 +8,13 @@ const codex = createCodexAppServer({
 
 const result = streamText({
     model: codex("gpt-5.3-codex"),
-    prompt: "Explain JSON-RPC in one paragraph.",
+    prompt: "Check the local repository just quickly. What it is about?",
 });
 
 for await (const chunk of result.textStream)
 {
     process.stdout.write(chunk);
 }
+
+console.log("\n");
+await codex.shutdown();

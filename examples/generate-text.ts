@@ -8,7 +8,9 @@ const codex = createCodexAppServer({
 
 const result = await generateText({
     model: codex.languageModel("gpt-5.3-codex"),
-    prompt: "Check the local repository just quickly. What it is about?",
+    prompt: "Hello, who are you?",
 });
 
 console.log(result.text);
+
+await codex.shutdown();
