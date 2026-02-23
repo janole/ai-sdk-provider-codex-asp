@@ -5,10 +5,10 @@
 Status: POC feature-complete for language model usage.
 
 - `LanguageModelV3` provider implementation
-- `doStream` via Codex app-server lifecycle
-- `doGenerate` via stream aggregation
+- Streaming (`streamText`) and non-streaming (`generateText`)
+- Standard AI SDK `tool()` support via Codex dynamic tools injection
 - `stdio` and `websocket` transports
-- dynamicTools dispatcher (experimental)
+- Persistent worker pool with thread management
 
 ## Installation
 
@@ -58,75 +58,48 @@ for await (const chunk of result.textStream) {
 }
 ```
 
-## Transport Options
+## Tools
 
-### Stdio (default)
+Use standard AI SDK `tool()` definitions — the provider automatically injects them into Codex as dynamic tools and routes results back. No Codex-specific API needed.
 
-Uses:
-
-```bash
-codex app-server --listen stdio://
-```
-
-Config:
+Requires a persistent transport so tool results can be fed back within the same session:
 
 ```ts
-const codex = createCodexAppServer({
-  transport: {
-    type: 'stdio',
-    stdio: {
-      command: 'codex',
-      args: ['app-server', '--listen', 'stdio://'],
-      cwd: process.cwd(),
-    },
-  },
-});
-```
-
-### WebSocket
-
-Connects to a running app-server websocket endpoint.
-
-```ts
-const codex = createCodexAppServer({
-  transport: {
-    type: 'websocket',
-    websocket: {
-      url: 'ws://localhost:3000',
-      headers: {
-        Authorization: 'Bearer <token>',
-      },
-    },
-  },
-});
-```
-
-## dynamicTools (Experimental)
-
-Codex can send inbound `item/tool/call` requests to the client. Register handlers with `toolHandlers`.
-
-```ts
-import { streamText } from 'ai';
+import { stepCountIs, streamText, tool } from 'ai';
+import { z } from 'zod';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  experimentalApi: true,
-  toolTimeoutMs: 30_000,
-  toolHandlers: {
-    lookup_ticket: async (args) => {
-      const id = (args as { id?: string }).id ?? 'unknown';
-      return {
-        success: true,
-        contentItems: [{ type: 'inputText', text: `Ticket ${id} is open.` }],
-      };
-    },
-  },
+  persistent: { scope: 'global', poolSize: 1, idleTimeoutMs: 60_000 },
 });
 
 const result = streamText({
   model: codex('gpt-5.3-codex'),
-  prompt: 'Check ticket ABC-123 and summarize status.',
+  prompt: 'Can you check ticket 15 and also the weather in Berlin?',
+  tools: {
+    lookup_ticket: tool({
+      description: 'Look up the current status of a support ticket by its ID.',
+      inputSchema: z.object({
+        id: z.string().describe('The ticket ID, e.g. "TICK-42".'),
+      }),
+      execute: async ({ id }) => `Ticket ${id} is open and assigned to team Alpha.`,
+    }),
+    check_weather: tool({
+      description: 'Get the current weather for a given location.',
+      inputSchema: z.object({
+        location: z.string().describe('City name or coordinates.'),
+      }),
+      execute: async ({ location }) => `Weather in ${location}: 22°C, sunny`,
+    }),
+  },
+  stopWhen: stepCountIs(5),
 });
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+
+await codex.shutdown();
 ```
 
 ## API Reference
