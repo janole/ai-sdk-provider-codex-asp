@@ -123,9 +123,22 @@ describe("CodexLanguageModel.doStream", () =>
 
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            { type: "text-start", id: "item_1" },
-            { type: "text-delta", id: "item_1", delta: "Hello" },
-            { type: "text-end", id: "item_1" },
+            {
+                type: "text-start",
+                id: "item_1",
+                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+            },
+            {
+                type: "text-delta",
+                id: "item_1",
+                delta: "Hello",
+                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+            },
+            {
+                type: "text-end",
+                id: "item_1",
+                providerMetadata: { "codex-app-server": { threadId: "thr_1" } },
+            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
