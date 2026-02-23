@@ -2,9 +2,9 @@ import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
-import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { PersistentTransport } from "../src/client/transport-persistent";
 import { CodexWorkerPool } from "../src/client/worker-pool";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
