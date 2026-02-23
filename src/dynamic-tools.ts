@@ -5,6 +5,7 @@ import type {
     CodexToolCallResult,
     CodexToolResultContentItem,
 } from "./protocol/types";
+import { stripUndefined } from "./utils/object";
 
 export interface DynamicToolExecutionContext {
     threadId?: string;
@@ -114,12 +115,12 @@ export class DynamicToolsDispatcher
             return toTextResult(`No dynamic tool handler registered for "${toolName}".`, false);
         }
 
-        const context: DynamicToolExecutionContext = {
+        const context: DynamicToolExecutionContext = stripUndefined({
             toolName,
-            ...(params.threadId ? { threadId: params.threadId } : {}),
-            ...(params.turnId ? { turnId: params.turnId } : {}),
-            ...(params.callId ? { callId: params.callId } : {}),
-        };
+            threadId: params.threadId,
+            turnId: params.turnId,
+            callId: params.callId,
+        });
 
         const args = params.arguments ?? params.input;
 
