@@ -4,6 +4,8 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import { withProviderMetadata } from "./provider-metadata";
+
 export interface CodexEventMapperInput
 {
     method: string;
@@ -67,24 +69,13 @@ export class CodexEventMapper
         this.threadId = threadId;
     }
 
-    private getProviderMetadata():
-        | { "codex-app-server": { threadId: string } }
-        | undefined
-    {
-        if (!this.threadId)
-        {
-            return undefined;
-        }
-
-        return { "codex-app-server": { threadId: this.threadId } };
-    }
-
-    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[] 
+    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
     {
         const parts: LanguageModelV3StreamPart[] = [];
-        const providerMetadata = this.getProviderMetadata();
+
         const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T =>
-            (providerMetadata ? { ...part, providerMetadata } : part);
+            withProviderMetadata(part, this.threadId);
+
         const pushStreamStart = () => 
         {
             if (!this.streamStarted) 

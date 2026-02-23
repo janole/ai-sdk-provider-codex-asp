@@ -49,6 +49,7 @@ export { CodexLanguageModel } from "./model";
 export type { CodexEventMapperInput } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
 export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
+export { CODEX_PROVIDER_ID, codexProviderMetadata, withProviderMetadata } from "./protocol/provider-metadata";
 export type {
     AskForApproval,
     CodexAgentMessageDeltaNotification,
