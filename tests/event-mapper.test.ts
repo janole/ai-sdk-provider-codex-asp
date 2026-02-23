@@ -2,9 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { CodexEventMapper } from "../src/protocol/event-mapper";
 
-describe("CodexEventMapper", () => 
+const EMPTY_USAGE = {
+    inputTokens: {
+        total: undefined,
+        noCache: undefined,
+        cacheRead: undefined,
+        cacheWrite: undefined,
+    },
+    outputTokens: {
+        total: undefined,
+        text: undefined,
+        reasoning: undefined,
+    },
+};
+
+describe("CodexEventMapper", () =>
 {
-    it("maps assistant message lifecycle to text stream parts", () => 
+    it("maps agent message lifecycle to text stream parts", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -12,7 +26,11 @@ describe("CodexEventMapper", () =>
             { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
             {
                 method: "item/started",
-                params: { threadId: "thr", turnId: "turn", itemId: "item1", itemType: "assistantMessage" },
+                params: {
+                    item: { type: "agentMessage", id: "item1", text: "" },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
             },
             {
                 method: "item/agentMessage/delta",
@@ -20,11 +38,18 @@ describe("CodexEventMapper", () =>
             },
             {
                 method: "item/completed",
-                params: { threadId: "thr", turnId: "turn", itemId: "item1", itemType: "assistantMessage" },
+                params: {
+                    item: { type: "agentMessage", id: "item1", text: "Hello" },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
             },
             {
                 method: "turn/completed",
-                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
             },
         ];
 
@@ -38,19 +63,7 @@ describe("CodexEventMapper", () =>
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
-                usage: {
-                    inputTokens: {
-                        total: undefined,
-                        noCache: undefined,
-                        cacheRead: undefined,
-                        cacheWrite: undefined,
-                    },
-                    outputTokens: {
-                        total: undefined,
-                        text: undefined,
-                        reasoning: undefined,
-                    },
-                },
+                usage: EMPTY_USAGE,
             },
         ]);
     });
@@ -63,7 +76,11 @@ describe("CodexEventMapper", () =>
             { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
             {
                 method: "item/started",
-                params: { threadId: "thr", turnId: "turn", itemId: "reason_1", itemType: "reasoning" },
+                params: {
+                    item: { type: "reasoning", id: "reason_1", summary: [], content: [] },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
             },
             {
                 method: "item/reasoning/textDelta",
@@ -83,11 +100,18 @@ describe("CodexEventMapper", () =>
             },
             {
                 method: "item/completed",
-                params: { threadId: "thr", turnId: "turn", itemId: "reason_1", itemType: "reasoning" },
+                params: {
+                    item: { type: "reasoning", id: "reason_1", summary: [], content: [] },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
             },
             {
                 method: "turn/completed",
-                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
             },
         ];
 
@@ -110,19 +134,7 @@ describe("CodexEventMapper", () =>
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
-                usage: {
-                    inputTokens: {
-                        total: undefined,
-                        noCache: undefined,
-                        cacheRead: undefined,
-                        cacheWrite: undefined,
-                    },
-                    outputTokens: {
-                        total: undefined,
-                        text: undefined,
-                        reasoning: undefined,
-                    },
-                },
+                usage: EMPTY_USAGE,
             },
         ]);
     });
@@ -136,12 +148,20 @@ describe("CodexEventMapper", () =>
             {
                 method: "item/started",
                 params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_1",
+                        command: "npm test",
+                        cwd: "/project",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
                     threadId: "thr",
                     turnId: "turn",
-                    itemId: "cmd_1",
-                    itemType: "commandExecution",
-                    command: ["npm", "test"],
-                    cwd: "/project",
                 },
             },
             {
@@ -155,18 +175,28 @@ describe("CodexEventMapper", () =>
             {
                 method: "item/completed",
                 params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_1",
+                        command: "npm test",
+                        cwd: "/project",
+                        processId: "123",
+                        status: "completed",
+                        commandActions: [],
+                        aggregatedOutput: "PASS src/test.ts",
+                        exitCode: 0,
+                        durationMs: 1500,
+                    },
                     threadId: "thr",
                     turnId: "turn",
-                    itemId: "cmd_1",
-                    itemType: "commandExecution",
-                    exitCode: 0,
-                    status: "completed",
-                    aggregatedOutput: "PASS src/test.ts",
                 },
             },
             {
                 method: "turn/completed",
-                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
             },
         ];
 
@@ -178,8 +208,9 @@ describe("CodexEventMapper", () =>
                 type: "tool-call",
                 toolCallId: "cmd_1",
                 toolName: "codex_command_execution",
-                input: JSON.stringify({ command: ["npm", "test"], cwd: "/project" }),
+                input: JSON.stringify({ command: "npm test", cwd: "/project" }),
                 providerExecuted: true,
+                dynamic: true,
             },
             {
                 type: "tool-result",
@@ -204,19 +235,7 @@ describe("CodexEventMapper", () =>
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
-                usage: {
-                    inputTokens: {
-                        total: undefined,
-                        noCache: undefined,
-                        cacheRead: undefined,
-                        cacheWrite: undefined,
-                    },
-                    outputTokens: {
-                        total: undefined,
-                        text: undefined,
-                        reasoning: undefined,
-                    },
-                },
+                usage: EMPTY_USAGE,
             },
         ]);
     });
@@ -230,12 +249,20 @@ describe("CodexEventMapper", () =>
             {
                 method: "item/started",
                 params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_orphan",
+                        command: "ls -la",
+                        cwd: "/tmp",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
                     threadId: "thr",
                     turnId: "turn",
-                    itemId: "cmd_orphan",
-                    itemType: "commandExecution",
-                    command: "ls -la",
-                    cwd: "/tmp",
                 },
             },
             {
@@ -244,7 +271,10 @@ describe("CodexEventMapper", () =>
             },
             {
                 method: "turn/completed",
-                params: { threadId: "thr", turnId: "turn", status: "completed" as const },
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
             },
         ];
 
@@ -258,6 +288,7 @@ describe("CodexEventMapper", () =>
                 toolName: "codex_command_execution",
                 input: JSON.stringify({ command: "ls -la", cwd: "/tmp" }),
                 providerExecuted: true,
+                dynamic: true,
             },
             {
                 type: "tool-result",
@@ -275,19 +306,227 @@ describe("CodexEventMapper", () =>
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
-                usage: {
-                    inputTokens: {
-                        total: undefined,
-                        noCache: undefined,
-                        cacheRead: undefined,
-                        cacheWrite: undefined,
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("maps new item types (webSearch, collabAgentToolCall) to reasoning parts", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            {
+                method: "item/started",
+                params: {
+                    item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "collabAgentToolCall",
+                        id: "collab_1",
+                        tool: { type: "ask" },
+                        status: "inProgress",
+                        senderThreadId: "thr",
+                        receiverThreadIds: [],
+                        prompt: null,
+                        agentsStates: {},
                     },
-                    outputTokens: {
-                        total: undefined,
-                        text: undefined,
-                        reasoning: undefined,
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "collabAgentToolCall",
+                        id: "collab_1",
+                        tool: { type: "ask" },
+                        status: "completed",
+                        senderThreadId: "thr",
+                        receiverThreadIds: [],
+                        prompt: null,
+                        agentsStates: {},
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "reasoning-start", id: "ws_1" },
+            { type: "reasoning-start", id: "collab_1" },
+            { type: "reasoning-end", id: "ws_1" },
+            { type: "reasoning-end", id: "collab_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("populates finish usage from thread/tokenUsage/updated", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            {
+                method: "item/started",
+                params: {
+                    item: { type: "agentMessage", id: "item1", text: "" },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/agentMessage/delta",
+                params: { threadId: "thr", turnId: "turn", itemId: "item1", delta: "Hi" },
+            },
+            {
+                method: "thread/tokenUsage/updated",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    tokenUsage: {
+                        total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, outputTokens: 500, reasoningOutputTokens: 100 },
+                        last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, outputTokens: 200, reasoningOutputTokens: 50 },
+                        modelContextWindow: 128000,
                     },
                 },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: { type: "agentMessage", id: "item1", text: "Hi" },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        const finish = parts.find((p) => p.type === "finish");
+        expect(finish).toEqual({
+            type: "finish",
+            finishReason: { unified: "stop", raw: "completed" },
+            usage: {
+                inputTokens: {
+                    total: 600,
+                    noCache: undefined,
+                    cacheRead: 200,
+                    cacheWrite: undefined,
+                },
+                outputTokens: {
+                    total: 200,
+                    text: undefined,
+                    reasoning: 50,
+                },
+            },
+        });
+    });
+
+    it("maps mcpToolCall item/started and item/completed with nested shape", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "mcpToolCall",
+                        id: "mcp_1",
+                        server: "docs-server",
+                        tool: "search",
+                        status: "inProgress",
+                        arguments: { query: "test" },
+                        result: null,
+                        error: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/mcpToolCall/progress",
+                params: { threadId: "thr", turnId: "turn", itemId: "mcp_1", message: "Searching..." },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "mcpToolCall",
+                        id: "mcp_1",
+                        server: "docs-server",
+                        tool: "search",
+                        status: "completed",
+                        arguments: { query: "test" },
+                        result: { content: [{ type: "text", text: "found" }], isError: false },
+                        error: null,
+                        durationMs: 250,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "reasoning-start", id: "mcp_1" },
+            { type: "reasoning-delta", id: "mcp_1", delta: "Searching..." },
+            { type: "reasoning-end", id: "mcp_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
             },
         ]);
     });

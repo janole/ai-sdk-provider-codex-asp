@@ -27,6 +27,14 @@ export type { FileChangeRequestApprovalParams };
 export type { FileChangeRequestApprovalResponse };
 export type { SandboxMode };
 
+// Re-export official v2 notification types used by the event mapper
+export type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
+export type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
+export type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
+export type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
+export type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
+export type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
+
 export interface JsonRpcMessageBase {
     id?: number | string;
     method?: string;
@@ -143,53 +151,6 @@ export interface CodexTurnStartResult {
     turnId: string;
 }
 
-export interface CodexTurnStartedNotification {
-    method: "turn/started";
-    params: {
-        threadId: string;
-        turnId: string;
-    };
-}
-
-export interface CodexTurnCompletedNotification {
-    method: "turn/completed";
-    params: {
-        threadId: string;
-        turnId: string;
-        status: "completed" | "interrupted" | "failed";
-    };
-}
-
-export interface CodexItemStartedNotification {
-    method: "item/started";
-    params: {
-        threadId: string;
-        turnId: string;
-        itemId: string;
-        itemType: string;
-    };
-}
-
-export interface CodexItemCompletedNotification {
-    method: "item/completed";
-    params: {
-        threadId: string;
-        turnId: string;
-        itemId: string;
-        itemType: string;
-    };
-}
-
-export interface CodexAgentMessageDeltaNotification {
-    method: "item/agentMessage/delta";
-    params: {
-        threadId: string;
-        turnId: string;
-        itemId: string;
-        delta: string;
-    };
-}
-
 export interface CodexToolCallStartedNotification {
     method: "item/tool/callStarted";
     params: {
@@ -234,11 +195,6 @@ export interface CodexToolCallResult {
 
 export type CodexNotification =
   | CodexInitializedNotification
-  | CodexTurnStartedNotification
-  | CodexTurnCompletedNotification
-  | CodexItemStartedNotification
-  | CodexItemCompletedNotification
-  | CodexAgentMessageDeltaNotification
   | CodexToolCallStartedNotification
   | CodexToolCallDeltaNotification
   | CodexToolCallFinishedNotification;
