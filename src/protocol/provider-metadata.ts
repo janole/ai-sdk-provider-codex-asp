@@ -1,6 +1,6 @@
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 
-export const CODEX_PROVIDER_ID = "codex-app-server";
+export const CODEX_PROVIDER_ID = "@janole/ai-sdk-provider-codex-asp";
 
 export function codexProviderMetadata(threadId: string | undefined)
 {
