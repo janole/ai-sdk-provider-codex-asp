@@ -161,6 +161,18 @@ npm run build        # ESM + CJS + .d.ts via tsup
 npm run qa           # lint + typecheck + test (all-in-one)
 ```
 
+### Generated Protocol Types
+
+`src/protocol/app-server-protocol/` is gitignored, but selected generated files are intentionally tracked via `git add -f`.
+This keeps protocol diffs visible in PRs and local `git status` after regeneration.
+
+When protocol shapes change, clean and regenerate:
+
+```bash
+rm -rf src/protocol/app-server-protocol
+npm run codex:generate-types
+```
+
 ## License
 
 MIT
