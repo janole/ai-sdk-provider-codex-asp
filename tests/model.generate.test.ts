@@ -5,6 +5,7 @@ import type {
 } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 
+import { CODEX_PROVIDER_ID } from "../src";
 import { CodexLanguageModel } from "../src/model";
 
 function streamFromParts(parts: LanguageModelV3StreamPart[]): ReadableStream<LanguageModelV3StreamPart> 
@@ -25,7 +26,7 @@ class MockGenerateModel extends CodexLanguageModel
 {
     constructor(private readonly result: LanguageModelV3StreamResult) 
     {
-        super("gpt-5.1-codex", {}, { provider: "codex-app-server", providerSettings: {} });
+        super("gpt-5.3-codex", {}, { provider: CODEX_PROVIDER_ID, providerSettings: {} });
     }
 
     override doStream(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>

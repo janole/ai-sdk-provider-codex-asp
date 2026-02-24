@@ -220,7 +220,7 @@ describe("ApprovalsDispatcher", () =>
             // No approvals callbacks → defaults to auto-approve
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
@@ -266,7 +266,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
@@ -312,7 +312,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],
@@ -353,7 +353,7 @@ describe("ApprovalsDispatcher", () =>
             // No approvals callbacks → defaults to auto-approve
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],

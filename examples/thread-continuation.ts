@@ -10,6 +10,7 @@
 
 import { generateText } from "ai";
 
+import { CODEX_PROVIDER_ID } from "../src";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
@@ -34,7 +35,7 @@ const turn1 = await generateText({
 
 console.log("Codex:", turn1.text);
 
-const threadId = turn1.providerMetadata?.["codex-app-server"]?.["threadId"];
+const threadId = turn1.providerMetadata?.[CODEX_PROVIDER_ID]?.["threadId"];
 console.log("\nThread ID:", threadId, "\n");
 
 if (!threadId || typeof threadId !== "string")
@@ -59,7 +60,7 @@ const turn2 = await generateText({
             // Carry the threadId forward so the provider calls thread/resume
             // instead of thread/start, and sends only the new user message.
             providerOptions: {
-                "codex-app-server": { threadId },
+                [CODEX_PROVIDER_ID]: { threadId },
             },
         },
         {

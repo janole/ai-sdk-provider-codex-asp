@@ -11,7 +11,8 @@ import { MockTransport } from "./helpers/mock-transport";
 /**
  * Scripted tool call definition for the mock transport.
  */
-interface ScriptedToolCall {
+interface ScriptedToolCall
+{
     callId: string;
     tool: string;
     args: Record<string, unknown>;
@@ -181,7 +182,7 @@ async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]>
     return parts;
 }
 
-type StreamPart = { type: string; [key: string]: unknown };
+type StreamPart = { type: string;[key: string]: unknown };
 
 const TICKET_TOOL: ScriptedToolCall = {
     callId: "call_ticket",
@@ -312,7 +313,7 @@ describe("Cross-call tool support", () =>
                         content: [
                             { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
                         ],
-                        providerOptions: { "codex-app-server": { threadId: "thr_1" } },
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
                     },
                     {
                         role: "tool",
@@ -370,7 +371,7 @@ describe("Cross-call tool support", () =>
                         content: [
                             { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
                         ],
-                        providerOptions: { "codex-app-server": { threadId: "thr_1" } },
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
                     },
                     {
                         role: "tool",
@@ -396,7 +397,7 @@ describe("Cross-call tool support", () =>
                         content: [
                             { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
                         ],
-                        providerOptions: { "codex-app-server": { threadId: "thr_1" } },
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
                     },
                     {
                         role: "tool",
@@ -412,7 +413,7 @@ describe("Cross-call tool support", () =>
                         content: [
                             { type: "tool-call", toolCallId: "call_weather", toolName: "check_weather", input: { location: "Berlin" } },
                         ],
-                        providerOptions: { "codex-app-server": { threadId: "thr_1" } },
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
                     },
                     {
                         role: "tool",
@@ -501,7 +502,7 @@ describe("Cross-call tool support", () =>
                         content: [
                             { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
                         ],
-                        providerOptions: { "codex-app-server": { threadId: "thr_1" } },
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
                     },
                     {
                         role: "tool",
