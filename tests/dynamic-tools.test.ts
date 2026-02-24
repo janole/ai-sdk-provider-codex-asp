@@ -269,7 +269,7 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
         });
@@ -321,7 +321,7 @@ describe("CodexLanguageModel dynamic tools wiring", () =>
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
         });

@@ -1,6 +1,7 @@
 import { NoSuchModelError } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 
+import { CODEX_PROVIDER_ID } from "../src";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { CodexLanguageModel } from "../src/model";
 import { createCodexAppServer } from "../src/provider";
@@ -108,19 +109,19 @@ describe("createCodexAppServer", () =>
 
         expect(provider.specificationVersion).toBe("v3");
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
         expect(model).toBeInstanceOf(CodexLanguageModel);
         expect(model.specificationVersion).toBe("v3");
-        expect(model.provider).toBe("codex-app-server");
-        expect(model.modelId).toBe("gpt-5.1-codex");
+        expect(model.provider).toBe(CODEX_PROVIDER_ID);
+        expect(model.modelId).toBe("gpt-5.3-codex");
     });
 
     it("supports callable provider and chat alias", () => 
     {
         const provider = createCodexAppServer();
 
-        const viaCall = provider("gpt-5.1-codex");
-        const viaChat = provider.chat("gpt-5.1-codex");
+        const viaCall = provider("gpt-5.3-codex");
+        const viaChat = provider.chat("gpt-5.3-codex");
 
         expect(viaCall).toBeInstanceOf(CodexLanguageModel);
         expect(viaChat).toBeInstanceOf(CodexLanguageModel);
@@ -165,8 +166,8 @@ describe("createCodexAppServer", () =>
 
         try
         {
-            const modelOne = providerOne.languageModel("gpt-5.1-codex");
-            const modelTwo = providerTwo.languageModel("gpt-5.1-codex");
+            const modelOne = providerOne.languageModel("gpt-5.3-codex");
+            const modelTwo = providerTwo.languageModel("gpt-5.3-codex");
 
             const { stream: streamOne } = await modelOne.doStream({
                 prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],
@@ -220,8 +221,8 @@ describe("createCodexAppServer", () =>
 
         try
         {
-            const modelOne = providerOne.languageModel("gpt-5.1-codex");
-            const modelTwo = providerTwo.languageModel("gpt-5.1-codex");
+            const modelOne = providerOne.languageModel("gpt-5.3-codex");
+            const modelTwo = providerTwo.languageModel("gpt-5.3-codex");
 
             const { stream: streamOne } = await modelOne.doStream({
                 prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],

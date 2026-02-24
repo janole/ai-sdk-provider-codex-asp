@@ -111,7 +111,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -183,7 +183,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -191,7 +191,7 @@ describe("CodexLanguageModel.doStream", () =>
                 {
                     role: "assistant",
                     content: [{ type: "text", text: "Hello" }],
-                    providerOptions: { "codex-app-server": { threadId: "thr_existing" } },
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
                 },
                 { role: "user", content: [{ type: "text", text: "continue" }] },
             ],
@@ -230,7 +230,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -241,7 +241,7 @@ describe("CodexLanguageModel.doStream", () =>
                         {
                             type: "text",
                             text: "Hello",
-                            providerOptions: { "codex-app-server": { threadId: "thr_content_part" } },
+                            providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_content_part" } },
                         },
                     ],
                 },
@@ -274,7 +274,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -313,7 +313,7 @@ describe("CodexLanguageModel.doStream", () =>
             debug: { logPackets: true, logger: loggerSpy },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -376,7 +376,7 @@ describe("CodexLanguageModel.doStream", () =>
             debug: { logPackets: true, logger: loggerSpy },
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -384,7 +384,7 @@ describe("CodexLanguageModel.doStream", () =>
                 {
                     role: "assistant",
                     content: [{ type: "text", text: "Hello" }],
-                    providerOptions: { "codex-app-server": { threadId: "thr_existing" } },
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
                 },
                 { role: "user", content: [{ type: "text", text: "continue" }] },
             ],

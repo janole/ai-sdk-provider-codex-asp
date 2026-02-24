@@ -121,7 +121,7 @@ describe("PersistentTransport", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         // First call
         const { stream: stream1 } = await model.doStream({
@@ -157,7 +157,7 @@ describe("PersistentTransport", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         // First call — real initialize
         const { stream: stream1 } = await model.doStream({
@@ -214,7 +214,7 @@ describe("PersistentTransport", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         // First call
         const { stream: stream1 } = await model.doStream({
@@ -276,7 +276,7 @@ describe("PersistentTransport", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.1-codex");
+        const model = provider.languageModel("gpt-5.3-codex");
 
         // First call
         const { stream: stream1 } = await model.doStream({

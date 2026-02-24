@@ -12,9 +12,8 @@ import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import { WebSocketTransport } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
+import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 import { stripUndefined } from "./utils/object";
-
-const PROVIDER_ID = "codex-app-server" as const;
 
 export interface CodexProviderSettings {
     defaultModel?: string;
@@ -144,7 +143,7 @@ export function createCodexAppServer(
         modelSettings: CodexLanguageModelSettings = {},
     ): CodexLanguageModel =>
         new CodexLanguageModel(modelId, modelSettings, {
-            provider: PROVIDER_ID,
+            provider: CODEX_PROVIDER_ID,
             providerSettings: resolvedSettings,
         });
 
