@@ -17,6 +17,8 @@ import type { FileChangeApprovalDecision } from "./app-server-protocol/v2/FileCh
 import type { FileChangeRequestApprovalParams } from "./app-server-protocol/v2/FileChangeRequestApprovalParams";
 import type { FileChangeRequestApprovalResponse } from "./app-server-protocol/v2/FileChangeRequestApprovalResponse";
 import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
+import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
+import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
 
 export type { AskForApproval };
 export type { CommandExecutionApprovalDecision };
@@ -90,18 +92,9 @@ export interface CodexThreadStartResult {
     tools?: CodexDynamicToolDefinition[];
 }
 
-export interface CodexThreadResumeParams {
-    threadId: string;
-    persistExtendedHistory: boolean;
-    developerInstructions?: string;
-}
+export type CodexThreadResumeParams = ThreadResumeParams;
 
-export interface CodexThreadResumeResult {
-    thread?: {
-        id?: string;
-    };
-    threadId?: string;
-}
+export type CodexThreadResumeResult = ThreadResumeResponse;
 
 export interface CodexTurnInputText {
     type: "text";

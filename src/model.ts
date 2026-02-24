@@ -18,6 +18,7 @@ import { type DynamicToolDefinition, type DynamicToolHandler, DynamicToolsDispat
 import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import { CodexEventMapper } from "./protocol/event-mapper";
+import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
@@ -25,7 +26,6 @@ import type {
     CodexInitializeParams,
     CodexInitializeResult,
     CodexThreadResumeParams,
-    CodexThreadResumeResult,
     CodexThreadStartParams,
     CodexThreadStartResult,
     CodexToolCallRequestParams,
@@ -666,11 +666,11 @@ export class CodexLanguageModel implements LanguageModelV3
                                 developerInstructions,
                             });
                             debugLog?.("outbound", "thread/resume", resumeParams);
-                            const resumeResult = await client.request<CodexThreadResumeResult>(
+                            const resumeResult = await client.request<ThreadResumeResponse>(
                                 "thread/resume",
                                 resumeParams,
                             );
-                            threadId = resumeResult.threadId ?? resumeResult.thread?.id ?? resumeThreadId;
+                            threadId = resumeResult.thread.id;
                         }
                         else
                         {
