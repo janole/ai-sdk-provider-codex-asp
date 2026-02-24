@@ -17,8 +17,8 @@ import { WebSocketTransport, type WebSocketTransportSettings } from "./client/tr
 import { type DynamicToolDefinition, type DynamicToolHandler, DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
-import { CodexEventMapper } from "./protocol/event-mapper";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
+import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
