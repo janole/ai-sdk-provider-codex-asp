@@ -70,7 +70,7 @@ class ToolCallTransport extends MockTransport
 
         if (request.method === "thread/resume")
         {
-            this.emitMessage({ id: request.id, result: { threadId: "thr_1" } });
+            this.emitMessage({ id: request.id, result: { thread: { id: "thr_1" } } });
             return;
         }
 

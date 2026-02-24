@@ -31,7 +31,7 @@ class ScriptedTransport extends MockTransport
 
         if (message.method === "thread/resume")
         {
-            this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
+            this.emitMessage({ id: message.id, result: { thread: { id: "thr_1" } } });
             return;
         }
 
