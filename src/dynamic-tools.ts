@@ -32,6 +32,10 @@ export interface DynamicToolsDispatcherSettings {
     /** Legacy handler-only registration (no schema). Tools are not advertised to Codex. */
     handlers?: Record<string, DynamicToolHandler>;
     timeoutMs?: number;
+    onDebugEvent?: (event: {
+        event: string;
+        data?: unknown;
+    }) => void;
 }
 
 function toTextResult(message: string, success: boolean): CodexToolCallResult 
@@ -67,16 +71,22 @@ export class DynamicToolsDispatcher
 {
     private readonly handlers = new Map<string, DynamicToolHandler>();
     private readonly timeoutMs: number;
+    private readonly onDebugEvent?: DynamicToolsDispatcherSettings["onDebugEvent"];
 
     constructor(settings: DynamicToolsDispatcherSettings = {})
     {
         this.timeoutMs = settings.timeoutMs ?? 30_000;
+        this.onDebugEvent = settings.onDebugEvent;
 
         if (settings.tools)
         {
             for (const [name, def] of Object.entries(settings.tools))
             {
                 this.register(name, def.execute);
+                this.onDebugEvent?.({
+                    event: "dynamic-tool-registered",
+                    data: { name, source: "tools" },
+                });
             }
         }
 
@@ -85,6 +95,10 @@ export class DynamicToolsDispatcher
             for (const [name, handler] of Object.entries(settings.handlers))
             {
                 this.register(name, handler);
+                this.onDebugEvent?.({
+                    event: "dynamic-tool-registered",
+                    data: { name, source: "handlers" },
+                });
             }
         }
     }
@@ -105,6 +119,14 @@ export class DynamicToolsDispatcher
 
         if (!toolName) 
         {
+            this.onDebugEvent?.({
+                event: "dynamic-tool-missing-name",
+                data: {
+                    callId: params.callId,
+                    threadId: params.threadId,
+                    turnId: params.turnId,
+                },
+            });
             return toTextResult("Dynamic tool call is missing the tool name.", false);
         }
 
@@ -112,6 +134,15 @@ export class DynamicToolsDispatcher
 
         if (!handler) 
         {
+            this.onDebugEvent?.({
+                event: "dynamic-tool-missing-handler",
+                data: {
+                    toolName,
+                    callId: params.callId,
+                    threadId: params.threadId,
+                    turnId: params.turnId,
+                },
+            });
             return toTextResult(`No dynamic tool handler registered for "${toolName}".`, false);
         }
 
@@ -123,14 +154,47 @@ export class DynamicToolsDispatcher
         });
 
         const args = params.arguments ?? params.input;
+        const startedAt = Date.now();
+
+        this.onDebugEvent?.({
+            event: "dynamic-tool-dispatch-start",
+            data: {
+                toolName,
+                callId: params.callId,
+                threadId: params.threadId,
+                turnId: params.turnId,
+                hasArguments: args !== undefined,
+            },
+        });
 
         try 
         {
-            return await withTimeout(handler(args, context), this.timeoutMs);
+            const result = await withTimeout(handler(args, context), this.timeoutMs);
+
+            this.onDebugEvent?.({
+                event: "dynamic-tool-dispatch-success",
+                data: {
+                    toolName,
+                    callId: params.callId,
+                    durationMs: Date.now() - startedAt,
+                    success: result.success,
+                    contentItemsCount: result.contentItems.length,
+                },
+            });
+            return result;
         }
         catch (error) 
         {
             const message = error instanceof Error ? error.message : "Dynamic tool execution failed.";
+            this.onDebugEvent?.({
+                event: "dynamic-tool-dispatch-error",
+                data: {
+                    toolName,
+                    callId: params.callId,
+                    durationMs: Date.now() - startedAt,
+                    message,
+                },
+            });
             return toTextResult(message, false);
         }
     }

@@ -440,6 +440,14 @@ export class CodexLanguageModel implements LanguageModelV3
             })
             : undefined;
 
+        const toolLogger = this.config.providerSettings.debug?.logToolCalls === true
+            ? this.config.providerSettings.debug.toolLogger
+            ?? ((event: { event: string; data?: unknown }) =>
+            {
+                console.debug("[codex tool]", event.event, event.data);
+            })
+            : undefined;
+
         const debugLog = packetLogger
             ? (direction: "inbound" | "outbound", label: string, data?: unknown) =>
             {
@@ -558,7 +566,24 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         if (pendingToolCall && persistentTransport)
                         {
+                            toolLogger?.({
+                                event: "cross-call-resume",
+                                data: {
+                                    threadId: pendingToolCall.threadId,
+                                    callId: pendingToolCall.callId,
+                                    toolName: pendingToolCall.toolName,
+                                },
+                            });
                             const toolResult = extractToolResults(options.prompt, pendingToolCall.callId);
+                            toolLogger?.({
+                                event: "cross-call-result-extracted",
+                                data: {
+                                    callId: pendingToolCall.callId,
+                                    found: !!toolResult,
+                                    success: toolResult?.success,
+                                    contentItemsCount: toolResult?.contentItems.length ?? 0,
+                                },
+                            });
                             mapper.setThreadId(pendingToolCall.threadId);
 
                             client.onAnyNotification((method, params) =>
@@ -586,15 +611,24 @@ export class CodexLanguageModel implements LanguageModelV3
                             }));
                             approvalsDispatcher.attach(client);
 
-                            await persistentTransport.respondToToolCall(
-                                toolResult ?? {
-                                    success: false,
-                                    contentItems: [{
-                                        type: "inputText",
-                                        text: `Missing tool result for pending callId "${pendingToolCall.callId}".`,
-                                    }],
+                            const result = toolResult ?? {
+                                success: false,
+                                contentItems: [{
+                                    type: "inputText",
+                                    text: `Missing tool result for pending callId "${pendingToolCall.callId}".`,
+                                }],
+                            };
+
+                            await persistentTransport.respondToToolCall(result);
+
+                            toolLogger?.({
+                                event: "cross-call-result-sent",
+                                data: {
+                                    callId: pendingToolCall.callId,
+                                    result,
                                 },
-                            );
+                            });
+
                             return;
                         }
 
@@ -607,6 +641,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 tools: this.config.providerSettings.tools,
                                 handlers: this.config.providerSettings.toolHandlers,
                                 timeoutMs: this.config.providerSettings.toolTimeoutMs,
+                                onDebugEvent: toolLogger,
                             }));
                             dispatcher.attach(client);
                         }
@@ -648,6 +683,14 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         const allDynamicTools = [...providerDynamicTools, ...sdkDynamicTools];
                         const dynamicTools = allDynamicTools.length > 0 ? allDynamicTools : undefined;
+                        toolLogger?.({
+                            event: "dynamic-tools-advertised",
+                            data: {
+                                providerTools: providerDynamicTools.map((t) => t.name),
+                                sdkTools: sdkDynamicTools.map((t) => t.name),
+                                total: allDynamicTools.length,
+                            },
+                        });
 
                         const hasSdkTools = sdkDynamicTools.length > 0;
 

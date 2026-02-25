@@ -61,6 +61,13 @@ export interface CodexProviderSettings {
             direction: "inbound" | "outbound";
             message: unknown;
         }) => void;
+        /** Log dynamic tool registration, calls, and responses. */
+        logToolCalls?: boolean;
+        /** Optional dynamic tool logger (defaults to console.debug). */
+        toolLogger?: (event: {
+            event: string;
+            data?: unknown;
+        }) => void;
     };
     persistent?: {
         poolSize?: number;
