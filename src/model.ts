@@ -22,9 +22,9 @@ import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper"
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
+    CodexInitializeResult,
     CodexThreadCompactStartParams,
     CodexThreadCompactStartResult,
-    CodexInitializeResult,
     CodexThreadResumeParams,
     CodexThreadStartParams,
     CodexThreadStartResult,
