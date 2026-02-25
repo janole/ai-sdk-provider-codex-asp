@@ -16,8 +16,13 @@ export interface CodexCommandApprovalRequest {
     itemId: string;
     approvalId?: string | null;
     reason?: string | null;
+    networkApprovalContext?: CommandExecutionRequestApprovalParams["networkApprovalContext"];
     command?: string | null;
     cwd?: string | null;
+    commandActions?: CommandExecutionRequestApprovalParams["commandActions"];
+    additionalPermissions?: CommandExecutionRequestApprovalParams["additionalPermissions"];
+    proposedExecpolicyAmendment?: CommandExecutionRequestApprovalParams["proposedExecpolicyAmendment"];
+    proposedNetworkPolicyAmendments?: CommandExecutionRequestApprovalParams["proposedNetworkPolicyAmendments"];
 }
 
 export interface CodexFileChangeApprovalRequest {
@@ -65,8 +70,13 @@ export class ApprovalsDispatcher
                     itemId: p.itemId,
                     approvalId: p.approvalId,
                     reason: p.reason,
+                    networkApprovalContext: p.networkApprovalContext,
                     command: p.command,
                     cwd: p.cwd,
+                    commandActions: p.commandActions,
+                    additionalPermissions: p.additionalPermissions,
+                    proposedExecpolicyAmendment: p.proposedExecpolicyAmendment,
+                    proposedNetworkPolicyAmendments: p.proposedNetworkPolicyAmendments,
                 });
 
                 const decision = await this.onCommandApproval(request);
