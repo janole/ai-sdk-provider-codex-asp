@@ -8,13 +8,12 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
-import { ApprovalsDispatcher, type CommandApprovalHandler, type FileChangeApprovalHandler } from "./approvals";
+import { ApprovalsDispatcher } from "./approvals";
 import { AppServerClient } from "./client/app-server-client";
-import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
-import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
-import { WebSocketTransport, type WebSocketTransportSettings } from "./client/transport-websocket";
-import { type DynamicToolDefinition, type DynamicToolHandler, DynamicToolsDispatcher } from "./dynamic-tools";
+import { StdioTransport } from "./client/transport-stdio";
+import { WebSocketTransport } from "./client/transport-websocket";
+import { DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
@@ -36,6 +35,7 @@ import type {
     CodexTurnStartResult,
     SandboxMode,
 } from "./protocol/types";
+import type { CodexProviderSettings } from "./provider";
 import { stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -54,37 +54,7 @@ export interface CodexThreadDefaults
 export interface CodexModelConfig
 {
     provider: string;
-    providerSettings: {
-        defaultModel?: string;
-        clientInfo?: {
-            name: string;
-            version: string;
-            title?: string;
-        };
-        experimentalApi?: boolean;
-        transport?: {
-            type?: "stdio" | "websocket";
-            stdio?: StdioTransportSettings;
-            websocket?: WebSocketTransportSettings;
-        };
-        defaultThreadSettings?: CodexThreadDefaults;
-        transportFactory?: () => CodexTransport;
-        tools?: Record<string, DynamicToolDefinition>;
-        toolHandlers?: Record<string, DynamicToolHandler>;
-        toolTimeoutMs?: number;
-        interruptTimeoutMs?: number;
-        approvals?: {
-            onCommandApproval?: CommandApprovalHandler;
-            onFileChangeApproval?: FileChangeApprovalHandler;
-        };
-        debug?: {
-            logPackets?: boolean;
-            logger?: (packet: {
-                direction: "inbound" | "outbound";
-                message: unknown;
-            }) => void;
-        };
-    };
+    providerSettings: Readonly<CodexProviderSettings>;
 }
 
 interface ThreadStartResultLike extends CodexThreadStartResult
