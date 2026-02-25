@@ -625,8 +625,9 @@ export class CodexLanguageModel implements LanguageModelV3
                                 event: "cross-call-result-sent",
                                 data: {
                                     callId: pendingToolCall.callId,
+                                    found: !!toolResult,
                                     success: result.success,
-                                    missingToolResult: !toolResult,
+                                    contentItemsCount: result.contentItems.length ?? 0,
                                 },
                             });
 
