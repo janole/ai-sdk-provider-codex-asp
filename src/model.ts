@@ -157,6 +157,7 @@ function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): st
 
 function extractToolResults(
     prompt: LanguageModelV3CallOptions["prompt"],
+    callId?: string,
 ): CodexToolCallResult | undefined
 {
     for (let i = prompt.length - 1; i >= 0; i--)
@@ -171,6 +172,11 @@ function extractToolResults(
             {
                 if (part.type === "tool-result")
                 {
+                    if (callId && part.toolCallId !== callId)
+                    {
+                        continue;
+                    }
+
                     if (part.output.type === "text")
                     {
                         contentItems.push({ type: "inputText", text: part.output.value });
@@ -193,6 +199,13 @@ function extractToolResults(
             if (contentItems.length > 0)
             {
                 return { success, contentItems };
+            }
+
+            if (callId)
+            {
+                // A matching callId was requested, so don't consume unrelated
+                // tool results from older prompt entries.
+                return undefined;
             }
         }
     }
@@ -545,7 +558,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         if (pendingToolCall && persistentTransport)
                         {
-                            const toolResult = extractToolResults(options.prompt);
+                            const toolResult = extractToolResults(options.prompt, pendingToolCall.callId);
                             mapper.setThreadId(pendingToolCall.threadId);
 
                             client.onAnyNotification((method, params) =>
