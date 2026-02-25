@@ -447,6 +447,44 @@ describe("CodexLanguageModel.doStream", () =>
         });
     });
 
+    it("passes defaultTurnSettings including rich sandboxPolicy on turn/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            defaultTurnSettings: {
+                approvalPolicy: "on-request",
+                sandboxPolicy: {
+                    type: "externalSandbox",
+                    networkAccess: "enabled",
+                },
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        });
+
+        await readAll(stream);
+
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+
+        expect(turnStartMessage?.params).toMatchObject({
+            approvalPolicy: "on-request",
+            sandboxPolicy: {
+                type: "externalSandbox",
+                networkAccess: "enabled",
+            },
+        });
+    });
+
     it("emits debug events through the logger when logPackets is enabled", async () =>
     {
         const transport = new ScriptedTransport();

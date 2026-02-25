@@ -87,6 +87,9 @@ export function createCodexAppServer(
         defaultThreadSettings: settings.defaultThreadSettings
             ? { ...settings.defaultThreadSettings }
             : undefined,
+        defaultTurnSettings: settings.defaultTurnSettings
+            ? { ...settings.defaultTurnSettings }
+            : undefined,
         compaction: settings.compaction
             ? { ...settings.compaction }
             : undefined,

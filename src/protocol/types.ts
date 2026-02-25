@@ -17,6 +17,7 @@ import type { FileChangeApprovalDecision } from "./app-server-protocol/v2/FileCh
 import type { FileChangeRequestApprovalParams } from "./app-server-protocol/v2/FileChangeRequestApprovalParams";
 import type { FileChangeRequestApprovalResponse } from "./app-server-protocol/v2/FileChangeRequestApprovalResponse";
 import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
+import type { SandboxPolicy } from "./app-server-protocol/v2/SandboxPolicy";
 import type { ThreadCompactStartParams } from "./app-server-protocol/v2/ThreadCompactStartParams";
 import type { ThreadCompactStartResponse } from "./app-server-protocol/v2/ThreadCompactStartResponse";
 import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
@@ -32,6 +33,7 @@ export type { FileChangeApprovalDecision };
 export type { FileChangeRequestApprovalParams };
 export type { FileChangeRequestApprovalResponse };
 export type { SandboxMode };
+export type { SandboxPolicy };
 export type { ThreadCompactStartParams };
 export type { ThreadCompactStartResponse };
 export type { TurnInterruptParams };
@@ -151,6 +153,12 @@ export type CodexTurnInputItem =
 export interface CodexTurnStartParams {
     threadId: string;
     input: CodexTurnInputItem[];
+    cwd?: string;
+    approvalPolicy?: AskForApproval;
+    sandboxPolicy?: SandboxPolicy;
+    model?: string;
+    effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+    summary?: "auto" | "concise" | "detailed" | "none";
 }
 
 export interface CodexTurnStartResult {
