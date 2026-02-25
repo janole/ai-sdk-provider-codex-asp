@@ -1,3 +1,4 @@
+import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
@@ -30,7 +31,30 @@ class ScriptedTransport extends MockTransport
 
         if (message.method === "thread/resume")
         {
-            this.emitMessage({ id: message.id, result: { thread: { id: "thr_1" } } });
+            this.emitMessage({
+                id: message.id,
+                result: {
+                    thread: {
+                        id: "thr_1",
+                        preview: "",
+                        modelProvider: "openai",
+                        createdAt: 0,
+                        updatedAt: 0,
+                        path: null,
+                        cwd: "/tmp",
+                        cliVersion: "test",
+                        source: "appServer",
+                        gitInfo: null,
+                        turns: [],
+                    },
+                    model: "gpt-5.3-codex",
+                    modelProvider: "openai",
+                    cwd: "/tmp",
+                    approvalPolicy: "never",
+                    sandbox: { type: "dangerFullAccess" },
+                    reasoningEffort: null,
+                },
+            });
             return;
         }
 
@@ -338,7 +362,7 @@ describe("CodexLanguageModel.doStream", () =>
         const provider = createCodexAppServer({
             transportFactory: () => transport,
             clientInfo: { name: "test-client", version: "1.0.0" },
-            compaction: { onResume: true },
+            compaction: { shouldCompactOnResume: true },
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
@@ -377,7 +401,7 @@ describe("CodexLanguageModel.doStream", () =>
         const provider = createCodexAppServer({
             transportFactory: () => transport,
             clientInfo: { name: "test-client", version: "1.0.0" },
-            compaction: { onResume: true },
+            compaction: { shouldCompactOnResume: true },
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
@@ -406,6 +430,183 @@ describe("CodexLanguageModel.doStream", () =>
             "thread/resume",
             "thread/compact/start",
             "turn/start",
+        ]);
+    });
+
+    it("supports callback-based compaction decision with resume context", async () =>
+    {
+        const transport = new ScriptedTransport();
+        const shouldCompactOnResume = vi.fn<(context: unknown) => boolean>(() => true);
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: { shouldCompactOnResume },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const prompt: LanguageModelV3CallOptions["prompt"] = [
+            { role: "user", content: [{ type: "text", text: "hi" }] },
+            {
+                role: "assistant",
+                content: [{ type: "text", text: "Hello" }],
+                providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+            },
+            { role: "user", content: [{ type: "text", text: "continue" }] },
+        ];
+
+        const { stream } = await model.doStream({ prompt });
+        await readAll(stream);
+
+        expect(shouldCompactOnResume).toHaveBeenCalledTimes(1);
+        const firstCall = shouldCompactOnResume.mock.calls[0];
+        expect(firstCall).toBeDefined();
+        const typedCallbackContext = firstCall![0] as {
+            threadId: string;
+            resumeThreadId: string;
+            resumeResult: { thread: { id: string } };
+            prompt: unknown[];
+        };
+        expect(typedCallbackContext).toMatchObject({
+            threadId: "thr_1",
+            resumeThreadId: "thr_existing",
+            resumeResult: { thread: { id: "thr_1" } },
+        });
+        expect(typedCallbackContext.prompt).toEqual(prompt);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
+            "thread/compact/start",
+            "turn/start",
+        ]);
+    });
+
+    it("skips compaction when callback returns false", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: { shouldCompactOnResume: () => false },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
+            "turn/start",
+        ]);
+    });
+
+    it("continues when callback throws in non-strict mode", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: { shouldCompactOnResume: () => { throw new Error("decision failed"); } },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
+            "turn/start",
+        ]);
+    });
+
+    it("fails before turn/start when callback throws in strict mode", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: {
+                shouldCompactOnResume: () => { throw new Error("decision failed"); },
+                strict: true,
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        const parts = await readAll(stream);
+        expect(parts.some((part) => (
+            typeof part === "object"
+            && part !== null
+            && "type" in part
+            && (part as { type: string }).type === "error"
+        ))).toBe(true);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
         ]);
     });
 

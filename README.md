@@ -111,7 +111,7 @@ const codex = createCodexAppServer({
   clientInfo?: { name, version, title? },  // defaults to package.json
   transport?: { type: 'stdio' | 'websocket', stdio?, websocket? },
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
-  compaction?: { onResume?, strict? },     // optional thread/compact/start before resumed turns
+  compaction?: { shouldCompactOnResume?, strict? }, // optional thread/compact/start before resumed turns
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
   defaultThreadSettings?: { cwd?, approvalPolicy?, sandbox? },
   defaultTurnSettings?: { cwd?, approvalPolicy?, sandboxPolicy?, model?, effort?, summary? },
@@ -171,6 +171,8 @@ npx tsx examples/stream-text.ts
 - Empty generated text:
   - Verify Codex emits `item/agentMessage/delta` and `turn/completed` notifications.
 - Compaction fails on resumed threads:
+  - Set `compaction.shouldCompactOnResume: true` to always compact resumed threads.
+  - Or provide `compaction.shouldCompactOnResume: (ctx) => boolean | Promise<boolean>` for dynamic decisions.
   - Leave `compaction.strict` unset/false to continue the turn when `thread/compact/start` fails.
   - Set `compaction.strict: true` if you want compaction failures to fail fast.
 

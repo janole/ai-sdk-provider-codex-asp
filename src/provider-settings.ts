@@ -1,9 +1,11 @@
+import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
+
 import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import type { AskForApproval, SandboxMode, SandboxPolicy } from "./protocol/types";
+import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
 
 export interface CodexThreadDefaults
 {
@@ -28,13 +30,25 @@ export interface CodexCompactionSettings
      * Trigger `thread/compact/start` before `turn/start` when resuming a thread.
      * Off by default.
      */
-    onResume?: boolean;
+    shouldCompactOnResume?: CodexCompactionOnResumeDecision;
     /**
      * When false (default), compaction errors are ignored and the turn continues.
      * When true, compaction errors fail the request.
      */
     strict?: boolean;
 }
+
+export interface CodexCompactionOnResumeContext
+{
+    threadId: string;
+    resumeThreadId: string;
+    resumeResult: CodexThreadResumeResult;
+    prompt: LanguageModelV3CallOptions["prompt"];
+}
+
+export type CodexCompactionOnResumeDecision =
+    | boolean
+    | ((context: CodexCompactionOnResumeContext) => boolean | Promise<boolean>);
 
 export interface CodexProviderSettings
 {
