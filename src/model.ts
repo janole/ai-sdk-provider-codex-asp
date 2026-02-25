@@ -36,7 +36,7 @@ import type {
     CodexTurnStartParams,
     CodexTurnStartResult,
 } from "./protocol/types";
-import type { CodexProviderSettings } from "./provider-settings";
+import type { CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -735,12 +735,44 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                             threadId = resumeResult.thread.id;
 
-                            if (this.config.providerSettings.compaction?.onResume)
+                            const strictCompaction = this.config.providerSettings.compaction?.strict === true;
+                            const shouldCompactOnResume = this.config.providerSettings.compaction?.shouldCompactOnResume;
+                            let shouldCompact = false;
+
+                            if (typeof shouldCompactOnResume === "boolean")
+                            {
+                                shouldCompact = shouldCompactOnResume;
+                            }
+                            else if (typeof shouldCompactOnResume === "function")
+                            {
+                                const compactionContext: CodexCompactionOnResumeContext = {
+                                    threadId,
+                                    resumeThreadId,
+                                    resumeResult,
+                                    prompt: options.prompt,
+                                };
+
+                                try
+                                {
+                                    shouldCompact = await shouldCompactOnResume(compactionContext);
+                                }
+                                catch (error)
+                                {
+                                    debugLog?.("inbound", "thread/compact/start:decision-error", {
+                                        message: error instanceof Error ? error.message : String(error),
+                                    });
+
+                                    if (strictCompaction)
+                                    {
+                                        throw error;
+                                    }
+                                }
+                            }
+
+                            if (shouldCompact)
                             {
                                 const compactParams: CodexThreadCompactStartParams = { threadId };
                                 debugLog?.("outbound", "thread/compact/start", compactParams);
-
-                                const strictCompaction = this.config.providerSettings.compaction.strict === true;
                                 if (strictCompaction)
                                 {
                                     await client.request<CodexThreadCompactStartResult>(
