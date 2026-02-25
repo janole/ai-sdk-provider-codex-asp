@@ -26,7 +26,8 @@ export interface CodexCompactionSettings
     strict?: boolean;
 }
 
-export interface CodexProviderSettings {
+export interface CodexProviderSettings
+{
     defaultModel?: string;
     clientInfo?: {
         name: string;
@@ -60,6 +61,13 @@ export interface CodexProviderSettings {
         logger?: (packet: {
             direction: "inbound" | "outbound";
             message: unknown;
+        }) => void;
+        /** Log dynamic tool registration, calls, and responses. */
+        logToolCalls?: boolean;
+        /** Optional dynamic tool logger (defaults to console.debug). */
+        toolLogger?: (event: {
+            event: string;
+            data?: unknown;
         }) => void;
     };
     persistent?: {
