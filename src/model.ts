@@ -23,6 +23,8 @@ import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-met
 import type {
     CodexInitializeParams,
     CodexInitializeResult,
+    CodexThreadCompactStartParams,
+    CodexThreadCompactStartResult,
     CodexThreadResumeParams,
     CodexThreadStartParams,
     CodexThreadStartResult,
@@ -667,6 +669,37 @@ export class CodexLanguageModel implements LanguageModelV3
                                 resumeParams,
                             );
                             threadId = resumeResult.thread.id;
+
+                            if (this.config.providerSettings.compaction?.onResume)
+                            {
+                                const compactParams: CodexThreadCompactStartParams = { threadId };
+                                debugLog?.("outbound", "thread/compact/start", compactParams);
+
+                                const strictCompaction = this.config.providerSettings.compaction.strict === true;
+                                if (strictCompaction)
+                                {
+                                    await client.request<CodexThreadCompactStartResult>(
+                                        "thread/compact/start",
+                                        compactParams,
+                                    );
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        await client.request<CodexThreadCompactStartResult>(
+                                            "thread/compact/start",
+                                            compactParams,
+                                        );
+                                    }
+                                    catch (error)
+                                    {
+                                        debugLog?.("inbound", "thread/compact/start:error", {
+                                            message: error instanceof Error ? error.message : String(error),
+                                        });
+                                    }
+                                }
+                            }
                         }
                         else
                         {

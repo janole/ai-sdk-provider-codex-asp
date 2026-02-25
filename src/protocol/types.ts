@@ -17,6 +17,8 @@ import type { FileChangeApprovalDecision } from "./app-server-protocol/v2/FileCh
 import type { FileChangeRequestApprovalParams } from "./app-server-protocol/v2/FileChangeRequestApprovalParams";
 import type { FileChangeRequestApprovalResponse } from "./app-server-protocol/v2/FileChangeRequestApprovalResponse";
 import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
+import type { ThreadCompactStartParams } from "./app-server-protocol/v2/ThreadCompactStartParams";
+import type { ThreadCompactStartResponse } from "./app-server-protocol/v2/ThreadCompactStartResponse";
 import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
 import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
 import type { TurnInterruptParams } from "./app-server-protocol/v2/TurnInterruptParams";
@@ -30,6 +32,8 @@ export type { FileChangeApprovalDecision };
 export type { FileChangeRequestApprovalParams };
 export type { FileChangeRequestApprovalResponse };
 export type { SandboxMode };
+export type { ThreadCompactStartParams };
+export type { ThreadCompactStartResponse };
 export type { TurnInterruptParams };
 export type { TurnInterruptResponse };
 
@@ -95,6 +99,9 @@ export interface CodexThreadStartResult {
     threadId: string;
     tools?: CodexDynamicToolDefinition[];
 }
+
+export type CodexThreadCompactStartParams = ThreadCompactStartParams;
+export type CodexThreadCompactStartResult = ThreadCompactStartResponse;
 
 export type CodexThreadResumeParams = ThreadResumeParams;
 

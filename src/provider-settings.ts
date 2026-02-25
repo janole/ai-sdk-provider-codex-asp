@@ -12,6 +12,20 @@ export interface CodexThreadDefaults
     sandbox?: SandboxMode;
 }
 
+export interface CodexCompactionSettings
+{
+    /**
+     * Trigger `thread/compact/start` before `turn/start` when resuming a thread.
+     * Off by default.
+     */
+    onResume?: boolean;
+    /**
+     * When false (default), compaction errors are ignored and the turn continues.
+     * When true, compaction errors fail the request.
+     */
+    strict?: boolean;
+}
+
 export interface CodexProviderSettings {
     defaultModel?: string;
     clientInfo?: {
@@ -26,6 +40,7 @@ export interface CodexProviderSettings {
         websocket?: WebSocketTransportSettings;
     };
     defaultThreadSettings?: CodexThreadDefaults;
+    compaction?: CodexCompactionSettings;
     transportFactory?: () => CodexTransport;
     /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
     tools?: Record<string, DynamicToolDefinition>;
