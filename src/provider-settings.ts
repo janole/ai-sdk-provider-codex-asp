@@ -3,13 +3,23 @@ import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import type { AskForApproval, SandboxMode } from "./protocol/types";
+import type { AskForApproval, SandboxMode, SandboxPolicy } from "./protocol/types";
 
 export interface CodexThreadDefaults
 {
     cwd?: string;
     approvalPolicy?: AskForApproval;
     sandbox?: SandboxMode;
+}
+
+export interface CodexTurnDefaults
+{
+    cwd?: string;
+    approvalPolicy?: AskForApproval;
+    sandboxPolicy?: SandboxPolicy;
+    model?: string;
+    effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+    summary?: "auto" | "concise" | "detailed" | "none";
 }
 
 export interface CodexCompactionSettings
@@ -41,6 +51,7 @@ export interface CodexProviderSettings
         websocket?: WebSocketTransportSettings;
     };
     defaultThreadSettings?: CodexThreadDefaults;
+    defaultTurnSettings?: CodexTurnDefaults;
     compaction?: CodexCompactionSettings;
     transportFactory?: () => CodexTransport;
     /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */

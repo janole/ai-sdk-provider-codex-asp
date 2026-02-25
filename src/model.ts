@@ -33,6 +33,7 @@ import type {
     CodexToolResultContentItem,
     CodexTurnInterruptParams,
     CodexTurnInterruptResult,
+    CodexTurnStartParams,
     CodexTurnStartResult,
 } from "./protocol/types";
 import type { CodexProviderSettings } from "./provider-settings";
@@ -44,7 +45,7 @@ export interface CodexLanguageModelSettings
     // intentionally empty — settings will be added as the API evolves
 }
 
-export type { CodexThreadDefaults } from "./provider-settings";
+export type { CodexThreadDefaults, CodexTurnDefaults } from "./provider-settings";
 
 export interface CodexModelConfig
 {
@@ -796,12 +797,20 @@ export class CodexLanguageModel implements LanguageModelV3
                         }
 
                         const turnInput = mapPromptToTurnInput(options.prompt, !!resumeThreadId);
-                        debugLog?.("outbound", "turn/start", { threadId, input: turnInput });
-
-                        const turnStartResult = await client.request<TurnStartResultLike>("turn/start", {
+                        const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
                             input: turnInput,
+                            cwd: this.config.providerSettings.defaultTurnSettings?.cwd,
+                            approvalPolicy: this.config.providerSettings.defaultTurnSettings?.approvalPolicy,
+                            sandboxPolicy: this.config.providerSettings.defaultTurnSettings?.sandboxPolicy,
+                            model: this.config.providerSettings.defaultTurnSettings?.model,
+                            effort: this.config.providerSettings.defaultTurnSettings?.effort,
+                            summary: this.config.providerSettings.defaultTurnSettings?.summary,
                         });
+
+                        debugLog?.("outbound", "turn/start", turnStartParams);
+
+                        const turnStartResult = await client.request<TurnStartResultLike>("turn/start", turnStartParams);
 
                         activeTurnId = extractTurnId(turnStartResult);
                     }
