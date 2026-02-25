@@ -19,6 +19,8 @@ import type { FileChangeRequestApprovalResponse } from "./app-server-protocol/v2
 import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
 import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
 import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
+import type { TurnInterruptParams } from "./app-server-protocol/v2/TurnInterruptParams";
+import type { TurnInterruptResponse } from "./app-server-protocol/v2/TurnInterruptResponse";
 
 export type { AskForApproval };
 export type { CommandExecutionApprovalDecision };
@@ -28,6 +30,8 @@ export type { FileChangeApprovalDecision };
 export type { FileChangeRequestApprovalParams };
 export type { FileChangeRequestApprovalResponse };
 export type { SandboxMode };
+export type { TurnInterruptParams };
+export type { TurnInterruptResponse };
 
 // Re-export official v2 notification types used by the event mapper
 export type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
@@ -95,6 +99,8 @@ export interface CodexThreadStartResult {
 export type CodexThreadResumeParams = ThreadResumeParams;
 
 export type CodexThreadResumeResult = ThreadResumeResponse;
+export type CodexTurnInterruptParams = TurnInterruptParams;
+export type CodexTurnInterruptResult = TurnInterruptResponse;
 
 export interface CodexTurnInputText {
     type: "text";

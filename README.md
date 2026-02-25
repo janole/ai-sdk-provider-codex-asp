@@ -115,6 +115,7 @@ const codex = createCodexAppServer({
   defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000
+  interruptTimeoutMs?: number,             // default: 10000
 });
 
 codex(modelId)                // returns a language model instance
@@ -150,6 +151,7 @@ npx tsx examples/stream-text.ts
   - Use Node.js 18+ with global WebSocket support, or use `stdio` transport.
 - Request timeouts:
   - Increase `toolTimeoutMs` for long-running dynamic tools.
+  - Increase `interruptTimeoutMs` if `turn/interrupt` acks are slow under heavy load.
 - Empty generated text:
   - Verify Codex emits `item/agentMessage/delta` and `turn/completed` notifications.
 

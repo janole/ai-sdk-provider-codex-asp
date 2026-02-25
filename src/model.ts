@@ -31,6 +31,8 @@ import type {
     CodexToolCallRequestParams,
     CodexToolCallResult,
     CodexToolResultContentItem,
+    CodexTurnInterruptParams,
+    CodexTurnInterruptResult,
     CodexTurnStartResult,
     SandboxMode,
 } from "./protocol/types";
@@ -70,6 +72,7 @@ export interface CodexModelConfig
         tools?: Record<string, DynamicToolDefinition>;
         toolHandlers?: Record<string, DynamicToolHandler>;
         toolTimeoutMs?: number;
+        interruptTimeoutMs?: number;
         approvals?: {
             onCommandApproval?: CommandApprovalHandler;
             onFileChangeApproval?: FileChangeApprovalHandler;
@@ -471,6 +474,24 @@ export class CodexLanguageModel implements LanguageModelV3
         }));
 
         const mapper = new CodexEventMapper();
+        let activeThreadId: string | undefined;
+        let activeTurnId: string | undefined;
+        const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
+
+        const interruptTurnIfPossible = async () =>
+        {
+            if (!activeThreadId || !activeTurnId)
+            {
+                return;
+            }
+
+            const interruptParams: CodexTurnInterruptParams = {
+                threadId: activeThreadId,
+                turnId: activeTurnId,
+            };
+            debugLog?.("outbound", "turn/interrupt", interruptParams);
+            await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
+        };
 
         const stream = new ReadableStream<LanguageModelV3StreamPart>({
             start: (controller) => 
@@ -518,7 +539,19 @@ export class CodexLanguageModel implements LanguageModelV3
 
                 const abortHandler = () => 
                 {
-                    void closeWithError(new DOMException("Aborted", "AbortError"));
+                    void (async () =>
+                    {
+                        try
+                        {
+                            await interruptTurnIfPossible();
+                        }
+                        catch
+                        {
+                            // Best-effort only: always close/disconnect even if interrupt fails.
+                        }
+
+                        await closeWithError(new DOMException("Aborted", "AbortError"));
+                    })();
                 };
 
                 if (options.abortSignal) 
@@ -690,6 +723,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             threadId = extractThreadId(threadStartResult);
                         }
 
+                        activeThreadId = threadId;
                         mapper.setThreadId(threadId);
 
                         // Register cross-call tool handler for SDK tools
@@ -709,7 +743,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             input: turnInput,
                         });
 
-                        extractTurnId(turnStartResult);
+                        activeTurnId = extractTurnId(turnStartResult);
                     }
                     catch (error)
                     {
@@ -719,6 +753,14 @@ export class CodexLanguageModel implements LanguageModelV3
             },
             cancel: async () => 
             {
+                try
+                {
+                    await interruptTurnIfPossible();
+                }
+                catch
+                {
+                    // Best-effort only: always disconnect to release resources.
+                }
                 await client.disconnect();
             },
         });

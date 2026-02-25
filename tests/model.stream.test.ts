@@ -81,6 +81,43 @@ class ScriptedTransport extends MockTransport
     }
 }
 
+class InterruptAwareTransport extends MockTransport
+{
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        await super.sendMessage(message);
+
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            return;
+        }
+
+        if (message.method === "initialize")
+        {
+            this.emitMessage({ id: message.id, result: { serverInfo: { name: "codex", version: "test" } } });
+            return;
+        }
+
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_abort" } });
+            return;
+        }
+
+        if (message.method === "turn/start")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_abort" } });
+            return;
+        }
+
+        if (message.method === "turn/interrupt")
+        {
+            this.emitMessage({ id: message.id, result: {} });
+            return;
+        }
+    }
+}
+
 async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]> 
 {
     const reader = stream.getReader();
@@ -421,6 +458,37 @@ describe("CodexLanguageModel.doStream", () =>
         expect(resumeEvent?.direction).toBe("outbound");
         expect((resumeEvent?.message as { data: { threadId: string } }).data).toMatchObject({
             threadId: "thr_existing",
+        });
+    });
+
+    it("sends turn/interrupt when abortSignal is triggered after turn/start", async () =>
+    {
+        const transport = new InterruptAwareTransport();
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+        const model = provider.languageModel("gpt-5.3-codex");
+        const abortController = new AbortController();
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "interrupt me" }] }],
+            abortSignal: abortController.signal,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        abortController.abort();
+
+        await readAll(stream);
+
+        const interruptMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/interrupt",
+        );
+        expect(interruptMessage).toBeDefined();
+        expect(interruptMessage?.params).toMatchObject({
+            threadId: "thr_abort",
+            turnId: "turn_abort",
         });
     });
 });
