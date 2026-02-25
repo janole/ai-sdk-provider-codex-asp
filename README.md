@@ -113,7 +113,8 @@ const codex = createCodexAppServer({
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
   compaction?: { onResume?, strict? },     // optional thread/compact/start before resumed turns
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
-  defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
+  defaultThreadSettings?: { cwd?, approvalPolicy?, sandbox? },
+  defaultTurnSettings?: { cwd?, approvalPolicy?, sandboxPolicy?, model?, effort?, summary? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000
   interruptTimeoutMs?: number,             // default: 10000
@@ -123,6 +124,20 @@ codex(modelId)                // returns a language model instance
 codex.languageModel(modelId)  // explicit alias
 codex.chat(modelId)           // explicit alias
 codex.shutdown()              // clean up persistent workers
+```
+
+Rich sandbox policy example (turn-level):
+
+```ts
+const codex = createCodexAppServer({
+  defaultTurnSettings: {
+    approvalPolicy: "on-request",
+    sandboxPolicy: {
+      type: "externalSandbox",
+      networkAccess: "enabled",
+    },
+  },
+});
 ```
 
 See [`src/provider.ts`](src/provider.ts) for full type definitions.
