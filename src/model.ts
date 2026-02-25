@@ -587,7 +587,13 @@ export class CodexLanguageModel implements LanguageModelV3
                             approvalsDispatcher.attach(client);
 
                             await persistentTransport.respondToToolCall(
-                                toolResult ?? { success: true, contentItems: [] },
+                                toolResult ?? {
+                                    success: false,
+                                    contentItems: [{
+                                        type: "inputText",
+                                        text: `Missing tool result for pending callId "${pendingToolCall.callId}".`,
+                                    }],
+                                },
                             );
                             return;
                         }
