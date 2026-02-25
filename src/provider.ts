@@ -1,62 +1,17 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
-import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
 import {
     acquirePersistentPool,
     type PersistentPoolHandle,
 } from "./client/persistent-pool-registry";
-import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
-import { StdioTransport, type StdioTransportSettings } from "./client/transport-stdio";
-import type { WebSocketTransportSettings } from "./client/transport-websocket";
+import { StdioTransport } from "./client/transport-stdio";
 import { WebSocketTransport } from "./client/transport-websocket";
-import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import { CodexLanguageModel, type CodexLanguageModelSettings, type CodexThreadDefaults } from "./model";
+import { CodexLanguageModel, type CodexLanguageModelSettings } from "./model";
 import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
+import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
-
-export interface CodexProviderSettings {
-    defaultModel?: string;
-    clientInfo?: {
-        name: string;
-        version: string;
-        title?: string;
-    };
-    experimentalApi?: boolean;
-    transport?: {
-        type?: "stdio" | "websocket";
-        stdio?: StdioTransportSettings;
-        websocket?: WebSocketTransportSettings;
-    };
-    defaultThreadSettings?: CodexThreadDefaults;
-    transportFactory?: () => CodexTransport;
-    /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
-    tools?: Record<string, DynamicToolDefinition>;
-    /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
-    toolHandlers?: Record<string, DynamicToolHandler>;
-    toolTimeoutMs?: number;
-    /** Max time to wait for `turn/interrupt` response on abort. */
-    interruptTimeoutMs?: number;
-    approvals?: {
-        onCommandApproval?: CommandApprovalHandler;
-        onFileChangeApproval?: FileChangeApprovalHandler;
-    };
-    debug?: {
-        /** Log all JSON-RPC packets exchanged with Codex. */
-        logPackets?: boolean;
-        /** Optional packet logger (defaults to console.debug for inbound packets). */
-        logger?: (packet: {
-            direction: "inbound" | "outbound";
-            message: unknown;
-        }) => void;
-    };
-    persistent?: {
-        poolSize?: number;
-        idleTimeoutMs?: number;
-        scope?: "provider" | "global";
-        key?: string;
-    };
-}
+export type { CodexProviderSettings } from "./provider-settings";
 
 export interface CodexProvider extends ProviderV3 {
     (
