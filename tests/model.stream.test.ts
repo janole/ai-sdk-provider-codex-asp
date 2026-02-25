@@ -34,6 +34,12 @@ class ScriptedTransport extends MockTransport
             return;
         }
 
+        if (message.method === "thread/compact/start")
+        {
+            this.emitMessage({ id: message.id, result: {} });
+            return;
+        }
+
         if (message.method === "turn/start") 
         {
             this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
@@ -78,6 +84,30 @@ class ScriptedTransport extends MockTransport
                 });
             });
         }
+    }
+}
+
+class CompactionFailingTransport extends ScriptedTransport
+{
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            await super.sendMessage(message);
+            return;
+        }
+
+        if (message.method === "thread/compact/start")
+        {
+            await MockTransport.prototype.sendMessage.call(this, message);
+            this.emitMessage({
+                id: message.id,
+                error: { code: -32000, message: "compaction failed" },
+            });
+            return;
+        }
+
+        await super.sendMessage(message);
     }
 }
 
@@ -299,6 +329,84 @@ describe("CodexLanguageModel.doStream", () =>
                 "method" in message && message.method === "thread/resume",
         );
         expect(resumeMessage?.params).toMatchObject({ threadId: "thr_content_part" });
+    });
+
+    it("can compact a resumed thread before turn/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: { onResume: true },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
+            "thread/compact/start",
+            "turn/start",
+        ]);
+    });
+
+    it("continues when non-strict compaction fails", async () =>
+    {
+        const transport = new CompactionFailingTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            compaction: { onResume: true },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+        });
+
+        await readAll(stream);
+
+        const methods = transport.sentMessages
+            .filter((message): message is { method: string } => "method" in message)
+            .map((message) => message.method);
+
+        expect(methods).toEqual([
+            "initialize",
+            "initialized",
+            "thread/resume",
+            "thread/compact/start",
+            "turn/start",
+        ]);
     });
 
     it("passes system messages as developerInstructions on thread/start", async () =>

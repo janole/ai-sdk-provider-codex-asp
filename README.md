@@ -111,6 +111,7 @@ const codex = createCodexAppServer({
   clientInfo?: { name, version, title? },  // defaults to package.json
   transport?: { type: 'stdio' | 'websocket', stdio?, websocket? },
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
+  compaction?: { onResume?, strict? },     // optional thread/compact/start before resumed turns
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
   defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
@@ -154,6 +155,9 @@ npx tsx examples/stream-text.ts
   - Increase `interruptTimeoutMs` if `turn/interrupt` acks are slow under heavy load.
 - Empty generated text:
   - Verify Codex emits `item/agentMessage/delta` and `turn/completed` notifications.
+- Compaction fails on resumed threads:
+  - Leave `compaction.strict` unset/false to continue the turn when `thread/compact/start` fails.
+  - Set `compaction.strict: true` if you want compaction failures to fail fast.
 
 ## Development
 

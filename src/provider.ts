@@ -87,6 +87,9 @@ export function createCodexAppServer(
         defaultThreadSettings: settings.defaultThreadSettings
             ? { ...settings.defaultThreadSettings }
             : undefined,
+        compaction: settings.compaction
+            ? { ...settings.compaction }
+            : undefined,
         transportFactory: effectiveTransportFactory,
         tools: settings.tools ? { ...settings.tools } : undefined,
         toolHandlers: settings.toolHandlers ? { ...settings.toolHandlers } : undefined,
