@@ -593,4 +593,86 @@ describe("Cross-call tool support", () =>
             await pool.shutdown();
         }
     });
+
+    it("uses only the latest tool message for pending callId and ignores stale history-like tool results", async () =>
+    {
+        const transport = new ToolCallTransport(
+            [TICKET_TOOL],
+            "Done.",
+        );
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream: s1 } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+                tools: SDK_TOOLS,
+            });
+            await readAll(s1);
+
+            const { stream: s2 } = await model.doStream({
+                prompt: [
+                    { role: "user", content: [{ type: "text", text: "test" }] },
+                    {
+                        role: "assistant",
+                        content: [
+                            { type: "tool-call", toolCallId: "call_old_1", toolName: "lookup_ticket", input: { id: "OLD-1" } },
+                            { type: "tool-call", toolCallId: "call_old_2", toolName: "lookup_ticket", input: { id: "OLD-2" } },
+                            { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
+                        ],
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                    },
+                    {
+                        role: "tool",
+                        content: [{
+                            type: "tool-result",
+                            toolCallId: "call_old_1",
+                            toolName: "lookup_ticket",
+                            output: { type: "text", value: "old-result-1" },
+                        }],
+                    },
+                    {
+                        role: "tool",
+                        content: [{
+                            type: "tool-result",
+                            toolCallId: "call_old_2",
+                            toolName: "lookup_ticket",
+                            output: { type: "text", value: "old-result-2" },
+                        }],
+                    },
+                    {
+                        role: "tool",
+                        content: [
+                            {
+                                type: "tool-result",
+                                toolCallId: "call_old_2",
+                                toolName: "lookup_ticket",
+                                output: { type: "text", value: "repeated-old-result-2" },
+                            },
+                            {
+                                type: "tool-result",
+                                toolCallId: "call_ticket",
+                                toolName: "lookup_ticket",
+                                output: { type: "text", value: "fresh-ticket-result" },
+                            },
+                        ],
+                    },
+                ],
+            });
+            await readAll(s2);
+
+            const toolResponse = transport.sentMessages.find(
+                (msg) => "id" in msg && msg.id === 200 && "result" in msg,
+            ) as { result?: { success: boolean; contentItems: Array<{ text: string }> } } | undefined;
+
+            expect(toolResponse?.result?.success).toBe(true);
+            expect(toolResponse?.result?.contentItems).toEqual([{ text: "fresh-ticket-result", type: "inputText" }]);
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
 });
