@@ -7,7 +7,8 @@ import type {
 } from "./protocol/types";
 import { stripUndefined } from "./utils/object";
 
-export interface DynamicToolExecutionContext {
+export interface DynamicToolExecutionContext
+{
     threadId?: string;
     turnId?: string;
     callId?: string;
@@ -20,13 +21,15 @@ export type DynamicToolHandler = (
 ) => Promise<CodexToolCallResult>;
 
 /** Full tool definition: schema advertised to Codex + local execution handler. */
-export interface DynamicToolDefinition {
+export interface DynamicToolDefinition
+{
     description: string;
     inputSchema: Record<string, unknown>;
     execute: DynamicToolHandler;
 }
 
-export interface DynamicToolsDispatcherSettings {
+export interface DynamicToolsDispatcherSettings
+{
     /** Tools with full schema advertised to Codex. Handlers are registered automatically. */
     tools?: Record<string, DynamicToolDefinition>;
     /** Legacy handler-only registration (no schema). Tools are not advertised to Codex. */
@@ -181,11 +184,13 @@ export class DynamicToolsDispatcher
                     contentItemsCount: result.contentItems.length,
                 },
             });
+
             return result;
         }
         catch (error) 
         {
             const message = error instanceof Error ? error.message : "Dynamic tool execution failed.";
+
             this.onDebugEvent?.({
                 event: "dynamic-tool-dispatch-error",
                 data: {
@@ -195,6 +200,7 @@ export class DynamicToolsDispatcher
                     message,
                 },
             });
+
             return toTextResult(message, false);
         }
     }

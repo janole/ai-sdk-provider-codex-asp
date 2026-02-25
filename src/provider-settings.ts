@@ -26,7 +26,8 @@ export interface CodexCompactionSettings
     strict?: boolean;
 }
 
-export interface CodexProviderSettings {
+export interface CodexProviderSettings
+{
     defaultModel?: string;
     clientInfo?: {
         name: string;
