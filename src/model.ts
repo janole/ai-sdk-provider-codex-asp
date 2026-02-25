@@ -72,6 +72,7 @@ export interface CodexModelConfig
         tools?: Record<string, DynamicToolDefinition>;
         toolHandlers?: Record<string, DynamicToolHandler>;
         toolTimeoutMs?: number;
+        interruptTimeoutMs?: number;
         approvals?: {
             onCommandApproval?: CommandApprovalHandler;
             onFileChangeApproval?: FileChangeApprovalHandler;
@@ -475,6 +476,7 @@ export class CodexLanguageModel implements LanguageModelV3
         const mapper = new CodexEventMapper();
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
+        const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 2_000;
 
         const interruptTurnIfPossible = async () =>
         {
@@ -488,7 +490,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 turnId: activeTurnId,
             };
             debugLog?.("outbound", "turn/interrupt", interruptParams);
-            await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, 2_000);
+            await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
         };
 
         const stream = new ReadableStream<LanguageModelV3StreamPart>({

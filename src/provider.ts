@@ -35,6 +35,8 @@ export interface CodexProviderSettings {
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
     toolHandlers?: Record<string, DynamicToolHandler>;
     toolTimeoutMs?: number;
+    /** Max time to wait for `turn/interrupt` response on abort. */
+    interruptTimeoutMs?: number;
     approvals?: {
         onCommandApproval?: CommandApprovalHandler;
         onFileChangeApproval?: FileChangeApprovalHandler;
@@ -134,6 +136,7 @@ export function createCodexAppServer(
         tools: settings.tools ? { ...settings.tools } : undefined,
         toolHandlers: settings.toolHandlers ? { ...settings.toolHandlers } : undefined,
         toolTimeoutMs: settings.toolTimeoutMs,
+        interruptTimeoutMs: settings.interruptTimeoutMs,
         approvals: settings.approvals ? { ...settings.approvals } : undefined,
         debug: settings.debug ? { ...settings.debug } : undefined,
     }));
