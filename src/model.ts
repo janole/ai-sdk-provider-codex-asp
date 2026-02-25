@@ -21,7 +21,6 @@ import { CodexEventMapper } from "./protocol/event-mapper";
 import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
-    AskForApproval,
     CodexInitializeParams,
     CodexInitializeResult,
     CodexThreadResumeParams,
@@ -33,9 +32,8 @@ import type {
     CodexTurnInterruptParams,
     CodexTurnInterruptResult,
     CodexTurnStartResult,
-    SandboxMode,
 } from "./protocol/types";
-import type { CodexProviderSettings } from "./provider";
+import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -44,12 +42,7 @@ export interface CodexLanguageModelSettings
     // intentionally empty — settings will be added as the API evolves
 }
 
-export interface CodexThreadDefaults
-{
-    cwd?: string;
-    approvalPolicy?: AskForApproval;
-    sandbox?: SandboxMode;
-}
+export type { CodexThreadDefaults } from "./provider-settings";
 
 export interface CodexModelConfig
 {
