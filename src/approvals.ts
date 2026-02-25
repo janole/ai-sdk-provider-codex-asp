@@ -48,8 +48,8 @@ export class ApprovalsDispatcher
 
     constructor(settings: ApprovalsDispatcherSettings = {})
     {
-        this.onCommandApproval = settings.onCommandApproval ?? (() => "accept");
-        this.onFileChangeApproval = settings.onFileChangeApproval ?? (() => "accept");
+        this.onCommandApproval = settings.onCommandApproval ?? (() => "decline");
+        this.onFileChangeApproval = settings.onFileChangeApproval ?? (() => "decline");
     }
 
     attach(client: AppServerClient): () => void
