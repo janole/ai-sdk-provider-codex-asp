@@ -201,7 +201,7 @@ async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]>
 
 describe("ApprovalsDispatcher", () =>
 {
-    it("auto-approves command execution by default", async () =>
+    it("declines command execution by default", async () =>
     {
         const transport = new ScriptedTransport();
         transport.setApprovalScenario("command");
@@ -217,7 +217,7 @@ describe("ApprovalsDispatcher", () =>
         const provider = createCodexAppServer({
             transportFactory: () => transport,
             clientInfo: { name: "test-client", version: "1.0.0" },
-            // No approvals callbacks → defaults to auto-approve
+            // No approvals callbacks → defaults to decline
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
@@ -228,20 +228,20 @@ describe("ApprovalsDispatcher", () =>
 
         const parts = await readAll(stream);
 
-        // Should complete successfully (auto-approved)
+        // Should still complete the turn in this scripted transport flow.
         const textDeltas = (parts as { type: string; delta?: string }[]).filter(
             (p) => p.type === "text-delta",
         );
         expect(textDeltas).toHaveLength(1);
         expect(textDeltas[0]?.delta).toBe("Done");
 
-        // Verify the approval response was sent with "accept"
+        // Verify the approval response was sent with "decline"
         const approvalResponse = transport.sentMessages.find(
             (msg) => "id" in msg && msg.id === 100 && "result" in msg,
         ) as { id: number; result: { decision: string } } | undefined;
 
         expect(approvalResponse).toBeDefined();
-        expect(approvalResponse?.result.decision).toBe("accept");
+        expect(approvalResponse?.result.decision).toBe("decline");
     });
 
     it("calls onCommandApproval callback and sends the decision", async () =>
@@ -335,7 +335,7 @@ describe("ApprovalsDispatcher", () =>
         expect(approvalResponse?.result.decision).toBe("accept");
     });
 
-    it("auto-approves file changes by default", async () =>
+    it("declines file changes by default", async () =>
     {
         const transport = new ScriptedTransport();
         transport.setApprovalScenario("fileChange");
@@ -350,7 +350,7 @@ describe("ApprovalsDispatcher", () =>
         const provider = createCodexAppServer({
             transportFactory: () => transport,
             clientInfo: { name: "test-client", version: "1.0.0" },
-            // No approvals callbacks → defaults to auto-approve
+            // No approvals callbacks → defaults to decline
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
@@ -371,6 +371,6 @@ describe("ApprovalsDispatcher", () =>
             (msg) => "id" in msg && msg.id === 100 && "result" in msg,
         ) as { id: number; result: { decision: string } } | undefined;
 
-        expect(approvalResponse?.result.decision).toBe("accept");
+        expect(approvalResponse?.result.decision).toBe("decline");
     });
 });
