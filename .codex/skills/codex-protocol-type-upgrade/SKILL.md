@@ -29,8 +29,52 @@ rg -n "TypeNameA|TypeNameB|TypeNameC" src tests
 
 Generated protocol directory is gitignored and we intentionally commit only used files. For every tracked generated file, all imported generated types it references (directly or transitively) must also be tracked.
 
-Use the playbook for the closure-check script and force-add process:
-- `docs/codex-protocol-type-upgrade-playbook.md`
+Closure-check script:
+
+```bash
+python3 - <<'PY'
+import pathlib, re, subprocess
+
+repo = pathlib.Path('.').resolve()
+tracked = [
+    pathlib.Path(p) for p in subprocess.check_output(
+        ["git", "ls-files", "src/protocol/app-server-protocol"], text=True
+    ).splitlines() if p.endswith('.ts')
+]
+changed = set(
+    pathlib.Path(p) for p in subprocess.check_output(
+        ["git", "diff", "--name-only"], text=True
+    ).splitlines() if p.startswith("src/protocol/app-server-protocol/") and p.endswith('.ts')
+)
+roots = list(changed or tracked)
+import_re = re.compile(r'^import type .* from "(\\./|\\.\\./)([^"]+)";', re.M)
+missing, seen, stack = set(), set(), roots[:]
+tracked_set = set(tracked)
+
+while stack:
+    rel = stack.pop()
+    f = (repo / rel).resolve()
+    if rel in seen or not f.exists():
+        continue
+    seen.add(rel)
+    text = f.read_text(encoding='utf-8')
+    for m in import_re.finditer(text):
+        dep = (f.parent / (m.group(1) + m.group(2))).with_suffix('.ts').resolve()
+        dep_rel = dep.relative_to(repo)
+        if dep_rel not in tracked_set:
+            missing.add(dep_rel)
+        stack.append(dep_rel)
+
+for p in sorted(missing):
+    print(p)
+PY
+```
+
+Then force-add missing generated files:
+
+```bash
+git add -f <each-missing-generated-file>
+```
 
 ## Validation
 

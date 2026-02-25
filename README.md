@@ -189,7 +189,7 @@ npm run qa           # lint + typecheck + test (all-in-one)
 `src/protocol/app-server-protocol/` is gitignored, but selected generated files are intentionally tracked with `git add -f` so protocol shape changes stay visible in PRs.
 
 Important: for every tracked generated file, all imported generated type dependencies (direct + transitive) must also be tracked.
-See `docs/codex-protocol-type-upgrade-playbook.md` for the exact closure-check + force-add workflow.
+Use the local skill `.codex/skills/codex-protocol-type-upgrade/SKILL.md` for the exact workflow.
 
 When protocol shapes change, clean and regenerate:
 
@@ -198,7 +198,7 @@ rm -rf src/protocol/app-server-protocol
 npm run codex:generate-types
 ```
 
-Then follow the playbook to:
+Then follow the skill workflow to:
 - adapt runtime mappings if needed
 - add missing generated dependencies with `git add -f`
 - run `npm run typecheck` (and focused tests)
