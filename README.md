@@ -115,7 +115,7 @@ const codex = createCodexAppServer({
   defaultThreadSettings?: { cwd?, approvalMode?, sandboxMode? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000
-  interruptTimeoutMs?: number,             // default: 2000
+  interruptTimeoutMs?: number,             // default: 10000
 });
 
 codex(modelId)                // returns a language model instance

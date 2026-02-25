@@ -476,7 +476,7 @@ export class CodexLanguageModel implements LanguageModelV3
         const mapper = new CodexEventMapper();
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
-        const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 2_000;
+        const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
 
         const interruptTurnIfPossible = async () =>
         {
