@@ -56,8 +56,15 @@ class ScriptedTransport extends MockTransport
                             threadId: "thr_1",
                             turnId: "turn_1",
                             itemId: "item_cmd_1",
+                            approvalId: "approval_1",
+                            reason: "Needs outbound access",
+                            networkApprovalContext: { host: "github.com", protocol: "https" },
                             command: "git push origin main",
                             cwd: "/repo",
+                            commandActions: [{ type: "unknown", command: "git push origin main" }],
+                            additionalPermissions: { network: true, fileSystem: null, macos: null },
+                            proposedExecpolicyAmendment: ["git push *"],
+                            proposedNetworkPolicyAmendments: [{ host: "github.com", action: "allow" }],
                         },
                     });
                 });
@@ -279,8 +286,15 @@ describe("ApprovalsDispatcher", () =>
             threadId: "thr_1",
             turnId: "turn_1",
             itemId: "item_cmd_1",
+            approvalId: "approval_1",
+            reason: "Needs outbound access",
+            networkApprovalContext: { host: "github.com", protocol: "https" },
             command: "git push origin main",
             cwd: "/repo",
+            commandActions: [{ type: "unknown", command: "git push origin main" }],
+            additionalPermissions: { network: true, fileSystem: null, macos: null },
+            proposedExecpolicyAmendment: ["git push *"],
+            proposedNetworkPolicyAmendments: [{ host: "github.com", action: "allow" }],
         });
 
         const approvalResponse = transport.sentMessages.find(

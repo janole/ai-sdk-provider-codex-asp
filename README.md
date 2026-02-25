@@ -2,7 +2,7 @@
 
 `@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) v6 custom provider for the Codex App Server Protocol.
 
-Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.104.0) 0.104.0.
+Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.105.0) 0.105.0.
 
 - `LanguageModelV3` provider implementation
 - Streaming (`streamText`) and non-streaming (`generateText`)
@@ -186,8 +186,10 @@ npm run qa           # lint + typecheck + test (all-in-one)
 
 ### Generated Protocol Types
 
-`src/protocol/app-server-protocol/` is gitignored, but selected generated files are intentionally tracked via `git add -f`.
-This keeps protocol diffs visible in PRs and local `git status` after regeneration.
+`src/protocol/app-server-protocol/` is gitignored, but selected generated files are intentionally tracked with `git add -f` so protocol shape changes stay visible in PRs.
+
+Important: for every tracked generated file, all imported generated type dependencies (direct + transitive) must also be tracked.
+Use the local skill `.codex/skills/codex-protocol-type-upgrade/SKILL.md` for the exact workflow.
 
 When protocol shapes change, clean and regenerate:
 
@@ -195,6 +197,11 @@ When protocol shapes change, clean and regenerate:
 rm -rf src/protocol/app-server-protocol
 npm run codex:generate-types
 ```
+
+Then follow the skill workflow to:
+- adapt runtime mappings if needed
+- add missing generated dependencies with `git add -f`
+- run `npm run typecheck` (and focused tests)
 
 ## License
 
