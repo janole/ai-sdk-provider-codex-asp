@@ -101,4 +101,6 @@ export interface CodexProviderSettings
         scope?: "provider" | "global";
         key?: string;
     };
+    /** Emit plan updates as tool-call/tool-result parts. Default: true. */
+    emitPlanUpdates?: boolean;
 }

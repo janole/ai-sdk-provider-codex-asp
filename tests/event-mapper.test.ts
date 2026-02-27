@@ -690,6 +690,146 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
+    it("maps plan updates as tool-call/tool-result pairs", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_plan" } },
+            {
+                method: "turn/plan/updated",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_plan",
+                    explanation: "Updating files",
+                    plan: [
+                        { step: "Read config", status: "completed" },
+                        { step: "Update mapper", status: "in_progress" },
+                    ],
+                },
+            },
+            {
+                method: "turn/plan/updated",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_plan",
+                    explanation: "Almost done",
+                    plan: [
+                        { step: "Read config", status: "completed" },
+                        { step: "Update mapper", status: "completed" },
+                    ],
+                },
+            },
+            // Wrapper duplicate — should be silently dropped.
+            {
+                method: "codex/event/plan_update",
+                params: {
+                    id: "turn_plan",
+                    msg: { type: "plan_update", plan: [] },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_plan", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            // First plan update: tool-call + tool-result
+            {
+                type: "tool-call",
+                toolCallId: "plan:turn_plan:1",
+                toolName: "codex_plan_update",
+                input: JSON.stringify({}),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "plan:turn_plan:1",
+                toolName: "codex_plan_update",
+                result: {
+                    plan: [
+                        { step: "Read config", status: "completed" },
+                        { step: "Update mapper", status: "in_progress" },
+                    ],
+                    explanation: "Updating files",
+                },
+            },
+            // Second plan update: new tool-call + tool-result pair
+            {
+                type: "tool-call",
+                toolCallId: "plan:turn_plan:2",
+                toolName: "codex_plan_update",
+                input: JSON.stringify({}),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "plan:turn_plan:2",
+                toolName: "codex_plan_update",
+                result: {
+                    plan: [
+                        { step: "Read config", status: "completed" },
+                        { step: "Update mapper", status: "completed" },
+                    ],
+                    explanation: "Almost done",
+                },
+            },
+            // codex/event/plan_update wrapper produces nothing.
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("suppresses plan updates when emitPlanUpdates is false", () =>
+    {
+        const mapper = new CodexEventMapper({ emitPlanUpdates: false });
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_plan2" } },
+            {
+                method: "turn/plan/updated",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_plan2",
+                    explanation: "Planning",
+                    plan: [{ step: "Do stuff", status: "in_progress" }],
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_plan2", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        // No tool-call/tool-result parts — plan updates are suppressed.
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
     it("maps MCP tool calls from codex/event wrapper events", () =>
     {
         const mapper = new CodexEventMapper();

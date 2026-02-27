@@ -460,7 +460,9 @@ export class CodexLanguageModel implements LanguageModelV3
             onPacket: packetLogger,
         }));
 
-        const mapper = new CodexEventMapper();
+        const mapper = new CodexEventMapper(stripUndefined({
+            emitPlanUpdates: this.config.providerSettings.emitPlanUpdates,
+        }));
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;

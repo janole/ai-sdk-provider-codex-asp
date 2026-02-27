@@ -57,19 +57,41 @@ function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishRe
     }
 }
 
+export interface CodexEventMapperOptions
+{
+    /** Emit plan updates as tool-call/tool-result parts. Default: true. */
+    emitPlanUpdates?: boolean;
+}
+
 export class CodexEventMapper
 {
+    private readonly options: Required<CodexEventMapperOptions>;
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
+    private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
+
+    constructor(options?: CodexEventMapperOptions)
+    {
+        this.options = {
+            emitPlanUpdates: options?.emitPlanUpdates ?? true,
+        };
+    }
 
     setThreadId(threadId: string): void
     {
         this.threadId = threadId;
+    }
+
+    private nextPlanSequence(turnId: string): number
+    {
+        const next = (this.planSequenceByTurnId.get(turnId) ?? 0) + 1;
+        this.planSequenceByTurnId.set(turnId, next);
+        return next;
     }
 
     map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
@@ -264,6 +286,49 @@ export class CodexEventMapper
             case "codex/event/agent_reasoning_section_break":
                 break;
 
+            case "turn/plan/updated": {
+                if (!this.options.emitPlanUpdates)
+                {
+                    break;
+                }
+
+                const params = (event.params ?? {}) as {
+                    turnId?: string;
+                    explanation?: string | null;
+                    plan?: Array<{ step: string; status: string }>;
+                };
+                const turnId = params.turnId;
+                const plan = params.plan;
+                if (turnId && plan)
+                {
+                    pushStreamStart();
+                    const planSequence = this.nextPlanSequence(turnId);
+                    const toolCallId = `plan:${turnId}:${planSequence}`;
+                    const toolName = "codex_plan_update";
+
+                    parts.push(withMeta({
+                        type: "tool-call",
+                        toolCallId,
+                        toolName,
+                        input: JSON.stringify({}),
+                        providerExecuted: true,
+                        dynamic: true,
+                    }));
+
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId,
+                        toolName,
+                        result: { plan, explanation: params.explanation ?? undefined },
+                    }));
+                }
+                break;
+            }
+
+            // codex/event/plan_update is the wrapper form of turn/plan/updated (1:1).
+            case "codex/event/plan_update":
+                break;
+
             // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
             // NOT mapped. They carry full unified diffs (often 50-100 KB) which,
             // when emitted as reasoning deltas, crash or freeze the frontend
@@ -429,6 +494,10 @@ export class CodexEventMapper
                 this.openToolCalls.clear();
 
                 const completed = (event.params ?? {}) as TurnCompletedNotification;
+                if (completed.turn?.id)
+                {
+                    this.planSequenceByTurnId.delete(completed.turn.id);
+                }
                 const usage = this.latestUsage ?? EMPTY_USAGE;
                 parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
                 break;
