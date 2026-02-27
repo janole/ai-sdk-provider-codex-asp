@@ -642,6 +642,53 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
+    it("maps codex/event/agent_reasoning to reasoning stream parts", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_ar" } },
+            {
+                method: "codex/event/agent_reasoning",
+                params: {
+                    id: "turn_ar",
+                    msg: { type: "agent_reasoning", text: "**Planning update**" },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "codex/event/agent_reasoning",
+                params: {
+                    id: "turn_ar",
+                    msg: { type: "agent_reasoning", text: "Looking at event counts." },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_ar", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "reasoning-start", id: "turn_ar" },
+            { type: "reasoning-delta", id: "turn_ar", delta: "**Planning update**" },
+            { type: "reasoning-delta", id: "turn_ar", delta: "Looking at event counts." },
+            { type: "reasoning-end", id: "turn_ar" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
     it("falls back to item/completed agent text when no deltas were emitted", () =>
     {
         const mapper = new CodexEventMapper();

@@ -280,6 +280,20 @@ export class CodexEventMapper
                 break;
             }
 
+            case "codex/event/agent_reasoning": {
+                const params = (event.params ?? {}) as {
+                    id?: string;
+                    msg?: { text?: string };
+                };
+                const turnId = params.id;
+                const text = params.msg?.text;
+                if (turnId && text)
+                {
+                    pushReasoningDelta(turnId, text);
+                }
+                break;
+            }
+
             // codex/event/agent_reasoning_section_break is the wrapper form of
             // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
             // canonical event above — skip the wrapper to avoid double "\n\n".
