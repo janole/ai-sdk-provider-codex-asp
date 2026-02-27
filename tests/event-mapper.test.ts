@@ -579,7 +579,7 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps reasoning section break notifications to reasoning separators", () =>
+    it("maps reasoning section break via canonical event and skips wrapper duplicate", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -604,6 +604,7 @@ describe("CodexEventMapper", () =>
                 },
             },
             {
+                // Wrapper duplicate of summaryPartAdded — should be ignored.
                 method: "codex/event/agent_reasoning_section_break",
                 params: {
                     id: "turn_1",
@@ -626,11 +627,11 @@ describe("CodexEventMapper", () =>
 
         const parts = events.flatMap((event) => mapper.map(event));
 
+        // Only one "\n\n" — the wrapper duplicate is skipped.
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
             { type: "reasoning-start", id: "rs_1" },
             { type: "reasoning-delta", id: "rs_1", delta: "First section" },
-            { type: "reasoning-delta", id: "rs_1", delta: "\n\n" },
             { type: "reasoning-delta", id: "rs_1", delta: "\n\n" },
             { type: "reasoning-end", id: "rs_1" },
             {

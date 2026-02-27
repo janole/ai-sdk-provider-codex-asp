@@ -4,7 +4,6 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
-import type { AgentReasoningSectionBreakEvent } from "./app-server-protocol/AgentReasoningSectionBreakEvent";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -27,13 +26,6 @@ interface DeltaParams
 {
     itemId?: string;
     delta?: string;
-}
-
-interface CodexEventEnvelope<TMsg>
-{
-    id?: string;
-    msg?: TMsg;
-    conversationId?: string;
 }
 
 const EMPTY_USAGE: LanguageModelV3Usage = {
@@ -245,14 +237,11 @@ export class CodexEventMapper
                 break;
             }
 
-            case "codex/event/agent_reasoning_section_break": {
-                const params = (event.params ?? {}) as CodexEventEnvelope<AgentReasoningSectionBreakEvent>;
-                if (params.msg?.item_id)
-                {
-                    pushReasoningDelta(params.msg.item_id, "\n\n");
-                }
+            // codex/event/agent_reasoning_section_break is the wrapper form of
+            // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
+            // canonical event above — skip the wrapper to avoid double "\n\n".
+            case "codex/event/agent_reasoning_section_break":
                 break;
-            }
 
             // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
             // NOT mapped. They carry full unified diffs (often 50-100 KB) which,
