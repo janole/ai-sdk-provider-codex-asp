@@ -745,7 +745,7 @@ describe("CodexEventMapper", () =>
             // First plan update: tool-call + tool-result
             {
                 type: "tool-call",
-                toolCallId: "plan:turn_plan",
+                toolCallId: "plan:turn_plan:1",
                 toolName: "codex_plan_update",
                 input: JSON.stringify({}),
                 providerExecuted: true,
@@ -753,7 +753,7 @@ describe("CodexEventMapper", () =>
             },
             {
                 type: "tool-result",
-                toolCallId: "plan:turn_plan",
+                toolCallId: "plan:turn_plan:1",
                 toolName: "codex_plan_update",
                 result: {
                     plan: [
@@ -763,10 +763,18 @@ describe("CodexEventMapper", () =>
                     explanation: "Updating files",
                 },
             },
-            // Second plan update: only tool-result (reuses same toolCallId)
+            // Second plan update: new tool-call + tool-result pair
+            {
+                type: "tool-call",
+                toolCallId: "plan:turn_plan:2",
+                toolName: "codex_plan_update",
+                input: JSON.stringify({}),
+                providerExecuted: true,
+                dynamic: true,
+            },
             {
                 type: "tool-result",
-                toolCallId: "plan:turn_plan",
+                toolCallId: "plan:turn_plan:2",
                 toolName: "codex_plan_update",
                 result: {
                     plan: [
@@ -776,14 +784,7 @@ describe("CodexEventMapper", () =>
                     explanation: "Almost done",
                 },
             },
-            // codex/event/plan_update wrapper produces nothing
-            // turn/completed closes the open plan tool call
-            {
-                type: "tool-result",
-                toolCallId: "plan:turn_plan",
-                toolName: "codex_plan_update",
-                result: { output: "" },
-            },
+            // codex/event/plan_update wrapper produces nothing.
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
