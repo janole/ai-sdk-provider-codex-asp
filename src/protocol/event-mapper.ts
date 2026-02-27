@@ -280,6 +280,12 @@ export class CodexEventMapper
                 break;
             }
 
+            // codex/event/agent_reasoning mirrors canonical reasoning summary
+            // stream events in current logs. Ignore wrapper to avoid duplicate
+            // reasoning text in consumers.
+            case "codex/event/agent_reasoning":
+                break;
+
             // codex/event/agent_reasoning_section_break is the wrapper form of
             // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
             // canonical event above — skip the wrapper to avoid double "\n\n".
