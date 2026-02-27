@@ -531,7 +531,11 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps turn diff notifications to reasoning stream parts", () =>
+    // Turn diffs are intentionally ignored — they carry full unified diffs
+    // (often 50-100 KB) that crash/freeze the frontend markdown renderer when
+    // emitted as reasoning. If re-enabling, use a dedicated part type with
+    // lazy/collapsed rendering instead of pushReasoningDelta.
+    it("ignores turn diff notifications", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -564,12 +568,9 @@ describe("CodexEventMapper", () =>
 
         const parts = events.flatMap((event) => mapper.map(event));
 
+        // No reasoning parts — diffs are silently dropped.
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            { type: "reasoning-start", id: "turn_diff:turn_1" },
-            { type: "reasoning-delta", id: "turn_diff:turn_1", delta: "diff --git a/a.ts b/a.ts" },
-            { type: "reasoning-delta", id: "turn_diff:turn_1", delta: "@@ -1,1 +1,1 @@" },
-            { type: "reasoning-end", id: "turn_diff:turn_1" },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },

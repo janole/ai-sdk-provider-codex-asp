@@ -5,7 +5,6 @@ import type {
 } from "@ai-sdk/provider";
 
 import type { AgentReasoningSectionBreakEvent } from "./app-server-protocol/AgentReasoningSectionBreakEvent";
-import type { TurnDiffEvent } from "./app-server-protocol/TurnDiffEvent";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -14,7 +13,6 @@ import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/M
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
-import type { TurnDiffUpdatedNotification } from "./app-server-protocol/v2/TurnDiffUpdatedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 
@@ -256,27 +254,15 @@ export class CodexEventMapper
                 break;
             }
 
-            case "turn/diff/updated": {
-                const params = (event.params ?? {}) as TurnDiffUpdatedNotification;
-                const turnId = params.turnId;
-                const diff = params.diff;
-                if (turnId && diff)
-                {
-                    pushReasoningDelta(`turn_diff:${turnId}`, diff);
-                }
+            // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
+            // NOT mapped. They carry full unified diffs (often 50-100 KB) which,
+            // when emitted as reasoning deltas, crash or freeze the frontend
+            // markdown renderer. If these need to surface in the UI, they should
+            // use a dedicated part type with lazy/collapsed rendering — not
+            // reasoning text.
+            case "turn/diff/updated":
+            case "codex/event/turn_diff":
                 break;
-            }
-
-            case "codex/event/turn_diff": {
-                const params = (event.params ?? {}) as CodexEventEnvelope<TurnDiffEvent>;
-                const turnId = params.id;
-                const diff = params.msg?.unified_diff;
-                if (turnId && diff)
-                {
-                    pushReasoningDelta(`turn_diff:${turnId}`, diff);
-                }
-                break;
-            }
 
             case "item/commandExecution/outputDelta": {
                 const delta = (event.params ?? {}) as CommandExecutionOutputDeltaNotification;
