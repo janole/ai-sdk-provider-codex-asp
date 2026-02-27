@@ -530,4 +530,163 @@ describe("CodexEventMapper", () =>
             },
         ]);
     });
+
+    // Turn diffs are intentionally ignored — they carry full unified diffs
+    // (often 50-100 KB) that crash/freeze the frontend markdown renderer when
+    // emitted as reasoning. If re-enabling, use a dedicated part type with
+    // lazy/collapsed rendering instead of pushReasoningDelta.
+    it("ignores turn diff notifications", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_1" } },
+            {
+                method: "turn/diff/updated",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_1",
+                    diff: "diff --git a/a.ts b/a.ts",
+                },
+            },
+            {
+                method: "codex/event/turn_diff",
+                params: {
+                    id: "turn_1",
+                    msg: { type: "turn_diff", unified_diff: "@@ -1,1 +1,1 @@" },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_1", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        // No reasoning parts — diffs are silently dropped.
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("maps reasoning section break via canonical event and skips wrapper duplicate", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_1" } },
+            {
+                method: "item/reasoning/summaryTextDelta",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_1",
+                    itemId: "rs_1",
+                    delta: "First section",
+                },
+            },
+            {
+                method: "item/reasoning/summaryPartAdded",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn_1",
+                    itemId: "rs_1",
+                    summaryIndex: 1,
+                },
+            },
+            {
+                // Wrapper duplicate of summaryPartAdded — should be ignored.
+                method: "codex/event/agent_reasoning_section_break",
+                params: {
+                    id: "turn_1",
+                    msg: {
+                        type: "agent_reasoning_section_break",
+                        item_id: "rs_1",
+                        summary_index: 2,
+                    },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_1", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        // Only one "\n\n" — the wrapper duplicate is skipped.
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-delta", id: "rs_1", delta: "First section" },
+            { type: "reasoning-delta", id: "rs_1", delta: "\n\n" },
+            { type: "reasoning-end", id: "rs_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("falls back to item/completed agent text when no deltas were emitted", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_fb" } },
+            {
+                method: "item/started",
+                params: {
+                    item: { type: "agentMessage", id: "msg_fb", text: "" },
+                    threadId: "thr",
+                    turnId: "turn_fb",
+                },
+            },
+            // No item/agentMessage/delta events arrive.
+            {
+                method: "item/completed",
+                params: {
+                    item: { type: "agentMessage", id: "msg_fb", text: "Final answer text", phase: "final_answer" },
+                    threadId: "thr",
+                    turnId: "turn_fb",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_fb", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "msg_fb" },
+            // Fallback: full text emitted from item/completed since no deltas arrived.
+            { type: "text-delta", id: "msg_fb", delta: "Final answer text" },
+            { type: "text-end", id: "msg_fb" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
 });

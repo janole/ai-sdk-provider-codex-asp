@@ -9,6 +9,7 @@ import type { CommandExecutionOutputDeltaNotification } from "./app-server-proto
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
+import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
@@ -60,6 +61,7 @@ export class CodexEventMapper
 {
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
+    private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
     private threadId: string | undefined;
@@ -176,6 +178,7 @@ export class CodexEventMapper
                 }
 
                 parts.push(withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
+                this.textDeltaReceived.add(delta.itemId);
                 break;
             }
 
@@ -187,10 +190,29 @@ export class CodexEventMapper
                     break;
                 }
 
-                if (item.type === "agentMessage" && this.openTextParts.has(item.id))
+                if (item.type === "agentMessage")
                 {
-                    parts.push(withMeta({ type: "text-end", id: item.id }));
-                    this.openTextParts.delete(item.id);
+                    // Fallback: if no deltas were streamed for this item,
+                    // emit the full text from the completed event so the
+                    // message isn't silently lost.
+                    if (!this.textDeltaReceived.has(item.id) && item.text)
+                    {
+                        pushStreamStart();
+
+                        if (!this.openTextParts.has(item.id))
+                        {
+                            this.openTextParts.add(item.id);
+                            parts.push(withMeta({ type: "text-start", id: item.id }));
+                        }
+
+                        parts.push(withMeta({ type: "text-delta", id: item.id, delta: item.text }));
+                    }
+
+                    if (this.openTextParts.has(item.id))
+                    {
+                        parts.push(withMeta({ type: "text-end", id: item.id }));
+                        this.openTextParts.delete(item.id);
+                    }
                 }
                 else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
                 {
@@ -226,6 +248,31 @@ export class CodexEventMapper
                 }
                 break;
             }
+
+            case "item/reasoning/summaryPartAdded": {
+                const params = (event.params ?? {}) as ReasoningSummaryPartAddedNotification;
+                if (params.itemId)
+                {
+                    pushReasoningDelta(params.itemId, "\n\n");
+                }
+                break;
+            }
+
+            // codex/event/agent_reasoning_section_break is the wrapper form of
+            // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
+            // canonical event above — skip the wrapper to avoid double "\n\n".
+            case "codex/event/agent_reasoning_section_break":
+                break;
+
+            // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
+            // NOT mapped. They carry full unified diffs (often 50-100 KB) which,
+            // when emitted as reasoning deltas, crash or freeze the frontend
+            // markdown renderer. If these need to surface in the UI, they should
+            // use a dedicated part type with lazy/collapsed rendering — not
+            // reasoning text.
+            case "turn/diff/updated":
+            case "codex/event/turn_diff":
+                break;
 
             case "item/commandExecution/outputDelta": {
                 const delta = (event.params ?? {}) as CommandExecutionOutputDeltaNotification;
