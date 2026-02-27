@@ -689,4 +689,84 @@ describe("CodexEventMapper", () =>
             },
         ]);
     });
+
+    it("maps MCP tool calls from codex/event wrapper events", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_mcp" } },
+            {
+                method: "codex/event/mcp_tool_call_begin",
+                params: {
+                    id: "turn_mcp",
+                    msg: {
+                        type: "mcp_tool_call_begin",
+                        call_id: "call_mcp_1",
+                        invocation: {
+                            server: "github",
+                            tool: "get_file_contents",
+                            arguments: { owner: "janole", repo: "test", path: "README.md" },
+                        },
+                    },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "codex/event/mcp_tool_call_end",
+                params: {
+                    id: "turn_mcp",
+                    msg: {
+                        type: "mcp_tool_call_end",
+                        call_id: "call_mcp_1",
+                        invocation: {
+                            server: "github",
+                            tool: "get_file_contents",
+                            arguments: { owner: "janole", repo: "test", path: "README.md" },
+                        },
+                        result: {
+                            Ok: {
+                                content: [
+                                    { type: "text", text: "# Test Repo" },
+                                ],
+                            },
+                        },
+                    },
+                    conversationId: "thr",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_mcp", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "call_mcp_1",
+                toolName: "mcp:github/get_file_contents",
+                input: JSON.stringify({ owner: "janole", repo: "test", path: "README.md" }),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "call_mcp_1",
+                toolName: "mcp:github/get_file_contents",
+                result: { output: "# Test Repo" },
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
 });

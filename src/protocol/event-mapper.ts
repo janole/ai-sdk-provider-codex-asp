@@ -291,6 +291,58 @@ export class CodexEventMapper
                 break;
             }
 
+            case "codex/event/mcp_tool_call_begin": {
+                const params = (event.params ?? {}) as {
+                    msg?: {
+                        call_id?: string;
+                        invocation?: { server?: string; tool?: string; arguments?: unknown };
+                    };
+                };
+                const callId = params.msg?.call_id;
+                const inv = params.msg?.invocation;
+                if (callId && inv)
+                {
+                    pushStreamStart();
+                    const toolName = `mcp:${inv.server}/${inv.tool}`;
+                    this.openToolCalls.set(callId, { toolName, output: "" });
+                    parts.push(withMeta({
+                        type: "tool-call",
+                        toolCallId: callId,
+                        toolName,
+                        input: JSON.stringify(inv.arguments ?? {}),
+                        providerExecuted: true,
+                        dynamic: true,
+                    }));
+                }
+                break;
+            }
+
+            case "codex/event/mcp_tool_call_end": {
+                const params = (event.params ?? {}) as {
+                    msg?: {
+                        call_id?: string;
+                        result?: { Ok?: { content?: Array<{ type: string; text?: string }> }; Err?: unknown };
+                    };
+                };
+                const callId = params.msg?.call_id;
+                if (callId && this.openToolCalls.has(callId))
+                {
+                    const tracked = this.openToolCalls.get(callId)!;
+                    const result = params.msg?.result;
+                    const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
+                    const output = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
+
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId: callId,
+                        toolName: tracked.toolName,
+                        result: { output },
+                    }));
+                    this.openToolCalls.delete(callId);
+                }
+                break;
+            }
+
             case "item/mcpToolCall/progress": {
                 const params = (event.params ?? {}) as McpToolCallProgressNotification;
                 if (params.itemId && params.message)
