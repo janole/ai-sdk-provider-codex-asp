@@ -5,12 +5,16 @@ import type {
 } from "@ai-sdk/provider";
 
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
+import type { AgentReasoningSectionBreakEvent } from "./app-server-protocol/AgentReasoningSectionBreakEvent";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
+import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
+import type { TurnDiffEvent } from "./app-server-protocol/TurnDiffEvent";
+import type { TurnDiffUpdatedNotification } from "./app-server-protocol/v2/TurnDiffUpdatedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 
@@ -27,30 +31,11 @@ interface DeltaParams
     delta?: string;
 }
 
-interface TurnDiffUpdatedParams
-{
-    turnId?: string;
-    diff?: string;
-}
-
-interface CodexTurnDiffParams
+interface CodexEventEnvelope<TMsg>
 {
     id?: string;
-    msg?: {
-        unified_diff?: string;
-    };
-}
-
-interface ReasoningSummaryPartAddedParams
-{
-    itemId?: string;
-}
-
-interface CodexReasoningSectionBreakParams
-{
-    msg?: {
-        item_id?: string;
-    };
+    msg?: TMsg;
+    conversationId?: string;
 }
 
 const EMPTY_USAGE: LanguageModelV3Usage = {
@@ -254,7 +239,7 @@ export class CodexEventMapper
             }
 
             case "item/reasoning/summaryPartAdded": {
-                const params = (event.params ?? {}) as ReasoningSummaryPartAddedParams;
+                const params = (event.params ?? {}) as ReasoningSummaryPartAddedNotification;
                 if (params.itemId)
                 {
                     pushReasoningDelta(params.itemId, "\n\n");
@@ -263,7 +248,7 @@ export class CodexEventMapper
             }
 
             case "codex/event/agent_reasoning_section_break": {
-                const params = (event.params ?? {}) as CodexReasoningSectionBreakParams;
+                const params = (event.params ?? {}) as CodexEventEnvelope<AgentReasoningSectionBreakEvent>;
                 if (params.msg?.item_id)
                 {
                     pushReasoningDelta(params.msg.item_id, "\n\n");
@@ -272,7 +257,7 @@ export class CodexEventMapper
             }
 
             case "turn/diff/updated": {
-                const params = (event.params ?? {}) as TurnDiffUpdatedParams;
+                const params = (event.params ?? {}) as TurnDiffUpdatedNotification;
                 const turnId = params.turnId;
                 const diff = params.diff;
                 if (turnId && diff)
@@ -283,7 +268,7 @@ export class CodexEventMapper
             }
 
             case "codex/event/turn_diff": {
-                const params = (event.params ?? {}) as CodexTurnDiffParams;
+                const params = (event.params ?? {}) as CodexEventEnvelope<TurnDiffEvent>;
                 const turnId = params.id;
                 const diff = params.msg?.unified_diff;
                 if (turnId && diff)
