@@ -57,8 +57,15 @@ function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishRe
     }
 }
 
+export interface CodexEventMapperOptions
+{
+    /** Emit plan updates as tool-call/tool-result parts. Default: true. */
+    emitPlanUpdates?: boolean;
+}
+
 export class CodexEventMapper
 {
+    private readonly options: Required<CodexEventMapperOptions>;
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
@@ -66,6 +73,13 @@ export class CodexEventMapper
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
     private threadId: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
+
+    constructor(options?: CodexEventMapperOptions)
+    {
+        this.options = {
+            emitPlanUpdates: options?.emitPlanUpdates ?? true,
+        };
+    }
 
     setThreadId(threadId: string): void
     {
@@ -262,6 +276,52 @@ export class CodexEventMapper
             // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
             // canonical event above — skip the wrapper to avoid double "\n\n".
             case "codex/event/agent_reasoning_section_break":
+                break;
+
+            case "turn/plan/updated": {
+                if (!this.options.emitPlanUpdates)
+                {
+                    break;
+                }
+
+                const params = (event.params ?? {}) as {
+                    turnId?: string;
+                    explanation?: string | null;
+                    plan?: Array<{ step: string; status: string }>;
+                };
+                const turnId = params.turnId;
+                const plan = params.plan;
+                if (turnId && plan)
+                {
+                    pushStreamStart();
+                    const toolCallId = `plan:${turnId}`;
+                    const toolName = "codex_plan_update";
+
+                    if (!this.openToolCalls.has(toolCallId))
+                    {
+                        this.openToolCalls.set(toolCallId, { toolName, output: "" });
+                        parts.push(withMeta({
+                            type: "tool-call",
+                            toolCallId,
+                            toolName,
+                            input: JSON.stringify({}),
+                            providerExecuted: true,
+                            dynamic: true,
+                        }));
+                    }
+
+                    parts.push(withMeta({
+                        type: "tool-result",
+                        toolCallId,
+                        toolName,
+                        result: { plan, explanation: params.explanation ?? undefined },
+                    }));
+                }
+                break;
+            }
+
+            // codex/event/plan_update is the wrapper form of turn/plan/updated (1:1).
+            case "codex/event/plan_update":
                 break;
 
             // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
