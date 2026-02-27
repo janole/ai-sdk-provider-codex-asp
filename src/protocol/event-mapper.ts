@@ -280,19 +280,11 @@ export class CodexEventMapper
                 break;
             }
 
-            case "codex/event/agent_reasoning": {
-                const params = (event.params ?? {}) as {
-                    id?: string;
-                    msg?: { text?: string };
-                };
-                const turnId = params.id;
-                const text = params.msg?.text;
-                if (turnId && text)
-                {
-                    pushReasoningDelta(turnId, text);
-                }
+            // codex/event/agent_reasoning mirrors canonical reasoning summary
+            // stream events in current logs. Ignore wrapper to avoid duplicate
+            // reasoning text in consumers.
+            case "codex/event/agent_reasoning":
                 break;
-            }
 
             // codex/event/agent_reasoning_section_break is the wrapper form of
             // item/reasoning/summaryPartAdded (identical 1:1). Handled by the

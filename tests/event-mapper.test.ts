@@ -642,7 +642,7 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps codex/event/agent_reasoning to reasoning stream parts", () =>
+    it("ignores codex/event/agent_reasoning wrapper events", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -677,10 +677,6 @@ describe("CodexEventMapper", () =>
 
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            { type: "reasoning-start", id: "turn_ar" },
-            { type: "reasoning-delta", id: "turn_ar", delta: "**Planning update**" },
-            { type: "reasoning-delta", id: "turn_ar", delta: "Looking at event counts." },
-            { type: "reasoning-end", id: "turn_ar" },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
