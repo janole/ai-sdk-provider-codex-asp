@@ -27,6 +27,32 @@ interface DeltaParams
     delta?: string;
 }
 
+interface TurnDiffUpdatedParams
+{
+    turnId?: string;
+    diff?: string;
+}
+
+interface CodexTurnDiffParams
+{
+    id?: string;
+    msg?: {
+        unified_diff?: string;
+    };
+}
+
+interface ReasoningSummaryPartAddedParams
+{
+    itemId?: string;
+}
+
+interface CodexReasoningSectionBreakParams
+{
+    msg?: {
+        item_id?: string;
+    };
+}
+
 const EMPTY_USAGE: LanguageModelV3Usage = {
     inputTokens: {
         total: undefined,
@@ -223,6 +249,46 @@ export class CodexEventMapper
                 if (delta.itemId && delta.delta)
                 {
                     pushReasoningDelta(delta.itemId, delta.delta);
+                }
+                break;
+            }
+
+            case "item/reasoning/summaryPartAdded": {
+                const params = (event.params ?? {}) as ReasoningSummaryPartAddedParams;
+                if (params.itemId)
+                {
+                    pushReasoningDelta(params.itemId, "\n\n");
+                }
+                break;
+            }
+
+            case "codex/event/agent_reasoning_section_break": {
+                const params = (event.params ?? {}) as CodexReasoningSectionBreakParams;
+                if (params.msg?.item_id)
+                {
+                    pushReasoningDelta(params.msg.item_id, "\n\n");
+                }
+                break;
+            }
+
+            case "turn/diff/updated": {
+                const params = (event.params ?? {}) as TurnDiffUpdatedParams;
+                const turnId = params.turnId;
+                const diff = params.diff;
+                if (turnId && diff)
+                {
+                    pushReasoningDelta(`turn_diff:${turnId}`, diff);
+                }
+                break;
+            }
+
+            case "codex/event/turn_diff": {
+                const params = (event.params ?? {}) as CodexTurnDiffParams;
+                const turnId = params.id;
+                const diff = params.msg?.unified_diff;
+                if (turnId && diff)
+                {
+                    pushReasoningDelta(`turn_diff:${turnId}`, diff);
                 }
                 break;
             }
