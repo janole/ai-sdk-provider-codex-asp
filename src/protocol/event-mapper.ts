@@ -71,6 +71,7 @@ export class CodexEventMapper
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
+    private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
 
@@ -84,6 +85,13 @@ export class CodexEventMapper
     setThreadId(threadId: string): void
     {
         this.threadId = threadId;
+    }
+
+    private nextPlanSequence(turnId: string): number
+    {
+        const next = (this.planSequenceByTurnId.get(turnId) ?? 0) + 1;
+        this.planSequenceByTurnId.set(turnId, next);
+        return next;
     }
 
     map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
@@ -294,21 +302,18 @@ export class CodexEventMapper
                 if (turnId && plan)
                 {
                     pushStreamStart();
-                    const toolCallId = `plan:${turnId}`;
+                    const planSequence = this.nextPlanSequence(turnId);
+                    const toolCallId = `plan:${turnId}:${planSequence}`;
                     const toolName = "codex_plan_update";
 
-                    if (!this.openToolCalls.has(toolCallId))
-                    {
-                        this.openToolCalls.set(toolCallId, { toolName, output: "" });
-                        parts.push(withMeta({
-                            type: "tool-call",
-                            toolCallId,
-                            toolName,
-                            input: JSON.stringify({}),
-                            providerExecuted: true,
-                            dynamic: true,
-                        }));
-                    }
+                    parts.push(withMeta({
+                        type: "tool-call",
+                        toolCallId,
+                        toolName,
+                        input: JSON.stringify({}),
+                        providerExecuted: true,
+                        dynamic: true,
+                    }));
 
                     parts.push(withMeta({
                         type: "tool-result",
@@ -489,6 +494,10 @@ export class CodexEventMapper
                 this.openToolCalls.clear();
 
                 const completed = (event.params ?? {}) as TurnCompletedNotification;
+                if (completed.turn?.id)
+                {
+                    this.planSequenceByTurnId.delete(completed.turn.id);
+                }
                 const usage = this.latestUsage ?? EMPTY_USAGE;
                 parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
                 break;
