@@ -641,4 +641,52 @@ describe("CodexEventMapper", () =>
             },
         ]);
     });
+
+    it("falls back to item/completed agent text when no deltas were emitted", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turnId: "turn_fb" } },
+            {
+                method: "item/started",
+                params: {
+                    item: { type: "agentMessage", id: "msg_fb", text: "" },
+                    threadId: "thr",
+                    turnId: "turn_fb",
+                },
+            },
+            // No item/agentMessage/delta events arrive.
+            {
+                method: "item/completed",
+                params: {
+                    item: { type: "agentMessage", id: "msg_fb", text: "Final answer text", phase: "final_answer" },
+                    threadId: "thr",
+                    turnId: "turn_fb",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn_fb", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "msg_fb" },
+            // Fallback: full text emitted from item/completed since no deltas arrived.
+            { type: "text-delta", id: "msg_fb", delta: "Final answer text" },
+            { type: "text-end", id: "msg_fb" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
 });

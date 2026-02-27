@@ -61,6 +61,7 @@ export class CodexEventMapper
 {
     private streamStarted = false;
     private readonly openTextParts = new Set<string>();
+    private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
     private threadId: string | undefined;
@@ -177,6 +178,7 @@ export class CodexEventMapper
                 }
 
                 parts.push(withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
+                this.textDeltaReceived.add(delta.itemId);
                 break;
             }
 
@@ -188,10 +190,29 @@ export class CodexEventMapper
                     break;
                 }
 
-                if (item.type === "agentMessage" && this.openTextParts.has(item.id))
+                if (item.type === "agentMessage")
                 {
-                    parts.push(withMeta({ type: "text-end", id: item.id }));
-                    this.openTextParts.delete(item.id);
+                    // Fallback: if no deltas were streamed for this item,
+                    // emit the full text from the completed event so the
+                    // message isn't silently lost.
+                    if (!this.textDeltaReceived.has(item.id) && item.text)
+                    {
+                        pushStreamStart();
+
+                        if (!this.openTextParts.has(item.id))
+                        {
+                            this.openTextParts.add(item.id);
+                            parts.push(withMeta({ type: "text-start", id: item.id }));
+                        }
+
+                        parts.push(withMeta({ type: "text-delta", id: item.id, delta: item.text }));
+                    }
+
+                    if (this.openTextParts.has(item.id))
+                    {
+                        parts.push(withMeta({ type: "text-end", id: item.id }));
+                        this.openTextParts.delete(item.id);
+                    }
                 }
                 else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
                 {
