@@ -101,6 +101,7 @@ export function createCodexAppServer(
         interruptTimeoutMs: settings.interruptTimeoutMs,
         approvals: settings.approvals ? { ...settings.approvals } : undefined,
         debug: settings.debug ? { ...settings.debug } : undefined,
+        emitPlanUpdates: settings.emitPlanUpdates,
     }));
 
     const createLanguageModel = (
