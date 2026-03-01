@@ -67,7 +67,7 @@ export interface CodexProviderSettings
     defaultThreadSettings?: CodexThreadDefaults;
     defaultTurnSettings?: CodexTurnDefaults;
     compaction?: CodexCompactionSettings;
-    transportFactory?: () => CodexTransport;
+    transportFactory?: (signal?: AbortSignal) => CodexTransport;
     /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
     tools?: Record<string, DynamicToolDefinition>;
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */

@@ -1,4 +1,5 @@
 import type { CodexToolCallResult } from "../protocol/types";
+import { stripUndefined } from "../utils/object";
 import type {
     CodexTransport,
     CodexTransportEventMap,
@@ -11,11 +12,13 @@ import type { CodexWorkerPool } from "./worker-pool";
 
 export interface PersistentTransportSettings {
     pool: CodexWorkerPool;
+    signal?: AbortSignal;
 }
 
 export class PersistentTransport implements CodexTransport
 {
     private readonly pool: CodexWorkerPool;
+    private readonly signal: AbortSignal | undefined;
     private worker: CodexWorker | null = null;
     private pendingInitializeId: string | number | null = null;
     private initializeIntercepted = false;
@@ -29,11 +32,12 @@ export class PersistentTransport implements CodexTransport
     constructor(settings: PersistentTransportSettings)
     {
         this.pool = settings.pool;
+        this.signal = settings.signal;
     }
 
     async connect(): Promise<void>
     {
-        this.worker = this.pool.acquire();
+        this.worker = await this.pool.acquire(stripUndefined({ signal: this.signal }));
         await this.worker.ensureConnected();
     }
 

@@ -246,7 +246,7 @@ describe("PersistentTransport", () =>
         await provider.shutdown();
     });
 
-    it("throws when pool is exhausted", async () =>
+    it("queues when pool is exhausted and acquires after release", async () =>
     {
         const pool = new CodexWorkerPool({
             poolSize: 1,
@@ -259,9 +259,64 @@ describe("PersistentTransport", () =>
         // First acquire succeeds (via connect)
         await t1.connect();
 
-        // Second acquire should throw
-        await expect(() => t2.connect()).rejects.toThrow(/busy/i);
+        // Second acquire should wait until t1 releases.
+        let acquired = false;
+        const waitingAcquire = t2.connect().then(() =>
+        {
+            acquired = true;
+        });
 
+        await Promise.resolve();
+        expect(acquired).toBe(false);
+
+        await t1.disconnect();
+        await waitingAcquire;
+        expect(acquired).toBe(true);
+
+        await t2.disconnect();
+        await pool.shutdown();
+    });
+
+    it("rejects queued acquires on shutdown", async () =>
+    {
+        const pool = new CodexWorkerPool({
+            poolSize: 1,
+            transportFactory: () => new ScriptedTransport(),
+        });
+
+        const t1 = new PersistentTransport({ pool });
+        const t2 = new PersistentTransport({ pool });
+
+        await t1.connect();
+        const waitingAcquire = t2.connect();
+
+        await Promise.resolve();
+        await pool.shutdown();
+
+        await expect(waitingAcquire).rejects.toThrow(/shut down/i);
+    });
+
+    it("rejects queued acquire when abort signal fires", async () =>
+    {
+        const pool = new CodexWorkerPool({
+            poolSize: 1,
+            transportFactory: () => new ScriptedTransport(),
+        });
+
+        const t1 = new PersistentTransport({ pool });
+        await t1.connect();
+
+        const ac = new AbortController();
+        const t2 = new PersistentTransport({ pool, signal: ac.signal });
+        const waitingAcquire = t2.connect();
+
+        await Promise.resolve();
+
+        ac.abort();
+
+        await expect(waitingAcquire).rejects.toThrow(/abort/i);
+
+        await t1.disconnect();
         await pool.shutdown();
     });
 

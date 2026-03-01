@@ -425,7 +425,7 @@ export class CodexLanguageModel implements LanguageModelV3
     doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
         const transport = this.config.providerSettings.transportFactory
-            ? this.config.providerSettings.transportFactory()
+            ? this.config.providerSettings.transportFactory(options.abortSignal)
             : this.config.providerSettings.transport?.type === "websocket"
                 ? new WebSocketTransport(this.config.providerSettings.transport.websocket)
                 : new StdioTransport(this.config.providerSettings.transport?.stdio);
