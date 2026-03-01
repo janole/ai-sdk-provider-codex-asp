@@ -144,11 +144,9 @@ export class CodexEventMapper
         {
             case "turn/started": {
                 const turnStartedParams = event.params as TurnStartedNotification | undefined;
-                const turnId = turnStartedParams?.turn?.id
-                    ?? (turnStartedParams as unknown as { turnId?: string })?.turnId;
-                if (turnId)
+                if (turnStartedParams?.turn?.id)
                 {
-                    this.turnId = turnId;
+                    this.turnId = turnStartedParams.turn.id;
                 }
                 pushStreamStart();
                 break;
