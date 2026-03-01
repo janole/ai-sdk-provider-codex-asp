@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
 
-import type { CodexTurnInputItem } from "../protocol/types";
+import type { CodexTurnInputItem, CodexTurnInputText } from "../protocol/types";
 
 // ── System prompt extraction ──
 
@@ -32,6 +32,13 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
     }
 
     return chunks.length > 0 ? chunks.join("\n\n") : undefined;
+}
+
+// ── Helpers ──
+
+function textItem(text: string): CodexTurnInputText
+{
+    return { type: "text", text, text_elements: [] };
 }
 
 // ── File writer interface ──
@@ -103,34 +110,6 @@ export class LocalFileWriter implements FileWriter
     }
 }
 
-// ── File part → Codex item mapping ──
-
-/**
- * Convert a resolved file part (data must be a URL) to a Codex input item.
- * Returns `null` for unsupported media types or non-URL data.
- */
-function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
-{
-    const { mediaType, data } = part;
-
-    if (!(data instanceof URL))
-    {
-        return null;
-    }
-
-    if (mediaType.startsWith("image/"))
-    {
-        if (data.protocol === "file:")
-        {
-            return { type: "localImage", path: fileURLToPath(data) };
-        }
-
-        return { type: "image", url: data.href };
-    }
-
-    return null;
-}
-
 // ── Resolver class ──
 
 /**
@@ -191,14 +170,32 @@ export class PromptFileResolver
      */
     async cleanup(): Promise<void>
     {
-        if (this.written.length > 0)
+        const urls = this.written.splice(0);
+        if (urls.length > 0)
         {
-            await this.writer.cleanup(this.written);
-            this.written.length = 0;
+            await this.writer.cleanup(urls);
         }
     }
 
     // ── Private helpers ──
+
+    /**
+     * Convert a resolved image URL to a Codex input item.
+     */
+    private mapImageUrl(mediaType: string, data: URL): CodexTurnInputItem | null
+    {
+        if (!mediaType.startsWith("image/"))
+        {
+            return null;
+        }
+
+        if (data.protocol === "file:")
+        {
+            return { type: "localImage", path: fileURLToPath(data) };
+        }
+
+        return { type: "image", url: data.href };
+    }
 
     /**
      * Resolve a single file part: write inline data via the writer, then
@@ -212,17 +209,19 @@ export class PromptFileResolver
         const { mediaType, data } = part;
 
         // Text files → decode and inline as text.
+        // URL text files pass through as the URL string — we don't fetch remote
+        // content; the URL itself serves as a reference for the model.
         if (mediaType.startsWith("text/"))
         {
             if (data instanceof URL)
             {
-                return { type: "text", text: data.href, text_elements: [] };
+                return textItem(data.href);
             }
 
             const text = typeof data === "string"
                 ? Buffer.from(data, "base64").toString("utf-8")
                 : new TextDecoder().decode(data);
-            return { type: "text", text, text_elements: [] };
+            return textItem(text);
         }
 
         // Images with inline data → write via writer, then map the URL.
@@ -230,11 +229,16 @@ export class PromptFileResolver
         {
             const url = await this.writer.write(data, mediaType);
             this.written.push(url);
-            return mapFilePart({ ...part, data: url });
+            return this.mapImageUrl(mediaType, url);
         }
 
         // Images that already have a URL → map directly.
-        return mapFilePart(part);
+        if (data instanceof URL)
+        {
+            return this.mapImageUrl(mediaType, data);
+        }
+
+        return null;
     }
 
     /**
@@ -259,7 +263,7 @@ export class PromptFileResolver
                         const text = part.text.trim();
                         if (text.length > 0)
                         {
-                            items.push({ type: "text", text, text_elements: [] });
+                            items.push(textItem(text));
                         }
                     }
                     else if (part.type === "file")
@@ -294,7 +298,7 @@ export class PromptFileResolver
         {
             if (textChunks.length > 0)
             {
-                items.push({ type: "text", text: textChunks.join("\n\n"), text_elements: [] });
+                items.push(textItem(textChunks.join("\n\n")));
                 textChunks.length = 0;
             }
         };
