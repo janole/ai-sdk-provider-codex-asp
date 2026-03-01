@@ -1,10 +1,7 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
 import { AppServerClient } from "./client/app-server-client";
-import {
-    acquirePersistentPool,
-    type PersistentPoolHandle,
-} from "./client/persistent-pool-registry";
+import { acquirePersistentPool, type PersistentPoolHandle } from "./client/persistent-pool-registry";
 import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport } from "./client/transport-stdio";
 import { WebSocketTransport } from "./client/transport-websocket";
