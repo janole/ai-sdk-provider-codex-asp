@@ -1,4 +1,5 @@
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
+import type { JSONSchema7 } from "json-schema";
 import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
@@ -683,6 +684,46 @@ describe("CodexLanguageModel.doStream", () =>
                 type: "externalSandbox",
                 networkAccess: "enabled",
             },
+        });
+    });
+
+    it("forwards responseFormat JSON schema to turn/start outputSchema", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+        const outputSchema: JSONSchema7 = {
+            type: "object",
+            properties: {
+                answer: { type: "string" },
+                confidence: { type: "number" },
+            },
+            required: ["answer"],
+            additionalProperties: false,
+        };
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+            responseFormat: {
+                type: "json",
+                schema: outputSchema,
+            },
+        });
+
+        await readAll(stream);
+
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+
+        expect(turnStartMessage?.params).toMatchObject({
+            outputSchema,
         });
     });
 

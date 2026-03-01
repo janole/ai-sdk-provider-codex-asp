@@ -147,6 +147,7 @@ See [`src/provider.ts`](src/provider.ts) for full type definitions.
 See the [`examples/`](examples/) directory:
 
 - [`generate-text.ts`](examples/generate-text.ts) — Non-streaming text generation
+- [`generate-object.ts`](examples/generate-object.ts) — Structured output with `generateText` + `Output.object`
 - [`stream-text.ts`](examples/stream-text.ts) — Streaming text generation
 - [`cross-call-tools.ts`](examples/cross-call-tools.ts) — Standard AI SDK tools via Codex
 - [`dynamic-tools.ts`](examples/dynamic-tools.ts) — Provider-level dynamic tools
