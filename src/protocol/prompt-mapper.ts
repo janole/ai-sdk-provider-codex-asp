@@ -4,7 +4,6 @@ import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/pro
 
 import type { FileResolver } from "../utils/file-resolver";
 import { createLocalFileResolver } from "../utils/file-resolver";
-
 import type { CodexTurnInputItem } from "./types";
 
 export interface ResolvedPromptFiles
