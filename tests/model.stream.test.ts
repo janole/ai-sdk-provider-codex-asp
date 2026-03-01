@@ -1,5 +1,4 @@
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
-import type { JSONSchema7 } from "json-schema";
 import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
@@ -697,7 +696,7 @@ describe("CodexLanguageModel.doStream", () =>
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
-        const outputSchema: JSONSchema7 = {
+        const outputSchema = JSON.parse(JSON.stringify({
             type: "object",
             properties: {
                 answer: { type: "string" },
@@ -705,7 +704,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
             required: ["answer"],
             additionalProperties: false,
-        };
+        }));
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
