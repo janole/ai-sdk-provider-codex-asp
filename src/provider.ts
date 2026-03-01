@@ -17,8 +17,8 @@ import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 import type { CodexInitializeParams, CodexInitializeResult } from "./protocol/types";
 import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
-export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
 export type { Model as CodexModel } from "./protocol/app-server-protocol/v2/Model";
+export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
 
 export interface CodexProvider extends ProviderV3 {
     (
