@@ -91,6 +91,7 @@ export type {
     TurnStartedNotification,
 } from "./protocol/types";
 export type {
+    CodexModel,
     CodexProvider,
     CodexProviderSettings,
     McpServerConfig,

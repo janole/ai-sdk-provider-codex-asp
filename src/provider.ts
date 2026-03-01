@@ -1,5 +1,6 @@
 import { NoSuchModelError, type ProviderV3 } from "@ai-sdk/provider";
 
+import { AppServerClient } from "./client/app-server-client";
 import {
     acquirePersistentPool,
     type PersistentPoolHandle,
@@ -8,10 +9,16 @@ import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport } from "./client/transport-stdio";
 import { WebSocketTransport } from "./client/transport-websocket";
 import { CodexLanguageModel, type CodexLanguageModelSettings } from "./model";
+import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
+import type { Model } from "./protocol/app-server-protocol/v2/Model";
+import type { ModelListParams } from "./protocol/app-server-protocol/v2/ModelListParams";
+import type { ModelListResponse } from "./protocol/app-server-protocol/v2/ModelListResponse";
 import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
+import type { CodexInitializeParams, CodexInitializeResult } from "./protocol/types";
 import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
 export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
+export type { Model as CodexModel } from "./protocol/app-server-protocol/v2/Model";
 
 export interface CodexProvider extends ProviderV3 {
     (
@@ -19,6 +26,7 @@ export interface CodexProvider extends ProviderV3 {
         settings?: CodexLanguageModelSettings,
     ): CodexLanguageModel;
     chat(modelId: string, settings?: CodexLanguageModelSettings): CodexLanguageModel;
+    listModels(params?: ModelListParams): Promise<Model[]>;
     readonly settings: Readonly<CodexProviderSettings>;
     shutdown(): Promise<void>;
 }
@@ -139,6 +147,51 @@ export function createCodexAppServer(
         imageModel(modelId: string)
         {
             throw createNoSuchModelError(modelId, "imageModel");
+        },
+        async listModels(params?: ModelListParams): Promise<Model[]>
+        {
+            const transport = effectiveTransportFactory
+                ? effectiveTransportFactory()
+                : resolvedSettings.transport?.type === "websocket"
+                    ? new WebSocketTransport(resolvedSettings.transport.websocket)
+                    : new StdioTransport(resolvedSettings.transport?.stdio);
+
+            const client = new AppServerClient(transport);
+
+            try
+            {
+                await client.connect();
+
+                const initializeParams: CodexInitializeParams = stripUndefined({
+                    clientInfo: resolvedSettings.clientInfo ?? {
+                        name: PACKAGE_NAME,
+                        version: PACKAGE_VERSION,
+                    },
+                });
+
+                await client.request<CodexInitializeResult>("initialize", initializeParams);
+                await client.notification("initialized");
+
+                const models: Model[] = [];
+                let cursor: string | undefined;
+
+                do
+                {
+                    const response = await client.request<ModelListResponse>(
+                        "model/list",
+                        stripUndefined({ ...params, cursor }),
+                    );
+                    models.push(...response.data);
+                    cursor = response.nextCursor ?? undefined;
+                }
+                while (cursor);
+
+                return models;
+            }
+            finally
+            {
+                await client.disconnect();
+            }
         },
         async shutdown(): Promise<void>
         {
