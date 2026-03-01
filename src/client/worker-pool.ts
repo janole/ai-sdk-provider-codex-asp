@@ -86,18 +86,19 @@ export class CodexWorkerPool
 
     release(worker: CodexWorker): void
     {
+        // An aborted waiter can never appear here: the abort handler
+        // synchronously removes it from the queue via removeWaiter(),
+        // so shift() will only ever return live (non-aborted) waiters.
         const waiter = this.waiters.shift();
         if (waiter)
         {
-            this.clearWaiterAbortHandler(waiter);
-
-            if (!waiter.signal?.aborted)
-            {
-                waiter.resolve(worker);
-                return;
-            }
+            this.clearWaiterAbortHandler(waiter); // prevent stale abort handler from firing after resolve
+            waiter.resolve(worker);
         }
-        worker.release();
+        else
+        {
+            worker.release();
+        }
     }
 
     async shutdown(): Promise<void>
@@ -121,6 +122,7 @@ export class CodexWorkerPool
         }
     }
 
+    /** Remove the abort listener so it doesn't fire after the waiter is already served. */
     private clearWaiterAbortHandler(waiter: AcquireWaiter): void
     {
         if (!waiter.signal || !waiter.abortHandler)
