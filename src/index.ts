@@ -93,6 +93,7 @@ export type {
 export type {
     CodexProvider,
     CodexProviderSettings,
+    McpServerConfig,
 } from "./provider";
 export {
     codexAppServer,

@@ -11,7 +11,7 @@ import { CodexLanguageModel, type CodexLanguageModelSettings } from "./model";
 import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
-export type { CodexProviderSettings } from "./provider-settings";
+export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
 
 export interface CodexProvider extends ProviderV3 {
     (

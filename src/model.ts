@@ -807,10 +807,16 @@ export class CodexLanguageModel implements LanguageModelV3
                         }
                         else
                         {
+                            const mcpServers = this.config.providerSettings.mcpServers;
+                            const config = mcpServers
+                                ? { mcp_servers: mcpServers } as CodexThreadStartParams["config"]
+                                : undefined;
+
                             const threadStartParams: CodexThreadStartParams = stripUndefined({
                                 model: this.config.providerSettings.defaultModel ?? this.modelId,
                                 dynamicTools,
                                 developerInstructions,
+                                config,
                                 cwd: this.config.providerSettings.defaultThreadSettings?.cwd,
                                 approvalPolicy: this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
                                 sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
