@@ -82,7 +82,7 @@ class ToolCallTransport extends MockTransport
             {
                 this.emitMessage({
                     method: "turn/started",
-                    params: { threadId: "thr_1", turnId: "turn_1" },
+                    params: { threadId: "thr_1", turn: { id: "turn_1" } },
                 });
                 this.emitNextToolCall();
             });
