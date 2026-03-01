@@ -9,6 +9,7 @@
  * The generated types land in src/protocol/app-server-protocol/ (gitignored)
  * and serve as the authoritative reference. V2 types (camelCase) are in the v2/ subdirectory.
  */
+import type { JsonValue } from "./app-server-protocol/serde_json/JsonValue";
 import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
 import type { CommandExecutionApprovalDecision } from "./app-server-protocol/v2/CommandExecutionApprovalDecision";
 import type { CommandExecutionRequestApprovalParams } from "./app-server-protocol/v2/CommandExecutionRequestApprovalParams";
@@ -95,6 +96,7 @@ export interface CodexThreadStartParams {
     cwd?: string;
     approvalPolicy?: AskForApproval;
     sandbox?: SandboxMode;
+    config?: Record<string, JsonValue | undefined>;
     dynamicTools?: CodexDynamicToolDefinition[];
     developerInstructions?: string;
 }

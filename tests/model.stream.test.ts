@@ -729,6 +729,48 @@ describe("CodexLanguageModel.doStream", () =>
         });
     });
 
+    it("forwards mcpServers as config on thread/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            mcpServers: {
+                filesystem: {
+                    type: "stdio",
+                    command: "npx",
+                    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+                },
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        });
+
+        await readAll(stream);
+
+        const threadStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/start",
+        );
+
+        expect(threadStartMessage?.params).toMatchObject({
+            config: {
+                mcp_servers: {
+                    filesystem: {
+                        type: "stdio",
+                        command: "npx",
+                        args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+                    },
+                },
+            },
+        });
+    });
+
     it("emits debug events through the logger when logPackets is enabled", async () =>
     {
         const transport = new ScriptedTransport();

@@ -11,7 +11,7 @@ import { CodexLanguageModel, type CodexLanguageModelSettings } from "./model";
 import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 import type { CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
-export type { CodexProviderSettings } from "./provider-settings";
+export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
 
 export interface CodexProvider extends ProviderV3 {
     (
@@ -94,12 +94,14 @@ export function createCodexAppServer(
             ? { ...settings.compaction }
             : undefined,
         transportFactory: effectiveTransportFactory,
+        mcpServers: settings.mcpServers ? { ...settings.mcpServers } : undefined,
         tools: settings.tools ? { ...settings.tools } : undefined,
         toolHandlers: settings.toolHandlers ? { ...settings.toolHandlers } : undefined,
         toolTimeoutMs: settings.toolTimeoutMs,
         interruptTimeoutMs: settings.interruptTimeoutMs,
         approvals: settings.approvals ? { ...settings.approvals } : undefined,
         debug: settings.debug ? { ...settings.debug } : undefined,
+        emitPlanUpdates: settings.emitPlanUpdates,
     }));
 
     const createLanguageModel = (

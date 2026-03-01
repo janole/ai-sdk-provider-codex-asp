@@ -50,9 +50,15 @@ export type CodexCompactionOnResumeDecision =
     | boolean
     | ((context: CodexCompactionOnResumeContext) => boolean | Promise<boolean>);
 
+export type McpServerConfig =
+    | { type: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
+    | { type: "http"; url: string; bearerToken?: string; headers?: Record<string, string> };
+
 export interface CodexProviderSettings
 {
     defaultModel?: string;
+    /** MCP servers to make available to Codex (additive behavior TBD — needs empirical testing). */
+    mcpServers?: Record<string, McpServerConfig>;
     clientInfo?: {
         name: string;
         version: string;
