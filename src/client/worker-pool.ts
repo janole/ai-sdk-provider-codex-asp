@@ -8,10 +8,22 @@ export interface CodexWorkerPoolSettings {
     idleTimeoutMs?: number;
 }
 
+interface AcquireOptions {
+    signal?: AbortSignal;
+}
+
+interface AcquireWaiter {
+    resolve: (worker: CodexWorker) => void;
+    reject: (error: Error) => void;
+    signal: AbortSignal | undefined;
+    abortHandler: (() => void) | undefined;
+}
+
 export class CodexWorkerPool
 {
     private readonly workers: CodexWorker[];
     private shutdownCalled = false;
+    private readonly waiters: AcquireWaiter[] = [];
 
     constructor(settings: CodexWorkerPoolSettings)
     {
@@ -26,7 +38,7 @@ export class CodexWorkerPool
         );
     }
 
-    acquire(): CodexWorker
+    async acquire(options?: AcquireOptions): Promise<CodexWorker>
     {
         if (this.shutdownCalled)
         {
@@ -39,9 +51,30 @@ export class CodexWorkerPool
 
         if (!worker)
         {
-            throw new CodexProviderError(
-                "All workers are busy. Try again later or increase poolSize.",
-            );
+            if (options?.signal?.aborted)
+            {
+                throw new CodexProviderError("Worker acquisition aborted while waiting.");
+            }
+
+            return new Promise<CodexWorker>((resolve, reject) =>
+            {
+                const waiter: AcquireWaiter = {
+                    resolve,
+                    reject,
+                    signal: options?.signal,
+                    abortHandler: undefined,
+                };
+                if (waiter.signal)
+                {
+                    waiter.abortHandler = () =>
+                    {
+                        this.removeWaiter(waiter);
+                        waiter.reject(new CodexProviderError("Worker acquisition aborted while waiting."));
+                    };
+                    waiter.signal.addEventListener("abort", waiter.abortHandler, { once: true });
+                }
+                this.waiters.push(waiter);
+            });
         }
 
         worker.acquire();
@@ -51,11 +84,44 @@ export class CodexWorkerPool
     release(worker: CodexWorker): void
     {
         worker.release();
+
+        const waiter = this.waiters.shift();
+        if (waiter)
+        {
+            this.clearWaiterAbortHandler(waiter);
+            worker.acquire();
+            waiter.resolve(worker);
+        }
     }
 
     async shutdown(): Promise<void>
     {
         this.shutdownCalled = true;
+        while (this.waiters.length > 0)
+        {
+            const waiter = this.waiters.shift()!;
+            this.clearWaiterAbortHandler(waiter);
+            waiter.reject(new CodexProviderError("Worker pool has been shut down."));
+        }
         await Promise.all(this.workers.map((w) => w.shutdown()));
+    }
+
+    private removeWaiter(target: AcquireWaiter): void
+    {
+        const index = this.waiters.indexOf(target);
+        if (index >= 0)
+        {
+            this.waiters.splice(index, 1);
+        }
+    }
+
+    private clearWaiterAbortHandler(waiter: AcquireWaiter): void
+    {
+        if (!waiter.signal || !waiter.abortHandler)
+        {
+            return;
+        }
+        waiter.signal.removeEventListener("abort", waiter.abortHandler);
+        waiter.abortHandler = undefined;
     }
 }

@@ -33,7 +33,7 @@ export class PersistentTransport implements CodexTransport
 
     async connect(): Promise<void>
     {
-        this.worker = this.pool.acquire();
+        this.worker = await this.pool.acquire();
         await this.worker.ensureConnected();
     }
 
