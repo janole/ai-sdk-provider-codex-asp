@@ -1,4 +1,5 @@
 import type { CodexToolCallResult } from "../protocol/types";
+import { stripUndefined } from "../utils/object";
 import type {
     CodexTransport,
     CodexTransportEventMap,
@@ -8,7 +9,6 @@ import type {
 import type { PendingToolCall } from "./worker";
 import type { CodexWorker } from "./worker";
 import type { CodexWorkerPool } from "./worker-pool";
-import { stripUndefined } from "../utils/object";
 
 export interface PersistentTransportSettings {
     pool: CodexWorkerPool;
