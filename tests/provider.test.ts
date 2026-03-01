@@ -76,12 +76,6 @@ class ScriptedTransport extends MockTransport
             return;
         }
 
-        if (message.method === "turn/steer")
-        {
-            this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
-            return;
-        }
-
         if (message.method === "turn/interrupt")
         {
             this.emitMessage({ id: message.id, result: {} });
