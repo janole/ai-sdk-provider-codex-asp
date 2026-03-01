@@ -90,12 +90,14 @@ export class CodexWorkerPool
         if (waiter)
         {
             this.clearWaiterAbortHandler(waiter);
-            waiter.resolve(worker);
+
+            if (!waiter.signal?.aborted)
+            {
+                waiter.resolve(worker);
+                return;
+            }
         }
-        else
-        {
-            worker.release();
-        }
+        worker.release();
     }
 
     async shutdown(): Promise<void>
