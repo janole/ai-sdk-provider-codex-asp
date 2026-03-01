@@ -172,8 +172,7 @@ export function createCodexAppServer(
 
                 do
                 {
-                    const raw = await client.request("model/list", stripUndefined({ ...params, cursor }));
-                    const response = raw as ModelListResponse;
+                    const response = await client.request<ModelListResponse>("model/list", stripUndefined({ ...params, cursor }));
                     models.push(...response.data);
                     cursor = response.nextCursor ?? undefined;
                 }
