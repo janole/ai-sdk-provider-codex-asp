@@ -18,7 +18,6 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -38,6 +37,7 @@ import type {
 } from "./protocol/types";
 import type { CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
+import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CodexLanguageModelSettings
@@ -482,14 +482,16 @@ export class CodexLanguageModel implements LanguageModelV3
             await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
         };
 
+        const fileResolver = new PromptFileResolver();
+
         const stream = new ReadableStream<LanguageModelV3StreamPart>({
-            start: (controller) => 
+            start: (controller) =>
             {
                 let closed = false;
 
-                const closeWithError = async (error: unknown) => 
+                const closeWithError = async (error: unknown) =>
                 {
-                    if (closed) 
+                    if (closed)
                     {
                         return;
                     }
@@ -497,31 +499,33 @@ export class CodexLanguageModel implements LanguageModelV3
                     controller.enqueue({ type: "error", error });
                     closed = true;
 
-                    try 
+                    try
                     {
                         controller.close();
                     }
-                    finally 
+                    finally
                     {
+                        await fileResolver.cleanup();
                         await client.disconnect();
                     }
                 };
 
-                const closeSuccessfully = async () => 
+                const closeSuccessfully = async () =>
                 {
-                    if (closed) 
+                    if (closed)
                     {
                         return;
                     }
 
                     closed = true;
 
-                    try 
+                    try
                     {
                         controller.close();
                     }
-                    finally 
+                    finally
                     {
+                        await fileResolver.cleanup();
                         await client.disconnect();
                     }
                 };
@@ -830,7 +834,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                         }
 
-                        const turnInput = mapPromptToTurnInput(options.prompt, !!resumeThreadId);
+                        const turnInput = await fileResolver.resolve(options.prompt, !!resumeThreadId);
                         const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
                             input: turnInput,
@@ -854,7 +858,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                 })();
             },
-            cancel: async () => 
+            cancel: async () =>
             {
                 try
                 {
@@ -864,6 +868,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 {
                     // Best-effort only: always disconnect to release resources.
                 }
+                await fileResolver.cleanup();
                 await client.disconnect();
             },
         });
