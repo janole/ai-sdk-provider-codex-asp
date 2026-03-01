@@ -83,14 +83,15 @@ export class CodexWorkerPool
 
     release(worker: CodexWorker): void
     {
-        worker.release();
-
         const waiter = this.waiters.shift();
         if (waiter)
         {
             this.clearWaiterAbortHandler(waiter);
-            worker.acquire();
             waiter.resolve(worker);
+        }
+        else
+        {
+            worker.release();
         }
     }
 
