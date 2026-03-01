@@ -15,7 +15,7 @@ export interface CodexSession
 
 export class CodexSessionImpl implements CodexSession
 {
-    private _threadId: string;
+    private readonly _threadId: string;
     private _turnId: string | undefined;
     private _active = true;
     private readonly client: AppServerClient;
