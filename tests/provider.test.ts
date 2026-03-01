@@ -10,6 +10,29 @@ import { MockTransport } from "./helpers/mock-transport";
 
 class ScriptedTransport extends MockTransport
 {
+    pauseTurnCompletion = false;
+
+    completeTurn(): void
+    {
+        this.emitMessage({
+            method: "item/completed",
+            params: {
+                threadId: "thr_1",
+                turnId: "turn_1",
+                itemId: "item_1",
+                itemType: "assistantMessage",
+            },
+        });
+        this.emitMessage({
+            method: "turn/completed",
+            params: {
+                threadId: "thr_1",
+                turnId: "turn_1",
+                status: "completed",
+            },
+        });
+    }
+
     override async sendMessage(message: JsonRpcMessage): Promise<void>
     {
         await super.sendMessage(message);
@@ -59,6 +82,12 @@ class ScriptedTransport extends MockTransport
             return;
         }
 
+        if (message.method === "turn/interrupt")
+        {
+            this.emitMessage({ id: message.id, result: {} });
+            return;
+        }
+
         if (message.method === "thread/start")
         {
             this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
@@ -93,23 +122,11 @@ class ScriptedTransport extends MockTransport
                         delta: "ok",
                     },
                 });
-                this.emitMessage({
-                    method: "item/completed",
-                    params: {
-                        threadId: "thr_1",
-                        turnId: "turn_1",
-                        itemId: "item_1",
-                        itemType: "assistantMessage",
-                    },
-                });
-                this.emitMessage({
-                    method: "turn/completed",
-                    params: {
-                        threadId: "thr_1",
-                        turnId: "turn_1",
-                        status: "completed",
-                    },
-                });
+
+                if (!this.pauseTurnCompletion)
+                {
+                    this.completeTurn();
+                }
             });
         }
     }
@@ -329,6 +346,87 @@ describe("createCodexAppServer", () =>
         expect(capturedSession!.threadId).toBe("thr_1");
         expect(capturedSession!.turnId).toBe("turn_1");
         expect(wasActiveDuringCallback).toBe(true);
+    });
+
+    it("session.injectMessage sends turn/steer RPC to the live connection", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.pauseTurnCompletion = true;
+        let capturedSession: CodexSession | null = null;
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            onSessionCreated: (session) =>
+            {
+                capturedSession = session;
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+        });
+
+        // Wait for session to be created (turn/start completes in microtask)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(capturedSession).not.toBeNull();
+        expect(capturedSession!.isActive()).toBe(true);
+
+        await capturedSession!.injectMessage("Also add error handling");
+
+        const steerMessage = transport.sentMessages.find(
+            (msg): msg is { method: string; params?: unknown } =>
+                "method" in msg && msg.method === "turn/steer",
+        );
+        expect(steerMessage?.params).toMatchObject({
+            threadId: "thr_1",
+            expectedTurnId: "turn_1",
+            input: [{ type: "text", text: "Also add error handling", text_elements: [] }],
+        });
+
+        // Complete the turn so the stream closes cleanly
+        transport.completeTurn();
+        await readAll(stream);
+    });
+
+    it("session.interrupt sends turn/interrupt RPC to the live connection", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.pauseTurnCompletion = true;
+        let capturedSession: CodexSession | null = null;
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            onSessionCreated: (session) =>
+            {
+                capturedSession = session;
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(capturedSession).not.toBeNull();
+
+        await capturedSession!.interrupt();
+
+        const interruptMessage = transport.sentMessages.find(
+            (msg): msg is { method: string; params?: unknown } =>
+                "method" in msg && msg.method === "turn/interrupt",
+        );
+        expect(interruptMessage?.params).toMatchObject({
+            threadId: "thr_1",
+            turnId: "turn_1",
+        });
+
+        // Complete the turn so the stream closes cleanly
+        transport.completeTurn();
+        await readAll(stream);
     });
 
     it("throws when reusing a global key with different pool settings", async () =>
