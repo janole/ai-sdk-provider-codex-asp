@@ -24,6 +24,8 @@ import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumePa
 import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
 import type { TurnInterruptParams } from "./app-server-protocol/v2/TurnInterruptParams";
 import type { TurnInterruptResponse } from "./app-server-protocol/v2/TurnInterruptResponse";
+import type { TurnStartParams } from "./app-server-protocol/v2/TurnStartParams";
+import type { UserInput } from "./app-server-protocol/v2/UserInput";
 
 export type { AskForApproval };
 export type { CommandExecutionApprovalDecision };
@@ -111,55 +113,14 @@ export type CodexThreadResumeResult = ThreadResumeResponse;
 export type CodexTurnInterruptParams = TurnInterruptParams;
 export type CodexTurnInterruptResult = TurnInterruptResponse;
 
-export interface CodexTurnInputText {
-    type: "text";
-    text: string;
-    text_elements: Array<{
-        start: number;
-        end: number;
-        type: "mention" | "skill";
-    }>;
-}
+export type CodexTurnInputItem = UserInput;
+export type CodexTurnInputText = Extract<UserInput, { type: "text" }>;
+export type CodexTurnInputImage = Extract<UserInput, { type: "image" }>;
+export type CodexTurnInputLocalImage = Extract<UserInput, { type: "localImage" }>;
+export type CodexTurnInputSkill = Extract<UserInput, { type: "skill" }>;
+export type CodexTurnInputMention = Extract<UserInput, { type: "mention" }>;
 
-export interface CodexTurnInputImage {
-    type: "image";
-    url: string;
-}
-
-export interface CodexTurnInputLocalImage {
-    type: "localImage";
-    path: string;
-}
-
-export interface CodexTurnInputSkill {
-    type: "skill";
-    name: string;
-    path: string;
-}
-
-export interface CodexTurnInputMention {
-    type: "mention";
-    name: string;
-    path: string;
-}
-
-export type CodexTurnInputItem =
-  | CodexTurnInputText
-  | CodexTurnInputImage
-  | CodexTurnInputLocalImage
-  | CodexTurnInputSkill
-  | CodexTurnInputMention;
-
-export interface CodexTurnStartParams {
-    threadId: string;
-    input: CodexTurnInputItem[];
-    cwd?: string;
-    approvalPolicy?: AskForApproval;
-    sandboxPolicy?: SandboxPolicy;
-    model?: string;
-    effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
-    summary?: "auto" | "concise" | "detailed" | "none";
-}
+export type CodexTurnStartParams = TurnStartParams;
 
 export interface CodexTurnStartResult {
     turnId: string;
