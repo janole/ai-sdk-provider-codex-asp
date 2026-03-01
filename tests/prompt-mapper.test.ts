@@ -286,14 +286,15 @@ describe("PromptFileResolver", () =>
         let cleanedUp = false;
 
         const customWriter: FileWriter = {
-            async write(data, mediaType)
+            write(data, mediaType)
             {
                 written.push({ data, mediaType });
-                return new URL("https://my-bucket.s3.amazonaws.com/resolved-image.png");
+                return Promise.resolve(new URL("https://my-bucket.s3.amazonaws.com/resolved-image.png"));
             },
-            async cleanup()
+            cleanup()
             {
                 cleanedUp = true;
+                return Promise.resolve();
             },
         };
 
