@@ -8,6 +8,34 @@ import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/pro
 
 import type { CodexTurnInputItem } from "../protocol/types";
 
+// ── System prompt extraction ──
+
+/**
+ * Extracts system messages from the prompt and concatenates them into a single
+ * string suitable for `developerInstructions` on `thread/start` or
+ * `thread/resume`.  Returns `undefined` when no system content is present.
+ */
+export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefined
+{
+    const chunks: string[] = [];
+
+    for (const message of prompt)
+    {
+        if (message.role === "system")
+        {
+            const text = message.content.trim();
+            if (text.length > 0)
+            {
+                chunks.push(text);
+            }
+        }
+    }
+
+    return chunks.length > 0 ? chunks.join("\n\n") : undefined;
+}
+
+// ── File writer interface ──
+
 /**
  * Pluggable backend for persisting inline binary data so that the Codex
  * protocol can reference it by URL.

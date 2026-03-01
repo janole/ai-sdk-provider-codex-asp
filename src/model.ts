@@ -18,7 +18,6 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { mapSystemPrompt } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -37,8 +36,8 @@ import type {
     CodexTurnStartResult,
 } from "./protocol/types";
 import type { CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
-import { PromptFileResolver } from "./utils/file-resolver";
 import { stripUndefined } from "./utils/object";
+import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CodexLanguageModelSettings
