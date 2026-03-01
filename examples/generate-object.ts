@@ -35,7 +35,7 @@ const parsed = z.object({
 if (!parsed.success)
 {
     console.error("Structured output validation failed:");
-    console.error(parsed.error.flatten());
+    console.error(z.treeifyError(parsed.error));
     await codex.shutdown();
     process.exit(1);
 }
