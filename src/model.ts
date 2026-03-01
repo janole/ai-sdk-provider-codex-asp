@@ -482,14 +482,16 @@ export class CodexLanguageModel implements LanguageModelV3
             await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
         };
 
+        let pendingCleanup: (() => Promise<void>) | undefined;
+
         const stream = new ReadableStream<LanguageModelV3StreamPart>({
-            start: (controller) => 
+            start: (controller) =>
             {
                 let closed = false;
 
-                const closeWithError = async (error: unknown) => 
+                const closeWithError = async (error: unknown) =>
                 {
-                    if (closed) 
+                    if (closed)
                     {
                         return;
                     }
@@ -497,31 +499,33 @@ export class CodexLanguageModel implements LanguageModelV3
                     controller.enqueue({ type: "error", error });
                     closed = true;
 
-                    try 
+                    try
                     {
                         controller.close();
                     }
-                    finally 
+                    finally
                     {
+                        await pendingCleanup?.();
                         await client.disconnect();
                     }
                 };
 
-                const closeSuccessfully = async () => 
+                const closeSuccessfully = async () =>
                 {
-                    if (closed) 
+                    if (closed)
                     {
                         return;
                     }
 
                     closed = true;
 
-                    try 
+                    try
                     {
                         controller.close();
                     }
-                    finally 
+                    finally
                     {
+                        await pendingCleanup?.();
                         await client.disconnect();
                     }
                 };
@@ -830,7 +834,10 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                         }
 
-                        const turnInput = mapPromptToTurnInput(options.prompt, !!resumeThreadId);
+                        const { items: turnInput, cleanup: cleanupPromptFiles } = await mapPromptToTurnInput(
+                            options.prompt, !!resumeThreadId,
+                        );
+                        pendingCleanup = cleanupPromptFiles;
                         const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
                             input: turnInput,
@@ -854,7 +861,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                 })();
             },
-            cancel: async () => 
+            cancel: async () =>
             {
                 try
                 {
@@ -864,6 +871,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 {
                     // Best-effort only: always disconnect to release resources.
                 }
+                await pendingCleanup?.();
                 await client.disconnect();
             },
         });
