@@ -1,7 +1,5 @@
 import type { LanguageModelV3Prompt } from "@ai-sdk/provider";
 
-import type { CodexTurnInputItem } from "./types";
-
 /**
  * Extracts system messages from the prompt and concatenates them into a single
  * string suitable for `developerInstructions` on `thread/start` or
@@ -24,95 +22,4 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
     }
 
     return chunks.length > 0 ? chunks.join("\n\n") : undefined;
-}
-
-/**
- * Maps user text from the prompt to the `input` array for a `turn/start`
- * request.  File and image parts are silently ignored — use
- * {@link PromptFileResolver.resolve} instead when the prompt may contain
- * non-text content.
- *
- * System messages are **not** included here — they are routed to
- * `developerInstructions` via {@link mapSystemPrompt} instead.
- *
- * @param isResume - When true the thread already holds the full history on
- *   disk, so only the last user message is extracted and sent.  When false
- *   (fresh thread) all user text is folded into a single item.
- */
-export function mapPromptToTurnInput(
-    prompt: LanguageModelV3Prompt,
-    isResume: boolean = false,
-): CodexTurnInputItem[]
-{
-    if (isResume)
-    {
-        return mapResumedPrompt(prompt);
-    }
-
-    return mapFreshPrompt(prompt);
-}
-
-/**
- * Resume path: extract text parts from the last user message individually.
- */
-function mapResumedPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
-{
-    for (let i = prompt.length - 1; i >= 0; i--)
-    {
-        const message = prompt[i];
-
-        if (message?.role === "user")
-        {
-            const items: CodexTurnInputItem[] = [];
-
-            for (const part of message.content)
-            {
-                if (part.type === "text")
-                {
-                    const text = part.text.trim();
-                    if (text.length > 0)
-                    {
-                        items.push({ type: "text", text, text_elements: [] });
-                    }
-                }
-            }
-
-            return items;
-        }
-    }
-
-    return [];
-}
-
-/**
- * Fresh thread path: flatten all user text into one item.
- */
-function mapFreshPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
-{
-    const chunks: string[] = [];
-
-    for (const message of prompt)
-    {
-        if (message.role === "user")
-        {
-            for (const part of message.content)
-            {
-                if (part.type === "text")
-                {
-                    const text = part.text.trim();
-                    if (text.length > 0)
-                    {
-                        chunks.push(text);
-                    }
-                }
-            }
-        }
-    }
-
-    if (chunks.length === 0)
-    {
-        return [];
-    }
-
-    return [{ type: "text", text: chunks.join("\n\n"), text_elements: [] }];
 }

@@ -2,15 +2,16 @@ import { existsSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { mapPromptToTurnInput, mapSystemPrompt } from "../src/protocol/prompt-mapper";
+import { mapSystemPrompt } from "../src/protocol/prompt-mapper";
 import type { FileWriter } from "../src/utils/file-resolver";
 import { PromptFileResolver } from "../src/utils/file-resolver";
 
-describe("mapPromptToTurnInput", () =>
+describe("PromptFileResolver", () =>
 {
-    it("maps user text to v2 text input, excluding system messages", () =>
+    it("maps user text to text input, excluding system messages", async () =>
     {
-        const result = mapPromptToTurnInput([
+        const resolver = new PromptFileResolver();
+        const items = await resolver.resolve([
             { role: "system", content: " Be concise. " },
             {
                 role: "user",
@@ -21,7 +22,7 @@ describe("mapPromptToTurnInput", () =>
             { role: "assistant", content: [{ type: "text", text: "ignored" }] },
         ]);
 
-        expect(result).toEqual([
+        expect(items).toEqual([
             {
                 type: "text",
                 text: "Hello",
@@ -30,9 +31,10 @@ describe("mapPromptToTurnInput", () =>
         ]);
     });
 
-    it("extracts only the last user message when resuming a thread", () =>
+    it("extracts only the last user message when resuming a thread", async () =>
     {
-        const result = mapPromptToTurnInput(
+        const resolver = new PromptFileResolver();
+        const items = await resolver.resolve(
             [
                 { role: "system", content: "Be concise." },
                 { role: "user", content: [{ type: "text", text: "first message" }] },
@@ -44,14 +46,10 @@ describe("mapPromptToTurnInput", () =>
             true,
         );
 
-        expect(result).toEqual([
+        expect(items).toEqual([
             { type: "text", text: "third message", text_elements: [] },
         ]);
     });
-});
-
-describe("PromptFileResolver", () =>
-{
     it("maps image URL (https) to CodexTurnInputImage", async () =>
     {
         const resolver = new PromptFileResolver();

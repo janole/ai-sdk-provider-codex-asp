@@ -49,7 +49,7 @@ export { CodexLanguageModel } from "./model";
 export { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 export type { CodexEventMapperInput, CodexEventMapperOptions } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
-export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
+export { mapSystemPrompt } from "./protocol/prompt-mapper";
 export { CODEX_PROVIDER_ID, codexProviderMetadata, withProviderMetadata } from "./protocol/provider-metadata";
 export type {
     AgentMessageDeltaNotification,
