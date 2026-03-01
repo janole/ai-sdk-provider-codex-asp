@@ -27,11 +27,10 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
 }
 
 /**
- * Maps the prompt to the `input` array for a `turn/start` request.
- *
- * Only handles `text` content parts.  For prompts that include file or image
- * parts, use {@link PromptFileResolver.resolve} instead — it handles both
- * text and file parts in a single pass.
+ * Maps user text from the prompt to the `input` array for a `turn/start`
+ * request.  File and image parts are silently ignored — use
+ * {@link PromptFileResolver.resolve} instead when the prompt may contain
+ * non-text content.
  *
  * System messages are **not** included here — they are routed to
  * `developerInstructions` via {@link mapSystemPrompt} instead.
