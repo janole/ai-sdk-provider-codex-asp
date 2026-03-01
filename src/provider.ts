@@ -94,6 +94,7 @@ export function createCodexAppServer(
             ? { ...settings.compaction }
             : undefined,
         transportFactory: effectiveTransportFactory,
+        mcpServers: settings.mcpServers ? { ...settings.mcpServers } : undefined,
         tools: settings.tools ? { ...settings.tools } : undefined,
         toolHandlers: settings.toolHandlers ? { ...settings.toolHandlers } : undefined,
         toolTimeoutMs: settings.toolTimeoutMs,
