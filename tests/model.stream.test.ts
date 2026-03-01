@@ -696,21 +696,24 @@ describe("CodexLanguageModel.doStream", () =>
         });
 
         const model = provider.languageModel("gpt-5.3-codex");
-        const outputSchema = JSON.parse(JSON.stringify({
-            type: "object",
+
+        const schema = {
+            type: "object" as const,
             properties: {
-                answer: { type: "string" },
-                confidence: { type: "number" },
+                answer: { type: "string" as const },
+                confidence: { type: "number" as const },
             },
             required: ["answer"],
             additionalProperties: false,
-        }));
+        };
+
+        const outputSchema: unknown = JSON.parse(JSON.stringify(schema));
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
             responseFormat: {
                 type: "json",
-                schema: outputSchema,
+                schema,
             },
         });
 
