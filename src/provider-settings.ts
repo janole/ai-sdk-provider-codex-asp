@@ -6,6 +6,7 @@ import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
 import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
+import type { CodexSession } from "./session";
 
 export interface CodexThreadDefaults
 {
@@ -109,4 +110,6 @@ export interface CodexProviderSettings
     };
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
+    /** Called when a streaming session is created, providing access to inject messages and interrupt. */
+    onSessionCreated?: (session: CodexSession) => void;
 }

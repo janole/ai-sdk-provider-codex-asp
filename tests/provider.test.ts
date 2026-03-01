@@ -5,6 +5,7 @@ import { CODEX_PROVIDER_ID } from "../src";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { CodexLanguageModel } from "../src/model";
 import { createCodexAppServer } from "../src/provider";
+import type { CodexSession } from "../src/session";
 import { MockTransport } from "./helpers/mock-transport";
 
 class ScriptedTransport extends MockTransport
@@ -49,6 +50,12 @@ class ScriptedTransport extends MockTransport
                     nextCursor: null,
                 },
             });
+            return;
+        }
+
+        if (message.method === "turn/steer")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
             return;
         }
 
@@ -294,6 +301,34 @@ describe("createCodexAppServer", () =>
             isDefault: true,
             inputModalities: ["text", "image"],
         });
+    });
+
+    it("onSessionCreated provides active session with threadId and turnId", async () =>
+    {
+        const transport = new ScriptedTransport();
+        let capturedSession: CodexSession | null = null;
+        let wasActiveDuringCallback = false;
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            onSessionCreated: (session) =>
+            {
+                capturedSession = session;
+                wasActiveDuringCallback = session.isActive();
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+        });
+        await readAll(stream);
+
+        expect(capturedSession).not.toBeNull();
+        expect(capturedSession!.threadId).toBe("thr_1");
+        expect(capturedSession!.turnId).toBe("turn_1");
+        expect(wasActiveDuringCallback).toBe(true);
     });
 
     it("throws when reusing a global key with different pool settings", async () =>

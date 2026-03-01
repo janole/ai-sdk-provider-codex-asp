@@ -12,6 +12,7 @@ import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/M
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
+import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 
@@ -73,6 +74,7 @@ export class CodexEventMapper
     private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
+    private turnId: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
 
     constructor(options?: CodexEventMapperOptions)
@@ -87,6 +89,11 @@ export class CodexEventMapper
         this.threadId = threadId;
     }
 
+    setTurnId(turnId: string): void
+    {
+        this.turnId = turnId;
+    }
+
     private nextPlanSequence(turnId: string): number
     {
         const next = (this.planSequenceByTurnId.get(turnId) ?? 0) + 1;
@@ -99,7 +106,7 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
 
         const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T =>
-            withProviderMetadata(part, this.threadId);
+            withProviderMetadata(part, this.threadId, this.turnId);
 
         const pushStreamStart = () =>
         {
@@ -131,6 +138,13 @@ export class CodexEventMapper
         switch (event.method)
         {
             case "turn/started": {
+                const turnStartedParams = event.params as TurnStartedNotification | undefined;
+                const turnId = turnStartedParams?.turn?.id
+                    ?? (turnStartedParams as unknown as { turnId?: string })?.turnId;
+                if (turnId)
+                {
+                    this.turnId = turnId;
+                }
                 pushStreamStart();
                 break;
             }

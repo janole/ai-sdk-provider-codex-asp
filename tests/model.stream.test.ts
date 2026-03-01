@@ -215,18 +215,18 @@ describe("CodexLanguageModel.doStream", () =>
             {
                 type: "text-start",
                 id: "item_1",
-                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1", turnId: "turn_1" } },
             },
             {
                 type: "text-delta",
                 id: "item_1",
                 delta: "Hello",
-                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1", turnId: "turn_1" } },
             },
             {
                 type: "text-end",
                 id: "item_1",
-                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1", turnId: "turn_1" } },
             },
             {
                 type: "finish",
@@ -244,7 +244,7 @@ describe("CodexLanguageModel.doStream", () =>
                         reasoning: undefined,
                     },
                 },
-                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1", turnId: "turn_1" } },
             },
         ]);
 
