@@ -348,7 +348,7 @@ describe("createCodexAppServer", () =>
         expect(wasActiveDuringCallback).toBe(true);
     });
 
-    it("session.injectMessage sends turn/steer RPC to the live connection", async () =>
+    it("session.injectMessage sends turn/start RPC to the live connection", async () =>
     {
         const transport = new ScriptedTransport();
         transport.pauseTurnCompletion = true;
@@ -375,13 +375,15 @@ describe("createCodexAppServer", () =>
 
         await capturedSession!.injectMessage("Also add error handling");
 
-        const steerMessage = transport.sentMessages.find(
+        // injectMessage uses turn/start — the server routes it through steer_input
+        // when a turn is active. Find the second turn/start (first is the initial turn).
+        const turnStartMessages = transport.sentMessages.filter(
             (msg): msg is { method: string; params?: unknown } =>
-                "method" in msg && msg.method === "turn/steer",
+                "method" in msg && msg.method === "turn/start",
         );
-        expect(steerMessage?.params).toMatchObject({
+        expect(turnStartMessages).toHaveLength(2);
+        expect(turnStartMessages[1]?.params).toMatchObject({
             threadId: "thr_1",
-            expectedTurnId: "turn_1",
             input: [{ type: "text", text: "Also add error handling", text_elements: [] }],
         });
 

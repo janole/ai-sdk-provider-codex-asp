@@ -1,8 +1,11 @@
 import type { AppServerClient } from "./client/app-server-client";
-import type { TurnSteerParams } from "./protocol/app-server-protocol/v2/TurnSteerParams";
-import type { TurnSteerResponse } from "./protocol/app-server-protocol/v2/TurnSteerResponse";
 import type { UserInput } from "./protocol/app-server-protocol/v2/UserInput";
-import type { CodexTurnInterruptParams, CodexTurnInterruptResult } from "./protocol/types";
+import type {
+    CodexTurnInterruptParams,
+    CodexTurnInterruptResult,
+    CodexTurnStartParams,
+    CodexTurnStartResult,
+} from "./protocol/types";
 
 export interface CodexSession
 {
@@ -61,6 +64,14 @@ export class CodexSessionImpl implements CodexSession
         return this._active;
     }
 
+    /**
+     * Inject follow-up input into the current thread.
+     *
+     * Uses turn/start which the app-server routes through steer_input when a
+     * turn is already active, or starts a new turn otherwise. This avoids the
+     * strict timing requirements of turn/steer (which needs codex/event/task_started
+     * before it accepts input). We may revisit turn/steer in the future.
+     */
     async injectMessage(input: string | UserInput[]): Promise<void>
     {
         if (!this._active)
@@ -68,22 +79,24 @@ export class CodexSessionImpl implements CodexSession
             throw new Error("Session is no longer active.");
         }
 
-        if (!this._turnId)
-        {
-            throw new Error("No active turn to steer.");
-        }
-
         const userInput: UserInput[] = typeof input === "string"
             ? [{ type: "text", text: input, text_elements: [] }]
             : input;
 
-        const steerParams: TurnSteerParams = {
+        const turnStartParams: CodexTurnStartParams = {
             threadId: this._threadId,
             input: userInput,
-            expectedTurnId: this._turnId,
         };
 
-        await this.client.request<TurnSteerResponse>("turn/steer", steerParams);
+        const result = await this.client.request<CodexTurnStartResult>("turn/start", turnStartParams);
+
+        // Update turnId if the server started a new turn
+        const newTurnId = (result as { turnId?: string }).turnId
+            ?? (result as { turn?: { id?: string } }).turn?.id;
+        if (newTurnId)
+        {
+            this._turnId = newTurnId;
+        }
     }
 
     async interrupt(): Promise<void>
