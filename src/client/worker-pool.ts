@@ -2,17 +2,20 @@ import { CodexProviderError } from "../errors";
 import type { CodexTransport } from "./transport";
 import { CodexWorker } from "./worker";
 
-export interface CodexWorkerPoolSettings {
+export interface CodexWorkerPoolSettings
+{
     poolSize?: number;
     transportFactory: () => CodexTransport;
     idleTimeoutMs?: number;
 }
 
-interface AcquireOptions {
+interface AcquireOptions
+{
     signal?: AbortSignal;
 }
 
-interface AcquireWaiter {
+interface AcquireWaiter
+{
     resolve: (worker: CodexWorker) => void;
     reject: (error: Error) => void;
     signal: AbortSignal | undefined;
