@@ -88,11 +88,10 @@ export class CodexSessionImpl implements CodexSession
             input: userInput,
         };
 
-        const result = await this.client.request<CodexTurnStartResult>("turn/start", turnStartParams);
+        const result = await this.client.request<CodexTurnStartResult & { turn?: { id?: string } }>("turn/start", turnStartParams);
 
         // Update turnId if the server started a new turn
-        const newTurnId = (result as { turnId?: string }).turnId
-            ?? (result as { turn?: { id?: string } }).turn?.id;
+        const newTurnId = result.turnId ?? result.turn?.id;
         if (newTurnId)
         {
             this._turnId = newTurnId;
