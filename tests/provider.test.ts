@@ -24,6 +24,34 @@ class ScriptedTransport extends MockTransport
             return;
         }
 
+        if (message.method === "model/list")
+        {
+            this.emitMessage({
+                id: message.id,
+                result: {
+                    data: [
+                        {
+                            id: "gpt-5.3-codex",
+                            model: "gpt-5.3-codex",
+                            upgrade: null,
+                            displayName: "GPT-5.3 Codex",
+                            description: "Test model",
+                            hidden: false,
+                            supportedReasoningEfforts: [
+                                { reasoningEffort: "medium", description: "Default" },
+                            ],
+                            defaultReasoningEffort: "medium",
+                            inputModalities: ["text", "image"],
+                            supportsPersonality: false,
+                            isDefault: true,
+                        },
+                    ],
+                    nextCursor: null,
+                },
+            });
+            return;
+        }
+
         if (message.method === "thread/start")
         {
             this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
@@ -248,6 +276,24 @@ describe("createCodexAppServer", () =>
         {
             await providerTwo.shutdown();
         }
+    });
+
+    it("listModels returns models via model/list RPC", async () =>
+    {
+        const provider = createCodexAppServer({
+            transportFactory: () => new ScriptedTransport(),
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+
+        const models = await provider.listModels();
+
+        expect(models).toHaveLength(1);
+        expect(models[0]).toMatchObject({
+            id: "gpt-5.3-codex",
+            displayName: "GPT-5.3 Codex",
+            isDefault: true,
+            inputModalities: ["text", "image"],
+        });
     });
 
     it("throws when reusing a global key with different pool settings", async () =>
