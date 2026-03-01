@@ -20,11 +20,9 @@ import { stripUndefined } from "./utils/object";
 export type { Model as CodexModel } from "./protocol/app-server-protocol/v2/Model";
 export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
 
-export interface CodexProvider extends ProviderV3 {
-    (
-        modelId: string,
-        settings?: CodexLanguageModelSettings,
-    ): CodexLanguageModel;
+export interface CodexProvider extends ProviderV3
+{
+    (modelId: string, settings?: CodexLanguageModelSettings): CodexLanguageModel;
     chat(modelId: string, settings?: CodexLanguageModelSettings): CodexLanguageModel;
     listModels(params?: ModelListParams): Promise<Model[]>;
     readonly settings: Readonly<CodexProviderSettings>;
