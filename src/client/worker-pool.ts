@@ -67,6 +67,7 @@ export class CodexWorkerPool
                     signal: options?.signal,
                     abortHandler: undefined,
                 };
+
                 if (waiter.signal)
                 {
                     waiter.abortHandler = () =>
@@ -76,6 +77,7 @@ export class CodexWorkerPool
                     };
                     waiter.signal.addEventListener("abort", waiter.abortHandler, { once: true });
                 }
+
                 this.waiters.push(waiter);
             });
         }
