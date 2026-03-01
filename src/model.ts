@@ -18,7 +18,7 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
+import { mapPromptToTurnInput, mapSystemPrompt, resolvePromptFiles } from "./protocol/prompt-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -834,10 +834,11 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                         }
 
-                        const { items: turnInput, cleanup: cleanupPromptFiles } = await mapPromptToTurnInput(
-                            options.prompt, !!resumeThreadId,
-                        );
+                        const { prompt: resolvedPrompt, cleanup: cleanupPromptFiles } =
+                            await resolvePromptFiles(options.prompt);
                         pendingCleanup = cleanupPromptFiles;
+
+                        const turnInput = mapPromptToTurnInput(resolvedPrompt, !!resumeThreadId);
                         const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
                             input: turnInput,

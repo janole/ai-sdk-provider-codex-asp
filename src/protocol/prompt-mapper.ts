@@ -2,12 +2,14 @@ import { fileURLToPath } from "node:url";
 
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
 
-import { cleanupTempFiles, writeTempFile } from "../utils/temp-file";
+import type { FileResolver } from "../utils/file-resolver";
+import { createLocalFileResolver } from "../utils/file-resolver";
+
 import type { CodexTurnInputItem } from "./types";
 
-export interface PromptMappingResult
+export interface ResolvedPromptFiles
 {
-    items: CodexTurnInputItem[];
+    prompt: LanguageModelV3Prompt;
     cleanup: () => Promise<void>;
 }
 
@@ -36,56 +38,98 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
 }
 
 /**
- * Maps a single `file` content part to a Codex input item, writing temp files
- * when the data is inline (base64 / Uint8Array).  Returns `null` for
- * unsupported media types.
+ * Pre-processes a prompt by resolving inline file data (base64 / Uint8Array)
+ * into URLs that {@link mapPromptToTurnInput} can handle synchronously.
+ *
+ * Inline image data is written via the provided {@link FileResolver} and
+ * replaced with `file:` (or other) URLs.  Text file data is decoded in-place.
+ * Non-image, non-text file parts are left unchanged (the mapper will skip
+ * them).
+ *
+ * @param prompt - The original AI SDK prompt.
+ * @param resolver - Strategy for persisting inline binary data.  Defaults to
+ *   a local temp-file resolver.
+ * @returns The transformed prompt and a `cleanup` callback that removes any
+ *   files written by the resolver.
  */
-async function mapFilePart(
-    part: LanguageModelV3FilePart,
-    tempFiles: string[],
-): Promise<CodexTurnInputItem | null>
+export async function resolvePromptFiles(
+    prompt: LanguageModelV3Prompt,
+    resolver: FileResolver = createLocalFileResolver(),
+): Promise<ResolvedPromptFiles>
+{
+    let changed = false;
+    const resolved: LanguageModelV3Prompt = [];
+
+    for (const message of prompt)
+    {
+        if (message.role !== "user")
+        {
+            resolved.push(message);
+            continue;
+        }
+
+        const parts: typeof message.content = [];
+        for (const part of message.content)
+        {
+            if (part.type === "file" && !(part.data instanceof URL))
+            {
+                if (part.mediaType.startsWith("image/"))
+                {
+                    const url = await resolver.write(part.data, part.mediaType);
+                    parts.push({ ...part, data: url });
+                    changed = true;
+                    continue;
+                }
+
+                if (part.mediaType.startsWith("text/"))
+                {
+                    const text = typeof part.data === "string"
+                        ? Buffer.from(part.data, "base64").toString("utf-8")
+                        : new TextDecoder().decode(part.data);
+                    parts.push({ type: "text", text });
+                    changed = true;
+                    continue;
+                }
+            }
+
+            parts.push(part);
+        }
+
+        resolved.push({ ...message, content: parts });
+    }
+
+    return {
+        prompt: changed ? resolved : prompt,
+        cleanup: () => resolver.cleanup(),
+    };
+}
+
+// ── Sync mapper ──
+
+/**
+ * Maps a single `file` content part (now guaranteed to have URL data after
+ * {@link resolvePromptFiles}) to a Codex input item.  Returns `null` for
+ * unsupported media types or non-URL data (which should not occur after
+ * resolution).
+ */
+function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
 {
     const { mediaType, data } = part;
 
-    // ── Text files → inline as text ──
-    if (mediaType.startsWith("text/"))
+    if (!(data instanceof URL))
     {
-        let text: string;
-        if (data instanceof URL)
-        {
-            // We don't fetch remote text files; treat URL as a reference.
-            text = data.href;
-        }
-        else if (typeof data === "string")
-        {
-            text = Buffer.from(data, "base64").toString("utf-8");
-        }
-        else
-        {
-            text = new TextDecoder().decode(data);
-        }
-
-        return { type: "text", text, text_elements: [] };
+        // Inline data should have been resolved already — skip gracefully.
+        return null;
     }
 
-    // ── Images ──
     if (mediaType.startsWith("image/"))
     {
-        if (data instanceof URL)
+        if (data.protocol === "file:")
         {
-            if (data.protocol === "file:")
-            {
-                return { type: "localImage", path: fileURLToPath(data) };
-            }
-
-            // http: / https:
-            return { type: "image", url: data.href };
+            return { type: "localImage", path: fileURLToPath(data) };
         }
 
-        // Inline data → write temp file
-        const path = await writeTempFile(data, mediaType);
-        tempFiles.push(path);
-        return { type: "localImage", path };
+        return { type: "image", url: data.href };
     }
 
     // Unsupported media type — skip silently.
@@ -98,45 +142,31 @@ async function mapFilePart(
  * System messages are **not** included here — they are routed to
  * `developerInstructions` via {@link mapSystemPrompt} instead.
  *
+ * **Important:** Call {@link resolvePromptFiles} first to materialise any
+ * inline file data.  This function is intentionally synchronous and assumes
+ * all file parts carry URL data.
+ *
  * @param isResume - When true the thread already holds the full history on
  *   disk, so only the last user message is extracted and sent.  When false
  *   (fresh thread) all user text is folded into a single item.
- *
- * @returns A `PromptMappingResult` containing the mapped items and a `cleanup`
- *   callback that removes any temporary files created during mapping.
  */
-export async function mapPromptToTurnInput(
+export function mapPromptToTurnInput(
     prompt: LanguageModelV3Prompt,
     isResume: boolean = false,
-): Promise<PromptMappingResult>
+): CodexTurnInputItem[]
 {
-    const tempFiles: string[] = [];
-
-    const cleanup = async (): Promise<void> =>
-    {
-        if (tempFiles.length > 0)
-        {
-            await cleanupTempFiles(tempFiles);
-        }
-    };
-
     if (isResume)
     {
-        const items = await mapResumedPrompt(prompt, tempFiles);
-        return { items, cleanup };
+        return mapResumedPrompt(prompt);
     }
 
-    const items = await mapFreshPrompt(prompt, tempFiles);
-    return { items, cleanup };
+    return mapFreshPrompt(prompt);
 }
 
 /**
  * Resume path: extract parts from the last user message individually.
  */
-async function mapResumedPrompt(
-    prompt: LanguageModelV3Prompt,
-    tempFiles: string[],
-): Promise<CodexTurnInputItem[]>
+function mapResumedPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
 {
     for (let i = prompt.length - 1; i >= 0; i--)
     {
@@ -158,7 +188,7 @@ async function mapResumedPrompt(
                 }
                 else if (part.type === "file")
                 {
-                    const mapped = await mapFilePart(part, tempFiles);
+                    const mapped = mapFilePart(part);
                     if (mapped)
                     {
                         items.push(mapped);
@@ -177,10 +207,7 @@ async function mapResumedPrompt(
  * Fresh thread path: accumulate text chunks and flush before images to
  * preserve ordering.
  */
-async function mapFreshPrompt(
-    prompt: LanguageModelV3Prompt,
-    tempFiles: string[],
-): Promise<CodexTurnInputItem[]>
+function mapFreshPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
 {
     const items: CodexTurnInputItem[] = [];
     const textChunks: string[] = [];
@@ -210,20 +237,12 @@ async function mapFreshPrompt(
                 }
                 else if (part.type === "file")
                 {
-                    const mapped = await mapFilePart(part, tempFiles);
+                    const mapped = mapFilePart(part);
                     if (mapped)
                     {
-                        if (mapped.type === "text")
-                        {
-                            // Text file content gets inlined into text chunks.
-                            textChunks.push(mapped.text);
-                        }
-                        else
-                        {
-                            // Image — flush accumulated text first, then emit the image.
-                            flushText();
-                            items.push(mapped);
-                        }
+                        // Image — flush accumulated text first, then emit the image.
+                        flushText();
+                        items.push(mapped);
                     }
                 }
             }
