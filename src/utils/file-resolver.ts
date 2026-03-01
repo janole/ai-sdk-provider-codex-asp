@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import type { LanguageModelV3Prompt } from "@ai-sdk/provider";
+import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
+
+import type { CodexTurnInputItem } from "../protocol/types";
 
 /**
  * Pluggable backend for persisting inline binary data so that the Codex
@@ -73,11 +75,39 @@ export class LocalFileWriter implements FileWriter
     }
 }
 
+// ── File part → Codex item mapping ──
+
+/**
+ * Convert a resolved file part (data must be a URL) to a Codex input item.
+ * Returns `null` for unsupported media types or non-URL data.
+ */
+function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
+{
+    const { mediaType, data } = part;
+
+    if (!(data instanceof URL))
+    {
+        return null;
+    }
+
+    if (mediaType.startsWith("image/"))
+    {
+        if (data.protocol === "file:")
+        {
+            return { type: "localImage", path: fileURLToPath(data) };
+        }
+
+        return { type: "image", url: data.href };
+    }
+
+    return null;
+}
+
 // ── Resolver class ──
 
 /**
- * Resolves inline binary data in AI SDK prompts into URLs that the sync
- * {@link mapPromptToTurnInput} can handle.
+ * Resolves inline binary data in AI SDK prompts and maps user content to
+ * {@link CodexTurnInputItem} arrays ready for `turn/start`.
  *
  * Instantiate with an optional custom {@link FileWriter} for non-local storage
  * (e.g. S3).  Tracks all written URLs so that {@link cleanup} can remove them
@@ -85,11 +115,10 @@ export class LocalFileWriter implements FileWriter
  *
  * @example
  * ```ts
- * const resolver = new PromptFileResolver();
- * const resolved = await resolver.resolve(prompt);
- * const items = mapPromptToTurnInput(resolved, isResume);
+ * const fileResolver = new PromptFileResolver();
+ * const turnInput = await fileResolver.resolve(prompt, isResume);
  * // … after the turn …
- * await resolver.cleanup();
+ * await fileResolver.cleanup();
  * ```
  */
 export class PromptFileResolver
@@ -103,60 +132,29 @@ export class PromptFileResolver
     }
 
     /**
-     * Walk the prompt, replacing inline file data with URLs.
+     * Resolve inline file data and map user content to Codex input items.
      *
      * - Inline image data (base64 / Uint8Array) is written via the
-     *   {@link FileWriter} and replaced with the returned URL.
-     * - Inline text file data is decoded to a `text` part in-place.
-     * - URL-based file parts and non-file parts pass through unchanged.
+     *   {@link FileWriter} and converted to `localImage` or `image` items.
+     * - URL-based image file parts are converted directly.
+     * - Inline text file data is decoded and inlined as text.
+     * - Unsupported media types are silently skipped.
      *
-     * Returns the original prompt reference when no parts needed resolution.
+     * @param isResume - When true only the last user message is extracted.
+     *   When false (fresh thread) all user text is accumulated with images
+     *   flushing the text buffer to preserve ordering.
      */
-    async resolve(prompt: LanguageModelV3Prompt): Promise<LanguageModelV3Prompt>
+    async resolve(
+        prompt: LanguageModelV3Prompt,
+        isResume: boolean = false,
+    ): Promise<CodexTurnInputItem[]>
     {
-        let changed = false;
-        const resolved: LanguageModelV3Prompt = [];
-
-        for (const message of prompt)
+        if (isResume)
         {
-            if (message.role !== "user")
-            {
-                resolved.push(message);
-                continue;
-            }
-
-            const parts: typeof message.content = [];
-            for (const part of message.content)
-            {
-                if (part.type === "file" && !(part.data instanceof URL))
-                {
-                    if (part.mediaType.startsWith("image/"))
-                    {
-                        const url = await this.writer.write(part.data, part.mediaType);
-                        this.written.push(url);
-                        parts.push({ ...part, data: url });
-                        changed = true;
-                        continue;
-                    }
-
-                    if (part.mediaType.startsWith("text/"))
-                    {
-                        const text = typeof part.data === "string"
-                            ? Buffer.from(part.data, "base64").toString("utf-8")
-                            : new TextDecoder().decode(part.data);
-                        parts.push({ type: "text", text });
-                        changed = true;
-                        continue;
-                    }
-                }
-
-                parts.push(part);
-            }
-
-            resolved.push({ ...message, content: parts });
+            return this.resolveResumed(prompt);
         }
 
-        return changed ? resolved : prompt;
+        return this.resolveFresh(prompt);
     }
 
     /**
@@ -170,5 +168,144 @@ export class PromptFileResolver
             await this.writer.cleanup(this.written);
             this.written.length = 0;
         }
+    }
+
+    // ── Private helpers ──
+
+    /**
+     * Resolve a single file part: write inline data via the writer, then
+     * convert to a Codex input item.  Text files are decoded and returned
+     * as text items.  Returns `null` for unsupported media types.
+     */
+    private async resolveFilePart(
+        part: LanguageModelV3FilePart,
+    ): Promise<CodexTurnInputItem | null>
+    {
+        const { mediaType, data } = part;
+
+        // Text files → decode and inline as text.
+        if (mediaType.startsWith("text/"))
+        {
+            if (data instanceof URL)
+            {
+                return { type: "text", text: data.href, text_elements: [] };
+            }
+
+            const text = typeof data === "string"
+                ? Buffer.from(data, "base64").toString("utf-8")
+                : new TextDecoder().decode(data);
+            return { type: "text", text, text_elements: [] };
+        }
+
+        // Images with inline data → write via writer, then map the URL.
+        if (mediaType.startsWith("image/") && !(data instanceof URL))
+        {
+            const url = await this.writer.write(data, mediaType);
+            this.written.push(url);
+            return mapFilePart({ ...part, data: url });
+        }
+
+        // Images that already have a URL → map directly.
+        return mapFilePart(part);
+    }
+
+    /**
+     * Resume path: extract parts from the last user message individually.
+     */
+    private async resolveResumed(
+        prompt: LanguageModelV3Prompt,
+    ): Promise<CodexTurnInputItem[]>
+    {
+        for (let i = prompt.length - 1; i >= 0; i--)
+        {
+            const message = prompt[i];
+
+            if (message?.role === "user")
+            {
+                const items: CodexTurnInputItem[] = [];
+
+                for (const part of message.content)
+                {
+                    if (part.type === "text")
+                    {
+                        const text = part.text.trim();
+                        if (text.length > 0)
+                        {
+                            items.push({ type: "text", text, text_elements: [] });
+                        }
+                    }
+                    else if (part.type === "file")
+                    {
+                        const mapped = await this.resolveFilePart(part);
+                        if (mapped)
+                        {
+                            items.push(mapped);
+                        }
+                    }
+                }
+
+                return items;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Fresh thread path: accumulate text chunks across all user messages,
+     * flushing before each image to preserve ordering.
+     */
+    private async resolveFresh(
+        prompt: LanguageModelV3Prompt,
+    ): Promise<CodexTurnInputItem[]>
+    {
+        const items: CodexTurnInputItem[] = [];
+        const textChunks: string[] = [];
+
+        const flushText = (): void =>
+        {
+            if (textChunks.length > 0)
+            {
+                items.push({ type: "text", text: textChunks.join("\n\n"), text_elements: [] });
+                textChunks.length = 0;
+            }
+        };
+
+        for (const message of prompt)
+        {
+            if (message.role === "user")
+            {
+                for (const part of message.content)
+                {
+                    if (part.type === "text")
+                    {
+                        const text = part.text.trim();
+                        if (text.length > 0)
+                        {
+                            textChunks.push(text);
+                        }
+                    }
+                    else if (part.type === "file")
+                    {
+                        const mapped = await this.resolveFilePart(part);
+                        if (mapped)
+                        {
+                            if (mapped.type === "text")
+                            {
+                                textChunks.push(mapped.text);
+                            }
+                            else
+                            {
+                                flushText();
+                                items.push(mapped);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        flushText();
+        return items;
     }
 }

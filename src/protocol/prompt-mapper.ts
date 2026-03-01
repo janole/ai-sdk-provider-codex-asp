@@ -1,6 +1,4 @@
-import { fileURLToPath } from "node:url";
-
-import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider";
 
 import type { CodexTurnInputItem } from "./types";
 
@@ -29,43 +27,14 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
 }
 
 /**
- * Maps a single `file` content part (expected to have URL data after
- * {@link PromptFileResolver.resolve}) to a Codex input item.  Returns `null`
- * for unsupported media types or non-URL data.
- */
-function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
-{
-    const { mediaType, data } = part;
-
-    if (!(data instanceof URL))
-    {
-        // Inline data should have been resolved already — skip gracefully.
-        return null;
-    }
-
-    if (mediaType.startsWith("image/"))
-    {
-        if (data.protocol === "file:")
-        {
-            return { type: "localImage", path: fileURLToPath(data) };
-        }
-
-        return { type: "image", url: data.href };
-    }
-
-    // Unsupported media type — skip silently.
-    return null;
-}
-
-/**
  * Maps the prompt to the `input` array for a `turn/start` request.
+ *
+ * Only handles `text` content parts.  For prompts that include file or image
+ * parts, use {@link PromptFileResolver.resolve} instead — it handles both
+ * text and file parts in a single pass.
  *
  * System messages are **not** included here — they are routed to
  * `developerInstructions` via {@link mapSystemPrompt} instead.
- *
- * **Important:** Call {@link PromptFileResolver.resolve} first to materialise
- * any inline file data.  This function is intentionally synchronous and
- * assumes all file parts carry URL data.
  *
  * @param isResume - When true the thread already holds the full history on
  *   disk, so only the last user message is extracted and sent.  When false
@@ -85,7 +54,7 @@ export function mapPromptToTurnInput(
 }
 
 /**
- * Resume path: extract parts from the last user message individually.
+ * Resume path: extract text parts from the last user message individually.
  */
 function mapResumedPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
 {
@@ -107,14 +76,6 @@ function mapResumedPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
                         items.push({ type: "text", text, text_elements: [] });
                     }
                 }
-                else if (part.type === "file")
-                {
-                    const mapped = mapFilePart(part);
-                    if (mapped)
-                    {
-                        items.push(mapped);
-                    }
-                }
             }
 
             return items;
@@ -125,22 +86,11 @@ function mapResumedPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
 }
 
 /**
- * Fresh thread path: accumulate text chunks and flush before images to
- * preserve ordering.
+ * Fresh thread path: flatten all user text into one item.
  */
 function mapFreshPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
 {
-    const items: CodexTurnInputItem[] = [];
-    const textChunks: string[] = [];
-
-    const flushText = (): void =>
-    {
-        if (textChunks.length > 0)
-        {
-            items.push({ type: "text", text: textChunks.join("\n\n"), text_elements: [] });
-            textChunks.length = 0;
-        }
-    };
+    const chunks: string[] = [];
 
     for (const message of prompt)
     {
@@ -153,23 +103,17 @@ function mapFreshPrompt(prompt: LanguageModelV3Prompt): CodexTurnInputItem[]
                     const text = part.text.trim();
                     if (text.length > 0)
                     {
-                        textChunks.push(text);
-                    }
-                }
-                else if (part.type === "file")
-                {
-                    const mapped = mapFilePart(part);
-                    if (mapped)
-                    {
-                        // Image — flush accumulated text first, then emit the image.
-                        flushText();
-                        items.push(mapped);
+                        chunks.push(text);
                     }
                 }
             }
         }
     }
 
-    flushText();
-    return items;
+    if (chunks.length === 0)
+    {
+        return [];
+    }
+
+    return [{ type: "text", text: chunks.join("\n\n"), text_elements: [] }];
 }
