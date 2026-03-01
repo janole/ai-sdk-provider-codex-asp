@@ -2,15 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider";
 
-import type { FileResolver } from "../utils/file-resolver";
-import { createLocalFileResolver } from "../utils/file-resolver";
 import type { CodexTurnInputItem } from "./types";
-
-export interface ResolvedPromptFiles
-{
-    prompt: LanguageModelV3Prompt;
-    cleanup: () => Promise<void>;
-}
 
 /**
  * Extracts system messages from the prompt and concatenates them into a single
@@ -37,79 +29,9 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
 }
 
 /**
- * Pre-processes a prompt by resolving inline file data (base64 / Uint8Array)
- * into URLs that {@link mapPromptToTurnInput} can handle synchronously.
- *
- * Inline image data is written via the provided {@link FileResolver} and
- * replaced with `file:` (or other) URLs.  Text file data is decoded in-place.
- * Non-image, non-text file parts are left unchanged (the mapper will skip
- * them).
- *
- * @param prompt - The original AI SDK prompt.
- * @param resolver - Strategy for persisting inline binary data.  Defaults to
- *   a local temp-file resolver.
- * @returns The transformed prompt and a `cleanup` callback that removes any
- *   files written by the resolver.
- */
-export async function resolvePromptFiles(
-    prompt: LanguageModelV3Prompt,
-    resolver: FileResolver = createLocalFileResolver(),
-): Promise<ResolvedPromptFiles>
-{
-    let changed = false;
-    const resolved: LanguageModelV3Prompt = [];
-
-    for (const message of prompt)
-    {
-        if (message.role !== "user")
-        {
-            resolved.push(message);
-            continue;
-        }
-
-        const parts: typeof message.content = [];
-        for (const part of message.content)
-        {
-            if (part.type === "file" && !(part.data instanceof URL))
-            {
-                if (part.mediaType.startsWith("image/"))
-                {
-                    const url = await resolver.write(part.data, part.mediaType);
-                    parts.push({ ...part, data: url });
-                    changed = true;
-                    continue;
-                }
-
-                if (part.mediaType.startsWith("text/"))
-                {
-                    const text = typeof part.data === "string"
-                        ? Buffer.from(part.data, "base64").toString("utf-8")
-                        : new TextDecoder().decode(part.data);
-                    parts.push({ type: "text", text });
-                    changed = true;
-                    continue;
-                }
-            }
-
-            parts.push(part);
-        }
-
-        resolved.push({ ...message, content: parts });
-    }
-
-    return {
-        prompt: changed ? resolved : prompt,
-        cleanup: () => resolver.cleanup(),
-    };
-}
-
-// ── Sync mapper ──
-
-/**
- * Maps a single `file` content part (now guaranteed to have URL data after
- * {@link resolvePromptFiles}) to a Codex input item.  Returns `null` for
- * unsupported media types or non-URL data (which should not occur after
- * resolution).
+ * Maps a single `file` content part (expected to have URL data after
+ * {@link PromptFileResolver.resolve}) to a Codex input item.  Returns `null`
+ * for unsupported media types or non-URL data.
  */
 function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
 {
@@ -141,9 +63,9 @@ function mapFilePart(part: LanguageModelV3FilePart): CodexTurnInputItem | null
  * System messages are **not** included here — they are routed to
  * `developerInstructions` via {@link mapSystemPrompt} instead.
  *
- * **Important:** Call {@link resolvePromptFiles} first to materialise any
- * inline file data.  This function is intentionally synchronous and assumes
- * all file parts carry URL data.
+ * **Important:** Call {@link PromptFileResolver.resolve} first to materialise
+ * any inline file data.  This function is intentionally synchronous and
+ * assumes all file parts carry URL data.
  *
  * @param isResume - When true the thread already holds the full history on
  *   disk, so only the last user message is extracted and sent.  When false

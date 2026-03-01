@@ -18,7 +18,8 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { mapPromptToTurnInput, mapSystemPrompt, resolvePromptFiles } from "./protocol/prompt-mapper";
+import { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
+import { PromptFileResolver } from "./utils/file-resolver";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -482,7 +483,7 @@ export class CodexLanguageModel implements LanguageModelV3
             await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
         };
 
-        let pendingCleanup: (() => Promise<void>) | undefined;
+        const fileResolver = new PromptFileResolver();
 
         const stream = new ReadableStream<LanguageModelV3StreamPart>({
             start: (controller) =>
@@ -505,7 +506,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
-                        await pendingCleanup?.();
+                        await fileResolver.cleanup();
                         await client.disconnect();
                     }
                 };
@@ -525,7 +526,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
-                        await pendingCleanup?.();
+                        await fileResolver.cleanup();
                         await client.disconnect();
                     }
                 };
@@ -834,10 +835,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             );
                         }
 
-                        const { prompt: resolvedPrompt, cleanup: cleanupPromptFiles } =
-                            await resolvePromptFiles(options.prompt);
-                        pendingCleanup = cleanupPromptFiles;
-
+                        const resolvedPrompt = await fileResolver.resolve(options.prompt);
                         const turnInput = mapPromptToTurnInput(resolvedPrompt, !!resumeThreadId);
                         const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
@@ -872,7 +870,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 {
                     // Best-effort only: always disconnect to release resources.
                 }
-                await pendingCleanup?.();
+                await fileResolver.cleanup();
                 await client.disconnect();
             },
         });

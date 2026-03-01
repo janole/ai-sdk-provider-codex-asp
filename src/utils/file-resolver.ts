@@ -4,32 +4,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider";
+
 /**
- * Abstraction for persisting inline binary data so that the Codex protocol
- * can reference it by URL.
+ * Pluggable backend for persisting inline binary data so that the Codex
+ * protocol can reference it by URL.
  *
- * The default implementation ({@link createLocalFileResolver}) writes to the
- * local filesystem.  Provide a custom implementation to use a different
- * backend (e.g. S3, GCS, or an in-memory store).
+ * Implement this interface to use a different storage backend (e.g. S3, GCS).
+ *
+ * - A `file:` URL maps to `{ type: "localImage", path }` in the Codex protocol.
+ * - An `http(s):` URL maps to `{ type: "image", url }`.
  */
-export interface FileResolver
+export interface FileWriter
 {
-    /**
-     * Persist `data` and return a URL that Codex can use to access it.
-     *
-     * - A `file:` URL maps to `{ type: "localImage", path }`.
-     * - An `http(s):` URL maps to `{ type: "image", url }`.
-     */
+    /** Persist `data` and return a URL that Codex can use to access it. */
     write(data: Uint8Array | string, mediaType: string): Promise<URL>;
 
     /**
-     * Remove all files created by previous {@link write} calls.
-     * Best-effort — implementations should never throw.
+     * Remove previously written files.  Best-effort — implementations should
+     * never throw.
      */
-    cleanup(): Promise<void>;
+    cleanup(urls: URL[]): Promise<void>;
 }
 
-// ── Local filesystem implementation ──
+// ── Local filesystem writer ──
 
 const MEDIA_TYPE_TO_EXT: Record<string, string> = {
     "image/png": ".png",
@@ -47,33 +45,130 @@ function extensionForMediaType(mediaType: string): string
 }
 
 /**
- * Creates a {@link FileResolver} that writes to `os.tmpdir()` and returns
- * `file:` URLs.
+ * A {@link FileWriter} that writes to `os.tmpdir()` and returns `file:` URLs.
  */
-export function createLocalFileResolver(): FileResolver
+export class LocalFileWriter implements FileWriter
 {
-    const written: string[] = [];
+    async write(data: Uint8Array | string, mediaType: string): Promise<URL>
+    {
+        const ext = extensionForMediaType(mediaType);
+        const filename = `codex-ai-sdk-${randomUUID()}${ext}`;
+        const filepath = join(tmpdir(), filename);
 
-    return {
-        async write(data, mediaType)
+        const buffer = typeof data === "string"
+            ? Buffer.from(data, "base64")
+            : data;
+
+        await writeFile(filepath, buffer);
+        return pathToFileURL(filepath);
+    }
+
+    async cleanup(urls: URL[]): Promise<void>
+    {
+        await Promise.allSettled(
+            urls
+                .filter((u) => u.protocol === "file:")
+                .map((u) => unlink(u)),
+        );
+    }
+}
+
+// ── Resolver class ──
+
+/**
+ * Resolves inline binary data in AI SDK prompts into URLs that the sync
+ * {@link mapPromptToTurnInput} can handle.
+ *
+ * Instantiate with an optional custom {@link FileWriter} for non-local storage
+ * (e.g. S3).  Tracks all written URLs so that {@link cleanup} can remove them
+ * after the turn completes.
+ *
+ * @example
+ * ```ts
+ * const resolver = new PromptFileResolver();
+ * const resolved = await resolver.resolve(prompt);
+ * const items = mapPromptToTurnInput(resolved, isResume);
+ * // … after the turn …
+ * await resolver.cleanup();
+ * ```
+ */
+export class PromptFileResolver
+{
+    private readonly writer: FileWriter;
+    private readonly written: URL[] = [];
+
+    constructor(writer?: FileWriter)
+    {
+        this.writer = writer ?? new LocalFileWriter();
+    }
+
+    /**
+     * Walk the prompt, replacing inline file data with URLs.
+     *
+     * - Inline image data (base64 / Uint8Array) is written via the
+     *   {@link FileWriter} and replaced with the returned URL.
+     * - Inline text file data is decoded to a `text` part in-place.
+     * - URL-based file parts and non-file parts pass through unchanged.
+     *
+     * Returns the original prompt reference when no parts needed resolution.
+     */
+    async resolve(prompt: LanguageModelV3Prompt): Promise<LanguageModelV3Prompt>
+    {
+        let changed = false;
+        const resolved: LanguageModelV3Prompt = [];
+
+        for (const message of prompt)
         {
-            const ext = extensionForMediaType(mediaType);
-            const filename = `codex-ai-sdk-${randomUUID()}${ext}`;
-            const filepath = join(tmpdir(), filename);
+            if (message.role !== "user")
+            {
+                resolved.push(message);
+                continue;
+            }
 
-            const buffer = typeof data === "string"
-                ? Buffer.from(data, "base64")
-                : data;
+            const parts: typeof message.content = [];
+            for (const part of message.content)
+            {
+                if (part.type === "file" && !(part.data instanceof URL))
+                {
+                    if (part.mediaType.startsWith("image/"))
+                    {
+                        const url = await this.writer.write(part.data, part.mediaType);
+                        this.written.push(url);
+                        parts.push({ ...part, data: url });
+                        changed = true;
+                        continue;
+                    }
 
-            await writeFile(filepath, buffer);
-            written.push(filepath);
-            return pathToFileURL(filepath);
-        },
+                    if (part.mediaType.startsWith("text/"))
+                    {
+                        const text = typeof part.data === "string"
+                            ? Buffer.from(part.data, "base64").toString("utf-8")
+                            : new TextDecoder().decode(part.data);
+                        parts.push({ type: "text", text });
+                        changed = true;
+                        continue;
+                    }
+                }
 
-        async cleanup()
+                parts.push(part);
+            }
+
+            resolved.push({ ...message, content: parts });
+        }
+
+        return changed ? resolved : prompt;
+    }
+
+    /**
+     * Remove all files created by previous {@link resolve} calls.
+     * Best-effort — never throws.
+     */
+    async cleanup(): Promise<void>
+    {
+        if (this.written.length > 0)
         {
-            await Promise.allSettled(written.map((p) => unlink(p)));
-            written.length = 0;
-        },
-    };
+            await this.writer.cleanup(this.written);
+            this.written.length = 0;
+        }
+    }
 }

@@ -49,8 +49,7 @@ export { CodexLanguageModel } from "./model";
 export { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 export type { CodexEventMapperInput, CodexEventMapperOptions } from "./protocol/event-mapper";
 export { CodexEventMapper } from "./protocol/event-mapper";
-export type { ResolvedPromptFiles } from "./protocol/prompt-mapper";
-export { mapPromptToTurnInput, mapSystemPrompt, resolvePromptFiles } from "./protocol/prompt-mapper";
+export { mapPromptToTurnInput, mapSystemPrompt } from "./protocol/prompt-mapper";
 export { CODEX_PROVIDER_ID, codexProviderMetadata, withProviderMetadata } from "./protocol/provider-metadata";
 export type {
     AgentMessageDeltaNotification,
@@ -101,5 +100,5 @@ export {
     createCodexAppServer,
     createCodexProvider,
 } from "./provider";
-export type { FileResolver } from "./utils/file-resolver";
-export { createLocalFileResolver } from "./utils/file-resolver";
+export type { FileWriter } from "./utils/file-resolver";
+export { LocalFileWriter, PromptFileResolver } from "./utils/file-resolver";

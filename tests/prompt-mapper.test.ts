@@ -3,7 +3,9 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { mapPromptToTurnInput, mapSystemPrompt, resolvePromptFiles } from "../src/protocol/prompt-mapper";
+import { mapPromptToTurnInput, mapSystemPrompt } from "../src/protocol/prompt-mapper";
+import type { FileWriter } from "../src/utils/file-resolver";
+import { PromptFileResolver } from "../src/utils/file-resolver";
 
 describe("mapPromptToTurnInput", () =>
 {
@@ -140,13 +142,14 @@ describe("mapPromptToTurnInput", () =>
     });
 });
 
-describe("resolvePromptFiles", () =>
+describe("PromptFileResolver", () =>
 {
     it("resolves inline text file to text part", async () =>
     {
+        const resolver = new PromptFileResolver();
         const base64Text = Buffer.from("file content here").toString("base64");
 
-        const { prompt } = await resolvePromptFiles([
+        const prompt = await resolver.resolve([
             {
                 role: "user",
                 content: [
@@ -163,14 +166,17 @@ describe("resolvePromptFiles", () =>
                 { type: "text", text: "file content here" },
             ]);
         }
+
+        await resolver.cleanup();
     });
 
     it("resolves inline image base64 to file: URL and cleans up", async () =>
     {
+        const resolver = new PromptFileResolver();
         // 1x1 red PNG pixel (base64)
         const base64Png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
-        const { prompt, cleanup } = await resolvePromptFiles([
+        const prompt = await resolver.resolve([
             {
                 role: "user",
                 content: [
@@ -193,7 +199,7 @@ describe("resolvePromptFiles", () =>
                 expect(path).toMatch(/codex-ai-sdk-.*\.png$/);
                 expect(existsSync(path)).toBe(true);
 
-                await cleanup();
+                await resolver.cleanup();
                 expect(existsSync(path)).toBe(false);
             }
         }
@@ -201,9 +207,10 @@ describe("resolvePromptFiles", () =>
 
     it("resolves inline image Uint8Array to file: URL and cleans up", async () =>
     {
+        const resolver = new PromptFileResolver();
         const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header
 
-        const { prompt, cleanup } = await resolvePromptFiles([
+        const prompt = await resolver.resolve([
             {
                 role: "user",
                 content: [
@@ -221,7 +228,7 @@ describe("resolvePromptFiles", () =>
                 const path = (part.data as URL).pathname;
                 expect(existsSync(path)).toBe(true);
 
-                await cleanup();
+                await resolver.cleanup();
                 expect(existsSync(path)).toBe(false);
             }
         }
@@ -229,6 +236,7 @@ describe("resolvePromptFiles", () =>
 
     it("passes through URL-based file parts unchanged", async () =>
     {
+        const resolver = new PromptFileResolver();
         const url = new URL("https://example.com/img.png");
         const original = [
             {
@@ -239,17 +247,19 @@ describe("resolvePromptFiles", () =>
             },
         ];
 
-        const { prompt } = await resolvePromptFiles(original);
+        const prompt = await resolver.resolve(original);
 
         // No inline data to resolve — should return the original prompt.
         expect(prompt).toBe(original);
+        await resolver.cleanup();
     });
 
     it("resolves mixed text file + image in fresh thread end-to-end", async () =>
     {
+        const resolver = new PromptFileResolver();
         const base64Text = Buffer.from("context from file").toString("base64");
 
-        const { prompt, cleanup } = await resolvePromptFiles([
+        const prompt = await resolver.resolve([
             {
                 role: "user",
                 content: [
@@ -267,38 +277,37 @@ describe("resolvePromptFiles", () =>
             { type: "image", url: "https://example.com/photo.jpg" },
         ]);
 
-        await cleanup();
+        await resolver.cleanup();
     });
 
-    it("accepts a custom FileResolver", async () =>
+    it("accepts a custom FileWriter", async () =>
     {
         const written: Array<{ data: Uint8Array | string; mediaType: string }> = [];
         let cleanedUp = false;
 
-        const customResolver = {
-            async write(data: Uint8Array | string, mediaType: string): Promise<URL>
+        const customWriter: FileWriter = {
+            async write(data, mediaType)
             {
                 written.push({ data, mediaType });
                 return new URL("https://my-bucket.s3.amazonaws.com/resolved-image.png");
             },
-            async cleanup(): Promise<void>
+            async cleanup()
             {
                 cleanedUp = true;
             },
         };
 
+        const resolver = new PromptFileResolver(customWriter);
         const base64Png = "iVBORw0KGgo=";
-        const { prompt, cleanup } = await resolvePromptFiles(
-            [
-                {
-                    role: "user",
-                    content: [
-                        { type: "file", mediaType: "image/png", data: base64Png },
-                    ],
-                },
-            ],
-            customResolver,
-        );
+
+        const prompt = await resolver.resolve([
+            {
+                role: "user",
+                content: [
+                    { type: "file", mediaType: "image/png", data: base64Png },
+                ],
+            },
+        ]);
 
         expect(written).toHaveLength(1);
         expect(written[0]!.mediaType).toBe("image/png");
@@ -309,7 +318,7 @@ describe("resolvePromptFiles", () =>
             { type: "image", url: "https://my-bucket.s3.amazonaws.com/resolved-image.png" },
         ]);
 
-        await cleanup();
+        await resolver.cleanup();
         expect(cleanedUp).toBe(true);
     });
 });
