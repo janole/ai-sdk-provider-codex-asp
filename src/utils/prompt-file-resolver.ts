@@ -8,8 +8,6 @@ import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/pro
 
 import type { CodexTurnInputItem, CodexTurnInputText } from "../protocol/types";
 
-// ── System prompt extraction ──
-
 /**
  * Extracts system messages from the prompt and concatenates them into a single
  * string suitable for `developerInstructions` on `thread/start` or
@@ -34,14 +32,10 @@ export function mapSystemPrompt(prompt: LanguageModelV3Prompt): string | undefin
     return chunks.length > 0 ? chunks.join("\n\n") : undefined;
 }
 
-// ── Helpers ──
-
 function textItem(text: string): CodexTurnInputText
 {
     return { type: "text", text, text_elements: [] };
 }
-
-// ── File writer interface ──
 
 /**
  * Pluggable backend for persisting inline binary data so that the Codex
@@ -63,8 +57,6 @@ export interface FileWriter
      */
     cleanup(urls: URL[]): Promise<void>;
 }
-
-// ── Local filesystem writer ──
 
 const MEDIA_TYPE_TO_EXT: Record<string, string> = {
     "image/png": ".png",
@@ -109,8 +101,6 @@ export class LocalFileWriter implements FileWriter
         );
     }
 }
-
-// ── Resolver class ──
 
 /**
  * Resolves inline binary data in AI SDK prompts and maps user content to
@@ -176,8 +166,6 @@ export class PromptFileResolver
             await this.writer.cleanup(urls);
         }
     }
-
-    // ── Private helpers ──
 
     /**
      * Convert a resolved image URL to a Codex input item.
