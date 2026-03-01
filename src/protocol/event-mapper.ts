@@ -94,6 +94,11 @@ export class CodexEventMapper
         this.turnId = turnId;
     }
 
+    getTurnId(): string | undefined
+    {
+        return this.turnId;
+    }
+
     private nextPlanSequence(turnId: string): number
     {
         const next = (this.planSequenceByTurnId.get(turnId) ?? 0) + 1;

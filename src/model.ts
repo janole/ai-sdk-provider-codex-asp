@@ -668,18 +668,15 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         client.onAnyNotification((method, params) =>
                         {
-                            if (method === "turn/started" && session)
-                            {
-                                const turnId = (params as { turn?: { id?: string }; turnId?: string })?.turn?.id
-                                    ?? (params as { turnId?: string })?.turnId;
-                                if (turnId)
-                                {
-                                    activeTurnId = turnId;
-                                    session.setTurnId(turnId);
-                                }
-                            }
-
                             const parts = mapper.map({ method, params });
+
+                            // Sync turnId from mapper after it processes turn/started
+                            const mappedTurnId = mapper.getTurnId();
+                            if (mappedTurnId && mappedTurnId !== activeTurnId)
+                            {
+                                activeTurnId = mappedTurnId;
+                                session?.setTurnId(mappedTurnId);
+                            }
 
                             for (const part of parts)
                             {
