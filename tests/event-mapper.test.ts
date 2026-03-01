@@ -23,7 +23,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -73,7 +73,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -144,7 +144,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -245,7 +245,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -316,7 +316,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -397,7 +397,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -466,7 +466,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
@@ -540,7 +540,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_1" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_1" } } },
             {
                 method: "turn/diff/updated",
                 params: {
@@ -584,7 +584,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_1" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_1" } } },
             {
                 method: "item/reasoning/summaryTextDelta",
                 params: {
@@ -647,7 +647,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_ar" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_ar" } } },
             {
                 method: "codex/event/agent_reasoning",
                 params: {
@@ -690,7 +690,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_fb" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_fb" } } },
             {
                 method: "item/started",
                 params: {
@@ -738,7 +738,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_plan" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_plan" } } },
             {
                 method: "turn/plan/updated",
                 params: {
@@ -841,7 +841,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper({ emitPlanUpdates: false });
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_plan2" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_plan2" } } },
             {
                 method: "turn/plan/updated",
                 params: {
@@ -878,7 +878,7 @@ describe("CodexEventMapper", () =>
         const mapper = new CodexEventMapper();
 
         const events = [
-            { method: "turn/started", params: { threadId: "thr", turnId: "turn_mcp" } },
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn_mcp" } } },
             {
                 method: "codex/event/mcp_tool_call_begin",
                 params: {

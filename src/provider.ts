@@ -105,6 +105,7 @@ export function createCodexAppServer(
         approvals: settings.approvals ? { ...settings.approvals } : undefined,
         debug: settings.debug ? { ...settings.debug } : undefined,
         emitPlanUpdates: settings.emitPlanUpdates,
+        onSessionCreated: settings.onSessionCreated,
     }));
 
     const createLanguageModel = (

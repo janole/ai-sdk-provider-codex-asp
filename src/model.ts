@@ -37,6 +37,7 @@ import type {
     CodexTurnStartResult,
 } from "./protocol/types";
 import type { CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
+import { CodexSessionImpl } from "./session";
 import { stripUndefined } from "./utils/object";
 import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
 
@@ -466,6 +467,7 @@ export class CodexLanguageModel implements LanguageModelV3
         }));
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
+        let session: CodexSessionImpl | undefined;
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
 
         const interruptTurnIfPossible = async () =>
@@ -497,6 +499,7 @@ export class CodexLanguageModel implements LanguageModelV3
                         return;
                     }
 
+                    session?.markInactive();
                     controller.enqueue({ type: "error", error });
                     closed = true;
 
@@ -518,6 +521,7 @@ export class CodexLanguageModel implements LanguageModelV3
                         return;
                     }
 
+                    session?.markInactive();
                     closed = true;
 
                     try
@@ -665,6 +669,14 @@ export class CodexLanguageModel implements LanguageModelV3
                         client.onAnyNotification((method, params) =>
                         {
                             const parts = mapper.map({ method, params });
+
+                            // Sync turnId from mapper after it processes turn/started
+                            const mappedTurnId = mapper.getTurnId();
+                            if (mappedTurnId && mappedTurnId !== activeTurnId)
+                            {
+                                activeTurnId = mappedTurnId;
+                                session?.setTurnId(mappedTurnId);
+                            }
 
                             for (const part of parts)
                             {
@@ -861,6 +873,14 @@ export class CodexLanguageModel implements LanguageModelV3
                         const turnStartResult = await client.request<TurnStartResultLike>("turn/start", turnStartParams);
 
                         activeTurnId = extractTurnId(turnStartResult);
+
+                        session = new CodexSessionImpl({
+                            client,
+                            threadId: activeThreadId,
+                            turnId: activeTurnId,
+                            interruptTimeoutMs,
+                        });
+                        this.config.providerSettings.onSessionCreated?.(session);
                     }
                     catch (error)
                     {
@@ -870,6 +890,8 @@ export class CodexLanguageModel implements LanguageModelV3
             },
             cancel: async () =>
             {
+                session?.markInactive();
+
                 try
                 {
                     await interruptTurnIfPossible();
