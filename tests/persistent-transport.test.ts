@@ -296,6 +296,30 @@ describe("PersistentTransport", () =>
         await expect(waitingAcquire).rejects.toThrow(/shut down/i);
     });
 
+    it("rejects queued acquire when abort signal fires", async () =>
+    {
+        const pool = new CodexWorkerPool({
+            poolSize: 1,
+            transportFactory: () => new ScriptedTransport(),
+        });
+
+        const t1 = new PersistentTransport({ pool });
+        await t1.connect();
+
+        const ac = new AbortController();
+        const t2 = new PersistentTransport({ pool, signal: ac.signal });
+        const waitingAcquire = t2.connect();
+
+        await Promise.resolve();
+
+        ac.abort();
+
+        await expect(waitingAcquire).rejects.toThrow(/abort/i);
+
+        await t1.disconnect();
+        await pool.shutdown();
+    });
+
     it("does not send initialized notification on subsequent calls", async () =>
     {
         const innerTransport = new ScriptedTransport();
