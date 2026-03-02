@@ -38,6 +38,7 @@ export class PersistentTransport implements CodexTransport
     async connect(): Promise<void>
     {
         this.worker = await this.pool.acquire(stripUndefined({ signal: this.signal }));
+        this.worker.clearSessionListeners();
         await this.worker.ensureConnected();
     }
 
