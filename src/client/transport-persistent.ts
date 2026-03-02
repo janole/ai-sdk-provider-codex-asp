@@ -13,12 +13,14 @@ import type { CodexWorkerPool } from "./worker-pool";
 export interface PersistentTransportSettings {
     pool: CodexWorkerPool;
     signal?: AbortSignal;
+    threadId?: string;
 }
 
 export class PersistentTransport implements CodexTransport
 {
     private readonly pool: CodexWorkerPool;
     private readonly signal: AbortSignal | undefined;
+    private readonly threadId: string | undefined;
     private worker: CodexWorker | null = null;
     private pendingInitializeId: string | number | null = null;
     private initializeIntercepted = false;
@@ -33,11 +35,12 @@ export class PersistentTransport implements CodexTransport
     {
         this.pool = settings.pool;
         this.signal = settings.signal;
+        this.threadId = settings.threadId;
     }
 
     async connect(): Promise<void>
     {
-        this.worker = await this.pool.acquire(stripUndefined({ signal: this.signal }));
+        this.worker = await this.pool.acquire(stripUndefined({ signal: this.signal, threadId: this.threadId }));
         await this.worker.ensureConnected();
     }
 

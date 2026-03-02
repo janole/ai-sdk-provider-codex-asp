@@ -26,10 +26,17 @@ export interface CodexProvider extends ProviderV3
     shutdown(): Promise<void>;
 }
 
+// Auto-release leaked pool handles when a provider is garbage-collected
+// without an explicit shutdown() call.  The handle's release() is
+// idempotent, so an explicit shutdown() followed by GC is harmless.
+const poolHandleCleanup = new FinalizationRegistry<PersistentPoolHandle>(
+    (handle) => { void handle.release().catch(() => { }); },
+);
+
 function createNoSuchModelError(
     modelId: string,
     modelType: "embeddingModel" | "imageModel",
-): NoSuchModelError 
+): NoSuchModelError
 {
     return new NoSuchModelError({ modelId, modelType });
 }
@@ -63,7 +70,8 @@ export function createCodexAppServer(
 
     const persistentPool = persistentPoolHandle?.pool ?? null;
     const effectiveTransportFactory = persistentPool
-        ? (signal?: AbortSignal) => new PersistentTransport(stripUndefined({ pool: persistentPool, signal }))
+        ? (signal?: AbortSignal, threadId?: string) =>
+            new PersistentTransport(stripUndefined({ pool: persistentPool, signal, threadId }))
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze(stripUndefined({
@@ -193,11 +201,17 @@ export function createCodexAppServer(
                 return;
             }
 
+            poolHandleCleanup.unregister(provider);
             const handle = persistentPoolHandle;
             persistentPoolHandle = null;
             await handle.release();
         },
     });
+
+    if (persistentPoolHandle)
+    {
+        poolHandleCleanup.register(provider, persistentPoolHandle, provider);
+    }
 
     return provider as CodexProvider;
 }

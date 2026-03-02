@@ -72,6 +72,7 @@ export class CodexWorker
 
     acquire(): void
     {
+        this.clearSessionListeners();
         if (this.idleTimer)
         {
             clearTimeout(this.idleTimer);
