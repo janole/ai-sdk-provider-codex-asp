@@ -426,8 +426,10 @@ export class CodexLanguageModel implements LanguageModelV3
 
     doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
+        const resumeThreadId = extractResumeThreadId(options.prompt);
+
         const transport = this.config.providerSettings.transportFactory
-            ? this.config.providerSettings.transportFactory(options.abortSignal)
+            ? this.config.providerSettings.transportFactory(options.abortSignal, resumeThreadId)
             : this.config.providerSettings.transport?.type === "websocket"
                 ? new WebSocketTransport(this.config.providerSettings.transport.websocket)
                 : new StdioTransport(this.config.providerSettings.transport?.stdio);
@@ -757,7 +759,6 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         debugLog?.("inbound", "prompt", options.prompt);
 
-                        const resumeThreadId = extractResumeThreadId(options.prompt);
                         debugLog?.("inbound", "extractResumeThreadId", { resumeThreadId });
 
                         const developerInstructions = mapSystemPrompt(options.prompt);
