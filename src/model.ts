@@ -18,7 +18,7 @@ import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
-import { CodexEventMapper, extractNotificationThreadId } from "./protocol/event-mapper";
+import { CodexEventMapper } from "./protocol/event-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -604,17 +604,6 @@ export class CodexLanguageModel implements LanguageModelV3
 
                             client.onAnyNotification((method, params) =>
                             {
-                                const notifThreadId = extractNotificationThreadId(params);
-                                if (notifThreadId && notifThreadId !== pendingToolCall.threadId)
-                                {
-                                    debugLog?.("inbound", "threadId-mismatch:cross-call", {
-                                        expected: pendingToolCall.threadId,
-                                        received: notifThreadId,
-                                        method,
-                                    });
-                                    return;
-                                }
-
                                 const parts = mapper.map({ method, params });
                                 for (const part of parts)
                                 {
@@ -683,17 +672,6 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         client.onAnyNotification((method, params) =>
                         {
-                            const notifThreadId = extractNotificationThreadId(params);
-                            if (notifThreadId && activeThreadId && notifThreadId !== activeThreadId)
-                            {
-                                debugLog?.("inbound", "threadId-mismatch", {
-                                    expected: activeThreadId,
-                                    received: notifThreadId,
-                                    method,
-                                });
-                                return;
-                            }
-
                             const parts = mapper.map({ method, params });
 
                             // Sync turnId from mapper after it processes turn/started
