@@ -88,9 +88,16 @@ export class CodexWorkerPool
 
     release(worker: CodexWorker): void
     {
+        // Always clear session listeners from the previous session before
+        // reuse, even during direct FIFO handoff.  Without this, stale
+        // listeners can leak onto the underlying transport when the
+        // higher-level disconnect path didn't (or couldn't) clean up.
+        worker.clearSessionListeners();
+
         // An aborted waiter can never appear here: the abort handler
         // synchronously removes it from the queue via removeWaiter(),
         // so shift() will only ever return live (non-aborted) waiters.
+
         const waiter = this.waiters.shift();
         if (waiter)
         {
