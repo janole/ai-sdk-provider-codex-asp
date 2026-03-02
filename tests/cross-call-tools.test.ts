@@ -6,6 +6,7 @@ import { PersistentTransport } from "../src/client/transport-persistent";
 import { CodexWorkerPool } from "../src/client/worker-pool";
 import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
+import { stripUndefined } from "../src/utils/object";
 import { MockTransport } from "./helpers/mock-transport";
 
 /**
@@ -232,7 +233,8 @@ function createPersistentProvider(innerTransport: MockTransport)
     return {
         pool,
         provider: createCodexAppServer({
-            transportFactory: () => new PersistentTransport({ pool }),
+            transportFactory: (signal?: AbortSignal, threadId?: string) =>
+                new PersistentTransport(stripUndefined({ pool, signal, threadId })),
             clientInfo: { name: "test", version: "1.0.0" },
         }),
     };
