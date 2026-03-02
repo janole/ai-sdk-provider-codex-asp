@@ -70,7 +70,8 @@ export function createCodexAppServer(
 
     const persistentPool = persistentPoolHandle?.pool ?? null;
     const effectiveTransportFactory = persistentPool
-        ? (signal?: AbortSignal) => new PersistentTransport(stripUndefined({ pool: persistentPool, signal }))
+        ? (signal?: AbortSignal, threadId?: string) =>
+            new PersistentTransport(stripUndefined({ pool: persistentPool, signal, threadId }))
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze(stripUndefined({
