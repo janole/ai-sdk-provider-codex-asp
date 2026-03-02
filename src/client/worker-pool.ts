@@ -11,11 +11,13 @@ export interface CodexWorkerPoolSettings
 
 interface AcquireOptions
 {
+    threadId?: string;
     signal?: AbortSignal;
 }
 
 interface AcquireWaiter
 {
+    threadId: string | undefined;
     resolve: (worker: CodexWorker) => void;
     reject: (error: Error) => void;
     signal: AbortSignal | undefined;
@@ -48,8 +50,25 @@ export class CodexWorkerPool
             throw new CodexProviderError("Worker pool has been shut down.");
         }
 
+        // 1. Exact match: worker reserved for this thread's pending tool call
+        if (options?.threadId)
+        {
+            const reserved = this.workers.find(
+                (w) => (w.state === "idle" || w.state === "disconnected")
+                    && w.pendingToolCall?.threadId === options.threadId,
+            );
+
+            if (reserved)
+            {
+                reserved.acquire();
+                return reserved;
+            }
+        }
+
+        // 2. Any unreserved worker (no pending tool call from another thread)
         const worker = this.workers.find(
-            (w) => w.state === "idle" || w.state === "disconnected",
+            (w) => (w.state === "idle" || w.state === "disconnected")
+                && !w.pendingToolCall,
         );
 
         if (!worker)
@@ -62,6 +81,7 @@ export class CodexWorkerPool
             return new Promise<CodexWorker>((resolve, reject) =>
             {
                 const waiter: AcquireWaiter = {
+                    threadId: options?.threadId,
                     resolve,
                     reject,
                     signal: options?.signal,
@@ -98,6 +118,20 @@ export class CodexWorkerPool
         // synchronously removes it from the queue via removeWaiter(),
         // so shift() will only ever return live (non-aborted) waiters.
 
+        // Try to match a waiter that needs this specific worker's pending tool call
+        if (worker.pendingToolCall)
+        {
+            const idx = this.waiters.findIndex(w => w.threadId === worker.pendingToolCall?.threadId);
+            if (idx >= 0)
+            {
+                const [waiter] = this.waiters.splice(idx, 1);
+                this.clearWaiterAbortHandler(waiter!);
+                waiter!.resolve(worker);
+                return;
+            }
+        }
+
+        // Otherwise: existing FIFO behavior
         const waiter = this.waiters.shift();
         if (waiter)
         {
