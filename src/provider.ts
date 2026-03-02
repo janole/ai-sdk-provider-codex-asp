@@ -30,7 +30,7 @@ export interface CodexProvider extends ProviderV3
 // without an explicit shutdown() call.  The handle's release() is
 // idempotent, so an explicit shutdown() followed by GC is harmless.
 const poolHandleCleanup = new FinalizationRegistry<PersistentPoolHandle>(
-    (handle) => { void handle.release(); },
+    (handle) => { void handle.release().catch(() => { }); },
 );
 
 function createNoSuchModelError(
