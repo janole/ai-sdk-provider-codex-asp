@@ -465,9 +465,11 @@ export class CodexLanguageModel implements LanguageModelV3
         const mapper = new CodexEventMapper(stripUndefined({
             emitPlanUpdates: this.config.providerSettings.emitPlanUpdates,
         }));
+
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
         let session: CodexSessionImpl | undefined;
+
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
 
         const interruptTurnIfPossible = async () =>
