@@ -64,6 +64,21 @@ export interface CodexEventMapperOptions
     emitPlanUpdates?: boolean;
 }
 
+/**
+ * Extract threadId from notification params. All codex protocol notifications
+ * include threadId as a top-level field. Returns undefined for notifications
+ * that don't carry a threadId (e.g. codex/event/* wrappers, account events).
+ */
+export function extractNotificationThreadId(params: unknown): string | undefined
+{
+    if (params && typeof params === "object" && "threadId" in params)
+    {
+        const val = (params as Record<string, unknown>)["threadId"];
+        return typeof val === "string" ? val : undefined;
+    }
+    return undefined;
+}
+
 export class CodexEventMapper
 {
     private readonly options: Required<CodexEventMapperOptions>;
