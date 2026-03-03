@@ -36,7 +36,8 @@ export type {
     DynamicToolsDispatcherSettings,
 } from "./dynamic-tools";
 export { DynamicToolsDispatcher } from "./dynamic-tools";
-export {
+export
+{
     CodexNotImplementedError,
     CodexProviderError,
 } from "./errors";
@@ -96,14 +97,14 @@ export type {
     CodexProviderSettings,
     McpServerConfig,
 } from "./provider";
-export {
+export
+{
     codexAppServer,
     createCodexAppServer,
     createCodexProvider,
 } from "./provider";
 export type { TransportContext } from "./provider-settings";
 export type { CodexSession } from "./session";
-export { StreamSession } from "./stream-session";
 export type { FileWriter } from "./utils/prompt-file-resolver";
 export { mapSystemPrompt } from "./utils/prompt-file-resolver";
 export { LocalFileWriter, PromptFileResolver } from "./utils/prompt-file-resolver";
