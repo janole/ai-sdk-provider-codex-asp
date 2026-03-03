@@ -39,8 +39,6 @@ import { CodexSessionImpl } from "./session";
 import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
 
-// ── Helpers (stream-only, moved from model.ts) ──────────────────────────
-
 interface ThreadStartResultLike extends CodexThreadStartResult
 {
     thread?: {
@@ -191,8 +189,6 @@ function sdkToolsToCodexDynamicTools(
             inputSchema: t.inputSchema as Record<string, unknown>,
         }));
 }
-
-// ── StreamSession ────────────────────────────────────────────────────────
 
 export class StreamSession
 {
