@@ -141,10 +141,7 @@ export class PromptFileResolver
      *   When false (fresh thread) all user text is accumulated with images
      *   flushing the text buffer to preserve ordering.
      */
-    async resolve(
-        prompt: LanguageModelV3Prompt,
-        isResume: boolean = false,
-    ): Promise<CodexTurnInputItem[]>
+    async resolve(prompt: LanguageModelV3Prompt, isResume: boolean = false): Promise<CodexTurnInputItem[]>
     {
         if (isResume)
         {
@@ -190,9 +187,7 @@ export class PromptFileResolver
      * convert to a Codex input item.  Text files are decoded and returned
      * as text items.  Returns `null` for unsupported media types.
      */
-    private async resolveFilePart(
-        part: LanguageModelV3FilePart,
-    ): Promise<CodexTurnInputItem | null>
+    private async resolveFilePart(part: LanguageModelV3FilePart): Promise<CodexTurnInputItem | null>
     {
         const { mediaType, data } = part;
 
@@ -232,9 +227,7 @@ export class PromptFileResolver
     /**
      * Resume path: extract parts from the last user message individually.
      */
-    private async resolveResumed(
-        prompt: LanguageModelV3Prompt,
-    ): Promise<CodexTurnInputItem[]>
+    private async resolveResumed(prompt: LanguageModelV3Prompt): Promise<CodexTurnInputItem[]>
     {
         for (let i = prompt.length - 1; i >= 0; i--)
         {
@@ -275,9 +268,7 @@ export class PromptFileResolver
      * Fresh thread path: accumulate text chunks across all user messages,
      * flushing before each image to preserve ordering.
      */
-    private async resolveFresh(
-        prompt: LanguageModelV3Prompt,
-    ): Promise<CodexTurnInputItem[]>
+    private async resolveFresh(prompt: LanguageModelV3Prompt): Promise<CodexTurnInputItem[]>
     {
         const items: CodexTurnInputItem[] = [];
         const textChunks: string[] = [];
