@@ -11,13 +11,18 @@ import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport } from "./client/transport-stdio";
 import { WebSocketTransport } from "./client/transport-websocket";
 import { DynamicToolsDispatcher } from "./dynamic-tools";
-import { CodexProviderError } from "./errors";
 import type { CodexModelConfig } from "./model";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
+import {
+    extractResumeThreadId,
+    extractThreadId,
+    extractToolResults,
+    extractTurnId,
+} from "./protocol/extractors";
+import { withProviderMetadata } from "./protocol/provider-metadata";
 import type {
     CodexInitializeParams,
     CodexInitializeResult,
@@ -28,7 +33,6 @@ import type {
     CodexThreadStartResult,
     CodexToolCallRequestParams,
     CodexToolCallResult,
-    CodexToolResultContentItem,
     CodexTurnInterruptParams,
     CodexTurnInterruptResult,
     CodexTurnStartParams,
@@ -38,144 +42,6 @@ import type { CodexCompactionOnResumeContext } from "./provider-settings";
 import { CodexSessionImpl } from "./session";
 import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
-
-interface ThreadStartResultLike extends CodexThreadStartResult
-{
-    thread?: {
-        id?: string;
-    };
-}
-
-interface TurnStartResultLike extends CodexTurnStartResult
-{
-    turn?: {
-        id?: string;
-    };
-}
-
-function extractThreadId(result: ThreadStartResultLike): string
-{
-    const threadId = result.threadId ?? result.thread?.id;
-    if (!threadId)
-    {
-        throw new CodexProviderError("thread/start response does not include a thread id.");
-    }
-    return threadId;
-}
-
-function extractTurnId(result: TurnStartResultLike): string
-{
-    const turnId = result.turnId ?? result.turn?.id;
-    if (!turnId)
-    {
-        throw new CodexProviderError("turn/start response does not include a turn id.");
-    }
-    return turnId;
-}
-
-function extractThreadIdFromProviderOptions(
-    providerOptions: Record<string, unknown> | undefined,
-): string | undefined
-{
-    const meta = providerOptions?.[CODEX_PROVIDER_ID];
-    if (meta && typeof meta === "object" && "threadId" in meta && typeof (meta as Record<string, unknown>)["threadId"] === "string")
-    {
-        return (meta as Record<string, unknown>)["threadId"] as string;
-    }
-    return undefined;
-}
-
-function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): string | undefined
-{
-    for (let i = prompt.length - 1; i >= 0; i--)
-    {
-        const message = prompt[i];
-        if (message?.role === "assistant")
-        {
-            // Check message-level providerOptions
-            const messageThreadId = extractThreadIdFromProviderOptions(
-                message.providerOptions as Record<string, unknown> | undefined,
-            );
-            if (messageThreadId)
-            {
-                return messageThreadId;
-            }
-
-            // Check content-part-level providerOptions
-            if (Array.isArray(message.content))
-            {
-                for (const part of message.content)
-                {
-                    const partThreadId = extractThreadIdFromProviderOptions(
-                        (part as { providerOptions?: Record<string, unknown> }).providerOptions,
-                    );
-                    if (partThreadId)
-                    {
-                        return partThreadId;
-                    }
-                }
-            }
-        }
-    }
-    return undefined;
-}
-
-function extractToolResults(
-    prompt: LanguageModelV3CallOptions["prompt"],
-    callId?: string,
-): CodexToolCallResult | undefined
-{
-    for (let i = prompt.length - 1; i >= 0; i--)
-    {
-        const message = prompt[i];
-        if (message?.role === "tool")
-        {
-            const contentItems: CodexToolResultContentItem[] = [];
-            let success = true;
-
-            for (const part of message.content)
-            {
-                if (part.type === "tool-result")
-                {
-                    if (callId && part.toolCallId !== callId)
-                    {
-                        continue;
-                    }
-
-                    if (part.output.type === "text")
-                    {
-                        contentItems.push({ type: "inputText", text: part.output.value });
-                    }
-                    else if (part.output.type === "json")
-                    {
-                        contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
-                    }
-                    else if (part.output.type === "execution-denied")
-                    {
-                        success = false;
-                        contentItems.push({
-                            type: "inputText",
-                            text: part.output.reason ?? "Tool execution was denied.",
-                        });
-                    }
-                }
-            }
-
-            if (contentItems.length > 0)
-            {
-                return { success, contentItems };
-            }
-
-            if (callId)
-            {
-                // A matching callId was requested, so don't consume unrelated
-                // tool results from older prompt entries.
-                return undefined;
-            }
-        }
-    }
-    return undefined;
-}
 
 function sdkToolsToCodexDynamicTools(
     tools: NonNullable<LanguageModelV3CallOptions["tools"]>,
@@ -651,7 +517,7 @@ export class StreamSession
                 sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
             });
             this.debugLog?.("outbound", "thread/start", threadStartParams);
-            const threadStartResult = await this.client.request<ThreadStartResultLike>(
+            const threadStartResult = await this.client.request<CodexThreadStartResult & { thread?: { id?: string } }>(
                 "thread/start",
                 threadStartParams,
             );
@@ -687,7 +553,7 @@ export class StreamSession
 
         this.debugLog?.("outbound", "turn/start", turnStartParams);
 
-        const turnStartResult = await this.client.request<TurnStartResultLike>("turn/start", turnStartParams);
+        const turnStartResult = await this.client.request<CodexTurnStartResult & { turn?: { id?: string } }>("turn/start", turnStartParams);
 
         this.activeTurnId = extractTurnId(turnStartResult);
 
