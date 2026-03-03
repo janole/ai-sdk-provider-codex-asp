@@ -6,7 +6,6 @@ import type {
 
 import { ApprovalsDispatcher } from "./approvals";
 import { AppServerClient } from "./client/app-server-client";
-import type { CodexTransport } from "./client/transport";
 import { PersistentTransport } from "./client/transport-persistent";
 import { StdioTransport } from "./client/transport-stdio";
 import { WebSocketTransport } from "./client/transport-websocket";
@@ -56,175 +55,78 @@ function sdkToolsToCodexDynamicTools(
         }));
 }
 
-export class StreamSession
+export function createStreamSession(
+    config: CodexModelConfig,
+    modelId: string,
+    options: LanguageModelV3CallOptions,
+): Promise<LanguageModelV3StreamResult>
 {
-    private readonly config: CodexModelConfig;
-    private readonly modelId: string;
-    private readonly options: LanguageModelV3CallOptions;
+    const resumeThreadId = extractResumeThreadId(options.prompt);
 
-    private activeThreadId: string | undefined;
-    private activeTurnId: string | undefined;
-    private session: CodexSessionImpl | undefined;
-    private closed = false;
+    const transport = config.providerSettings.transportFactory
+        ? config.providerSettings.transportFactory(stripUndefined({ signal: options.abortSignal, threadId: resumeThreadId }))
+        : config.providerSettings.transport?.type === "websocket"
+            ? new WebSocketTransport(config.providerSettings.transport.websocket)
+            : new StdioTransport(config.providerSettings.transport?.stdio);
 
-    private readonly transport: CodexTransport;
-    private readonly client: AppServerClient;
-    private readonly mapper: CodexEventMapper;
-    private readonly fileResolver: PromptFileResolver;
-    private readonly resumeThreadId: string | undefined;
-    private readonly interruptTimeoutMs: number;
-
-    private readonly debugLog: ((direction: "inbound" | "outbound", label: string, data?: unknown) => void) | undefined;
-    private readonly toolLogger: ((event: { event: string; data?: unknown }) => void) | undefined;
-
-    constructor(config: CodexModelConfig, modelId: string, options: LanguageModelV3CallOptions)
-    {
-        this.config = config;
-        this.modelId = modelId;
-        this.options = options;
-
-        this.resumeThreadId = extractResumeThreadId(options.prompt);
-
-        this.transport = config.providerSettings.transportFactory
-            ? config.providerSettings.transportFactory(stripUndefined({ signal: options.abortSignal, threadId: this.resumeThreadId }))
-            : config.providerSettings.transport?.type === "websocket"
-                ? new WebSocketTransport(config.providerSettings.transport.websocket)
-                : new StdioTransport(config.providerSettings.transport?.stdio);
-
-        const packetLogger = config.providerSettings.debug?.logPackets === true
-            ? config.providerSettings.debug.logger
-            ?? ((packet: { direction: "inbound" | "outbound"; message: unknown }) =>
+    const packetLogger = config.providerSettings.debug?.logPackets === true
+        ? config.providerSettings.debug.logger
+        ?? ((packet: { direction: "inbound" | "outbound"; message: unknown }) =>
+        {
+            if (packet.direction === "inbound")
             {
-                if (packet.direction === "inbound")
-                {
-                    console.debug("[codex packet]", packet.message);
-                }
-            })
-            : undefined;
-
-        this.toolLogger = config.providerSettings.debug?.logToolCalls === true
-            ? config.providerSettings.debug.toolLogger
-            ?? ((event: { event: string; data?: unknown }) =>
-            {
-                console.debug("[codex tool]", event.event, event.data);
-            })
-            : undefined;
-
-        this.debugLog = packetLogger
-            ? (direction: "inbound" | "outbound", label: string, data?: unknown) =>
-            {
-                packetLogger({ direction, message: { debug: label, data } });
+                console.debug("[codex packet]", packet.message);
             }
-            : undefined;
+        })
+        : undefined;
 
-        this.client = new AppServerClient(this.transport, stripUndefined({
-            onPacket: packetLogger,
-        }));
+    const toolLogger = config.providerSettings.debug?.logToolCalls === true
+        ? config.providerSettings.debug.toolLogger
+        ?? ((event: { event: string; data?: unknown }) =>
+        {
+            console.debug("[codex tool]", event.event, event.data);
+        })
+        : undefined;
 
-        this.mapper = new CodexEventMapper(stripUndefined({
-            emitPlanUpdates: config.providerSettings.emitPlanUpdates,
-        }));
+    const debugLog = packetLogger
+        ? (direction: "inbound" | "outbound", label: string, data?: unknown) =>
+        {
+            packetLogger({ direction, message: { debug: label, data } });
+        }
+        : undefined;
 
-        this.fileResolver = new PromptFileResolver();
-        this.interruptTimeoutMs = config.providerSettings.interruptTimeoutMs ?? 10_000;
-    }
+    const client = new AppServerClient(transport, stripUndefined({
+        onPacket: packetLogger,
+    }));
 
-    execute(): Promise<LanguageModelV3StreamResult>
-    {
-        const stream = new ReadableStream<LanguageModelV3StreamPart>({
-            start: (controller) =>
-            {
-                const abortHandler = () =>
-                {
-                    void (async () =>
-                    {
-                        try
-                        {
-                            await this.interruptTurnIfPossible();
-                        }
-                        catch
-                        {
-                            // Best-effort only: always close/disconnect even if interrupt fails.
-                        }
+    const mapper = new CodexEventMapper(stripUndefined({
+        emitPlanUpdates: config.providerSettings.emitPlanUpdates,
+    }));
 
-                        await this.close(controller, new DOMException("Aborted", "AbortError"));
-                    })();
-                };
+    const fileResolver = new PromptFileResolver();
+    const interruptTimeoutMs = config.providerSettings.interruptTimeoutMs ?? 10_000;
 
-                if (this.options.abortSignal)
-                {
-                    if (this.options.abortSignal.aborted)
-                    {
-                        abortHandler();
-                        return;
-                    }
-                    this.options.abortSignal.addEventListener("abort", abortHandler, { once: true });
-                }
+    let activeThreadId: string | undefined;
+    let activeTurnId: string | undefined;
+    let session: CodexSessionImpl | undefined;
+    let closed = false;
 
-                void (async () =>
-                {
-                    try
-                    {
-                        await this.client.connect();
-
-                        // ── Tool-result continuation (cross-call) ──
-                        const persistentTransport = this.transport instanceof PersistentTransport
-                            ? this.transport
-                            : null;
-                        const pendingToolCall = persistentTransport?.getPendingToolCall() ?? null;
-
-                        if (pendingToolCall && persistentTransport)
-                        {
-                            await this.runCrossCallResume(controller, persistentTransport, pendingToolCall);
-                        }
-                        else
-                        {
-                            await this.runFreshThread(controller, persistentTransport);
-                        }
-                    }
-                    catch (error)
-                    {
-                        await this.close(controller, error);
-                    }
-                })();
-            },
-            cancel: async () =>
-            {
-                this.session?.markInactive();
-
-                try
-                {
-                    await this.interruptTurnIfPossible();
-                }
-                catch
-                {
-                    // Best-effort only: always disconnect to release resources.
-                }
-                await Promise.all([this.fileResolver.cleanup(), this.client.disconnect()]);
-            },
-        });
-
-        return Promise.resolve({ stream });
-    }
-
-    // ── Private lifecycle methods ────────────────────────────────────────
-
-    private async close(
+    const close = async (
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
         error?: unknown,
-    ): Promise<void>
+    ): Promise<void> =>
     {
-        if (this.closed)
+        if (closed)
         {
             return;
         }
 
-        this.session?.markInactive();
+        session?.markInactive();
         if (error !== undefined)
         {
             controller.enqueue({ type: "error", error });
         }
-        this.closed = true;
+        closed = true;
 
         try
         {
@@ -232,50 +134,50 @@ export class StreamSession
         }
         finally
         {
-            await Promise.all([this.fileResolver.cleanup(), this.client.disconnect()]);
+            await Promise.all([fileResolver.cleanup(), client.disconnect()]);
         }
-    }
+    };
 
-    private async interruptTurnIfPossible(): Promise<void>
+    const interruptTurnIfPossible = async (): Promise<void> =>
     {
-        if (!this.activeThreadId || !this.activeTurnId)
+        if (!activeThreadId || !activeTurnId)
         {
             return;
         }
 
         const interruptParams: CodexTurnInterruptParams = {
-            threadId: this.activeThreadId,
-            turnId: this.activeTurnId,
+            threadId: activeThreadId,
+            turnId: activeTurnId,
         };
-        this.debugLog?.("outbound", "turn/interrupt", interruptParams);
-        await this.client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, this.interruptTimeoutMs);
-    }
+        debugLog?.("outbound", "turn/interrupt", interruptParams);
+        await client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, interruptTimeoutMs);
+    };
 
-    private attachApprovals(): void
+    const attachApprovals = (): void =>
     {
         const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
-            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
-            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
+            onCommandApproval: config.providerSettings.approvals?.onCommandApproval,
+            onFileChangeApproval: config.providerSettings.approvals?.onFileChangeApproval,
         }));
-        approvalsDispatcher.attach(this.client);
-    }
+        approvalsDispatcher.attach(client);
+    };
 
-    private attachNotificationHandler(
+    const attachNotificationHandler = (
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
         syncTurnId: boolean,
-    ): void
+    ): void =>
     {
-        this.client.onAnyNotification((method, params) =>
+        client.onAnyNotification((method, params) =>
         {
-            const parts = this.mapper.map({ method, params });
+            const parts = mapper.map({ method, params });
 
             if (syncTurnId)
             {
-                const mappedTurnId = this.mapper.getTurnId();
-                if (mappedTurnId && mappedTurnId !== this.activeTurnId)
+                const mappedTurnId = mapper.getTurnId();
+                if (mappedTurnId && mappedTurnId !== activeTurnId)
                 {
-                    this.activeTurnId = mappedTurnId;
-                    this.session?.setTurnId(mappedTurnId);
+                    activeTurnId = mappedTurnId;
+                    session?.setTurnId(mappedTurnId);
                 }
             }
 
@@ -284,297 +186,19 @@ export class StreamSession
                 controller.enqueue(part);
                 if (part.type === "finish")
                 {
-                    void this.close(controller);
+                    void close(controller);
                 }
             }
         });
-    }
+    };
 
-    // ── Cross-call resume flow ───────────────────────────────────────────
-
-    private async runCrossCallResume(
-        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
-        persistentTransport: PersistentTransport,
-        pendingToolCall: NonNullable<ReturnType<PersistentTransport["getPendingToolCall"]>>,
-    ): Promise<void>
-    {
-        this.toolLogger?.({
-            event: "cross-call-resume",
-            data: {
-                threadId: pendingToolCall.threadId,
-                callId: pendingToolCall.callId,
-                toolName: pendingToolCall.toolName,
-            },
-        });
-        const toolResult = extractToolResults(this.options.prompt, pendingToolCall.callId);
-        this.toolLogger?.({
-            event: "cross-call-result-extracted",
-            data: {
-                callId: pendingToolCall.callId,
-                found: !!toolResult,
-                success: toolResult?.success,
-                contentItemsCount: toolResult?.contentItems.length ?? 0,
-            },
-        });
-        this.mapper.setThreadId(pendingToolCall.threadId);
-
-        this.attachNotificationHandler(controller, false);
-
-        // Register cross-call handler again for chained tool calls
-        this.registerCrossCallToolHandler(
-            controller, persistentTransport,
-            pendingToolCall.threadId,
-        );
-
-        this.attachApprovals();
-
-        const result = toolResult ?? {
-            success: false,
-            contentItems: [{
-                type: "inputText",
-                text: `Missing tool result for pending callId "${pendingToolCall.callId}".`,
-            }],
-        };
-
-        await persistentTransport.respondToToolCall(result);
-
-        this.toolLogger?.({
-            event: "cross-call-result-sent",
-            data: {
-                callId: pendingToolCall.callId,
-                found: !!toolResult,
-                success: result.success,
-                contentItemsCount: result.contentItems.length ?? 0,
-            },
-        });
-    }
-
-    // ── Normal (fresh thread) flow ───────────────────────────────────────
-
-    private async runFreshThread(
-        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
-        persistentTransport: PersistentTransport | null,
-    ): Promise<void>
-    {
-        const dynamicToolsEnabled =
-            this.config.providerSettings.experimentalApi === true;
-        if (dynamicToolsEnabled)
-        {
-            const dispatcher = new DynamicToolsDispatcher(stripUndefined({
-                tools: this.config.providerSettings.tools,
-                handlers: this.config.providerSettings.toolHandlers,
-                timeoutMs: this.config.providerSettings.toolTimeoutMs,
-                onDebugEvent: this.toolLogger,
-            }));
-            dispatcher.attach(this.client);
-        }
-
-        this.attachApprovals();
-
-        this.attachNotificationHandler(controller, true);
-
-        // Merge provider-level tools with SDK tools from options
-        const providerToolDefs = this.config.providerSettings.tools;
-        const providerDynamicTools = providerToolDefs
-            ? Object.entries(providerToolDefs).map(([name, def]) => ({
-                name,
-                description: def.description,
-                inputSchema: def.inputSchema,
-            }))
-            : [];
-
-        const sdkDynamicTools = this.options.tools
-            ? sdkToolsToCodexDynamicTools(this.options.tools)
-            : [];
-
-        const allDynamicTools = [...providerDynamicTools, ...sdkDynamicTools];
-        const dynamicTools = allDynamicTools.length > 0 ? allDynamicTools : undefined;
-        this.toolLogger?.({
-            event: "dynamic-tools-advertised",
-            data: {
-                providerTools: providerDynamicTools.map((t) => t.name),
-                sdkTools: sdkDynamicTools.map((t) => t.name),
-                total: allDynamicTools.length,
-            },
-        });
-
-        const hasSdkTools = sdkDynamicTools.length > 0;
-
-        // Auto-enable experimentalApi when any dynamic tools are present
-        const needsExperimentalApi =
-            this.config.providerSettings.experimentalApi === true || dynamicTools !== undefined;
-
-        const initializeParams: CodexInitializeParams = stripUndefined({
-            clientInfo: this.config.providerSettings.clientInfo ?? {
-                name: PACKAGE_NAME,
-                version: PACKAGE_VERSION,
-            },
-            capabilities: needsExperimentalApi ? { experimentalApi: true } : undefined,
-        });
-
-        await this.client.request<CodexInitializeResult>("initialize", initializeParams);
-        await this.client.notification("initialized");
-
-        this.debugLog?.("inbound", "prompt", this.options.prompt);
-
-        this.debugLog?.("inbound", "extractResumeThreadId", { resumeThreadId: this.resumeThreadId });
-
-        const developerInstructions = mapSystemPrompt(this.options.prompt);
-
-        let threadId: string;
-
-        if (this.resumeThreadId)
-        {
-            const resumeParams: CodexThreadResumeParams = stripUndefined({
-                threadId: this.resumeThreadId,
-                persistExtendedHistory: false,
-                developerInstructions,
-            });
-            this.debugLog?.("outbound", "thread/resume", resumeParams);
-            const resumeResult = await this.client.request<ThreadResumeResponse>(
-                "thread/resume",
-                resumeParams,
-            );
-            threadId = resumeResult.thread.id;
-
-            const strictCompaction = this.config.providerSettings.compaction?.strict === true;
-            const shouldCompactOnResume = this.config.providerSettings.compaction?.shouldCompactOnResume;
-            let shouldCompact = false;
-
-            if (typeof shouldCompactOnResume === "boolean")
-            {
-                shouldCompact = shouldCompactOnResume;
-            }
-            else if (typeof shouldCompactOnResume === "function")
-            {
-                const compactionContext: CodexCompactionOnResumeContext = {
-                    threadId,
-                    resumeThreadId: this.resumeThreadId,
-                    resumeResult,
-                    prompt: this.options.prompt,
-                };
-
-                try
-                {
-                    shouldCompact = await shouldCompactOnResume(compactionContext);
-                }
-                catch (error)
-                {
-                    this.debugLog?.("inbound", "thread/compact/start:decision-error", {
-                        message: error instanceof Error ? error.message : String(error),
-                    });
-
-                    if (strictCompaction)
-                    {
-                        throw error;
-                    }
-                }
-            }
-
-            if (shouldCompact)
-            {
-                const compactParams: CodexThreadCompactStartParams = { threadId };
-                this.debugLog?.("outbound", "thread/compact/start", compactParams);
-                if (strictCompaction)
-                {
-                    await this.client.request<CodexThreadCompactStartResult>(
-                        "thread/compact/start",
-                        compactParams,
-                    );
-                }
-                else
-                {
-                    try
-                    {
-                        await this.client.request<CodexThreadCompactStartResult>(
-                            "thread/compact/start",
-                            compactParams,
-                        );
-                    }
-                    catch (error)
-                    {
-                        this.debugLog?.("inbound", "thread/compact/start:error", {
-                            message: error instanceof Error ? error.message : String(error),
-                        });
-                    }
-                }
-            }
-        }
-        else
-        {
-            const mcpServers = this.config.providerSettings.mcpServers;
-            const config = mcpServers
-                ? { mcp_servers: mcpServers } as CodexThreadStartParams["config"]
-                : undefined;
-
-            const threadStartParams: CodexThreadStartParams = stripUndefined({
-                model: this.config.providerSettings.defaultModel ?? this.modelId,
-                dynamicTools,
-                developerInstructions,
-                config,
-                cwd: this.config.providerSettings.defaultThreadSettings?.cwd,
-                approvalPolicy: this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
-                sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
-            });
-            this.debugLog?.("outbound", "thread/start", threadStartParams);
-            const threadStartResult = await this.client.request<CodexThreadStartResult & { thread?: { id?: string } }>(
-                "thread/start",
-                threadStartParams,
-            );
-            threadId = extractThreadId(threadStartResult);
-        }
-
-        this.activeThreadId = threadId;
-        this.mapper.setThreadId(threadId);
-
-        // Register cross-call tool handler for SDK tools
-        if (hasSdkTools && persistentTransport)
-        {
-            this.registerCrossCallToolHandler(
-                controller, persistentTransport,
-                threadId,
-            );
-        }
-
-        const turnInput = await this.fileResolver.resolve(this.options.prompt, !!this.resumeThreadId);
-        const turnStartParams: CodexTurnStartParams = stripUndefined({
-            threadId,
-            input: turnInput,
-            cwd: this.config.providerSettings.defaultTurnSettings?.cwd,
-            approvalPolicy: this.config.providerSettings.defaultTurnSettings?.approvalPolicy,
-            sandboxPolicy: this.config.providerSettings.defaultTurnSettings?.sandboxPolicy,
-            model: this.config.providerSettings.defaultTurnSettings?.model,
-            effort: this.config.providerSettings.defaultTurnSettings?.effort,
-            summary: this.config.providerSettings.defaultTurnSettings?.summary,
-            outputSchema: this.options.responseFormat?.type === "json"
-                ? this.options.responseFormat.schema as JsonValue | undefined
-                : undefined,
-        });
-
-        this.debugLog?.("outbound", "turn/start", turnStartParams);
-
-        const turnStartResult = await this.client.request<CodexTurnStartResult & { turn?: { id?: string } }>("turn/start", turnStartParams);
-
-        this.activeTurnId = extractTurnId(turnStartResult);
-
-        this.session = new CodexSessionImpl({
-            client: this.client,
-            threadId: this.activeThreadId,
-            turnId: this.activeTurnId,
-            interruptTimeoutMs: this.interruptTimeoutMs,
-        });
-        this.config.providerSettings.onSessionCreated?.(this.session);
-    }
-
-    // ── Cross-call tool handler ──────────────────────────────────────────
-
-    private registerCrossCallToolHandler(
+    const registerCrossCallToolHandler = (
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
         persistentTransport: PersistentTransport,
         threadId: string,
-    ): void
+    ): void =>
     {
-        this.client.onToolCallRequest((params: CodexToolCallRequestParams, request) =>
+        client.onToolCallRequest((params: CodexToolCallRequestParams, request) =>
         {
             const toolName = params.tool ?? params.toolName ?? "unknown";
             const callId = params.callId ?? `call_${Date.now()}`;
@@ -607,10 +231,359 @@ export class StreamSession
                 usage: EMPTY_USAGE,
             }));
 
-            void this.close(controller);
+            void close(controller);
 
             // Return a never-resolving promise to prevent auto-response
             return new Promise<CodexToolCallResult>(() => { });
         });
-    }
+    };
+
+    const runCrossCallResume = async (
+        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
+        persistentTransport: PersistentTransport,
+        pendingToolCall: NonNullable<ReturnType<PersistentTransport["getPendingToolCall"]>>,
+    ): Promise<void> =>
+    {
+        toolLogger?.({
+            event: "cross-call-resume",
+            data: {
+                threadId: pendingToolCall.threadId,
+                callId: pendingToolCall.callId,
+                toolName: pendingToolCall.toolName,
+            },
+        });
+        const toolResult = extractToolResults(options.prompt, pendingToolCall.callId);
+        toolLogger?.({
+            event: "cross-call-result-extracted",
+            data: {
+                callId: pendingToolCall.callId,
+                found: !!toolResult,
+                success: toolResult?.success,
+                contentItemsCount: toolResult?.contentItems.length ?? 0,
+            },
+        });
+        mapper.setThreadId(pendingToolCall.threadId);
+
+        attachNotificationHandler(controller, false);
+
+        // Register cross-call handler again for chained tool calls
+        registerCrossCallToolHandler(
+            controller,
+            persistentTransport,
+            pendingToolCall.threadId,
+        );
+
+        attachApprovals();
+
+        const result = toolResult ?? {
+            success: false,
+            contentItems: [{
+                type: "inputText",
+                text: `Missing tool result for pending callId "${pendingToolCall.callId}".`,
+            }],
+        };
+
+        await persistentTransport.respondToToolCall(result);
+
+        toolLogger?.({
+            event: "cross-call-result-sent",
+            data: {
+                callId: pendingToolCall.callId,
+                found: !!toolResult,
+                success: result.success,
+                contentItemsCount: result.contentItems.length ?? 0,
+            },
+        });
+    };
+
+    const runFreshThread = async (
+        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
+        persistentTransport: PersistentTransport | null,
+    ): Promise<void> =>
+    {
+        const dynamicToolsEnabled =
+            config.providerSettings.experimentalApi === true;
+        if (dynamicToolsEnabled)
+        {
+            const dispatcher = new DynamicToolsDispatcher(stripUndefined({
+                tools: config.providerSettings.tools,
+                handlers: config.providerSettings.toolHandlers,
+                timeoutMs: config.providerSettings.toolTimeoutMs,
+                onDebugEvent: toolLogger,
+            }));
+            dispatcher.attach(client);
+        }
+
+        attachApprovals();
+
+        attachNotificationHandler(controller, true);
+
+        // Merge provider-level tools with SDK tools from options
+        const providerToolDefs = config.providerSettings.tools;
+        const providerDynamicTools = providerToolDefs
+            ? Object.entries(providerToolDefs).map(([name, def]) => ({
+                name,
+                description: def.description,
+                inputSchema: def.inputSchema,
+            }))
+            : [];
+
+        const sdkDynamicTools = options.tools
+            ? sdkToolsToCodexDynamicTools(options.tools)
+            : [];
+
+        const allDynamicTools = [...providerDynamicTools, ...sdkDynamicTools];
+        const dynamicTools = allDynamicTools.length > 0 ? allDynamicTools : undefined;
+        toolLogger?.({
+            event: "dynamic-tools-advertised",
+            data: {
+                providerTools: providerDynamicTools.map((t) => t.name),
+                sdkTools: sdkDynamicTools.map((t) => t.name),
+                total: allDynamicTools.length,
+            },
+        });
+
+        const hasSdkTools = sdkDynamicTools.length > 0;
+
+        // Auto-enable experimentalApi when any dynamic tools are present
+        const needsExperimentalApi =
+            config.providerSettings.experimentalApi === true || dynamicTools !== undefined;
+
+        const initializeParams: CodexInitializeParams = stripUndefined({
+            clientInfo: config.providerSettings.clientInfo ?? {
+                name: PACKAGE_NAME,
+                version: PACKAGE_VERSION,
+            },
+            capabilities: needsExperimentalApi ? { experimentalApi: true } : undefined,
+        });
+
+        await client.request<CodexInitializeResult>("initialize", initializeParams);
+        await client.notification("initialized");
+
+        debugLog?.("inbound", "prompt", options.prompt);
+
+        debugLog?.("inbound", "extractResumeThreadId", { resumeThreadId });
+
+        const developerInstructions = mapSystemPrompt(options.prompt);
+
+        let threadId: string;
+
+        if (resumeThreadId)
+        {
+            const resumeParams: CodexThreadResumeParams = stripUndefined({
+                threadId: resumeThreadId,
+                persistExtendedHistory: false,
+                developerInstructions,
+            });
+            debugLog?.("outbound", "thread/resume", resumeParams);
+            const resumeResult = await client.request<ThreadResumeResponse>(
+                "thread/resume",
+                resumeParams,
+            );
+            threadId = resumeResult.thread.id;
+
+            const strictCompaction = config.providerSettings.compaction?.strict === true;
+            const shouldCompactOnResume = config.providerSettings.compaction?.shouldCompactOnResume;
+            let shouldCompact = false;
+
+            if (typeof shouldCompactOnResume === "boolean")
+            {
+                shouldCompact = shouldCompactOnResume;
+            }
+            else if (typeof shouldCompactOnResume === "function")
+            {
+                const compactionContext: CodexCompactionOnResumeContext = {
+                    threadId,
+                    resumeThreadId,
+                    resumeResult,
+                    prompt: options.prompt,
+                };
+
+                try
+                {
+                    shouldCompact = await shouldCompactOnResume(compactionContext);
+                }
+                catch (error)
+                {
+                    debugLog?.("inbound", "thread/compact/start:decision-error", {
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+
+                    if (strictCompaction)
+                    {
+                        throw error;
+                    }
+                }
+            }
+
+            if (shouldCompact)
+            {
+                const compactParams: CodexThreadCompactStartParams = { threadId };
+                debugLog?.("outbound", "thread/compact/start", compactParams);
+                if (strictCompaction)
+                {
+                    await client.request<CodexThreadCompactStartResult>(
+                        "thread/compact/start",
+                        compactParams,
+                    );
+                }
+                else
+                {
+                    try
+                    {
+                        await client.request<CodexThreadCompactStartResult>(
+                            "thread/compact/start",
+                            compactParams,
+                        );
+                    }
+                    catch (error)
+                    {
+                        debugLog?.("inbound", "thread/compact/start:error", {
+                            message: error instanceof Error ? error.message : String(error),
+                        });
+                    }
+                }
+            }
+        }
+        else
+        {
+            const mcpServers = config.providerSettings.mcpServers;
+            const threadConfig = mcpServers
+                ? { mcp_servers: mcpServers } as CodexThreadStartParams["config"]
+                : undefined;
+
+            const threadStartParams: CodexThreadStartParams = stripUndefined({
+                model: config.providerSettings.defaultModel ?? modelId,
+                dynamicTools,
+                developerInstructions,
+                config: threadConfig,
+                cwd: config.providerSettings.defaultThreadSettings?.cwd,
+                approvalPolicy: config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                sandbox: config.providerSettings.defaultThreadSettings?.sandbox,
+            });
+            debugLog?.("outbound", "thread/start", threadStartParams);
+            const threadStartResult = await client.request<CodexThreadStartResult & { thread?: { id?: string } }>(
+                "thread/start",
+                threadStartParams,
+            );
+            threadId = extractThreadId(threadStartResult);
+        }
+
+        activeThreadId = threadId;
+        mapper.setThreadId(threadId);
+
+        // Register cross-call tool handler for SDK tools
+        if (hasSdkTools && persistentTransport)
+        {
+            registerCrossCallToolHandler(
+                controller,
+                persistentTransport,
+                threadId,
+            );
+        }
+
+        const turnInput = await fileResolver.resolve(options.prompt, !!resumeThreadId);
+        const turnStartParams: CodexTurnStartParams = stripUndefined({
+            threadId,
+            input: turnInput,
+            cwd: config.providerSettings.defaultTurnSettings?.cwd,
+            approvalPolicy: config.providerSettings.defaultTurnSettings?.approvalPolicy,
+            sandboxPolicy: config.providerSettings.defaultTurnSettings?.sandboxPolicy,
+            model: config.providerSettings.defaultTurnSettings?.model,
+            effort: config.providerSettings.defaultTurnSettings?.effort,
+            summary: config.providerSettings.defaultTurnSettings?.summary,
+            outputSchema: options.responseFormat?.type === "json"
+                ? options.responseFormat.schema as JsonValue | undefined
+                : undefined,
+        });
+
+        debugLog?.("outbound", "turn/start", turnStartParams);
+
+        const turnStartResult = await client.request<CodexTurnStartResult & { turn?: { id?: string } }>("turn/start", turnStartParams);
+
+        activeTurnId = extractTurnId(turnStartResult);
+
+        session = new CodexSessionImpl({
+            client,
+            threadId: activeThreadId,
+            turnId: activeTurnId,
+            interruptTimeoutMs,
+        });
+        config.providerSettings.onSessionCreated?.(session);
+    };
+
+    const stream = new ReadableStream<LanguageModelV3StreamPart>({
+        start: (controller) =>
+        {
+            const abortHandler = () =>
+            {
+                void (async () =>
+                {
+                    try
+                    {
+                        await interruptTurnIfPossible();
+                    }
+                    catch
+                    {
+                        // Best-effort only: always close/disconnect even if interrupt fails.
+                    }
+
+                    await close(controller, new DOMException("Aborted", "AbortError"));
+                })();
+            };
+
+            if (options.abortSignal)
+            {
+                if (options.abortSignal.aborted)
+                {
+                    abortHandler();
+                    return;
+                }
+                options.abortSignal.addEventListener("abort", abortHandler, { once: true });
+            }
+
+            void (async () =>
+            {
+                try
+                {
+                    await client.connect();
+
+                    // ── Tool-result continuation (cross-call) ──
+                    const persistentTransport = transport instanceof PersistentTransport
+                        ? transport
+                        : null;
+                    const pendingToolCall = persistentTransport?.getPendingToolCall() ?? null;
+
+                    if (pendingToolCall && persistentTransport)
+                    {
+                        await runCrossCallResume(controller, persistentTransport, pendingToolCall);
+                    }
+                    else
+                    {
+                        await runFreshThread(controller, persistentTransport);
+                    }
+                }
+                catch (error)
+                {
+                    await close(controller, error);
+                }
+            })();
+        },
+        cancel: async () =>
+        {
+            session?.markInactive();
+
+            try
+            {
+                await interruptTurnIfPossible();
+            }
+            catch
+            {
+                // Best-effort only: always disconnect to release resources.
+            }
+            await Promise.all([fileResolver.cleanup(), client.disconnect()]);
+        },
+    });
+
+    return Promise.resolve({ stream });
 }

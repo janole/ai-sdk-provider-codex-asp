@@ -10,7 +10,7 @@ import type {
 
 import { CodexProviderError } from "./errors";
 import type { CodexProviderSettings } from "./provider-settings";
-import { StreamSession } from "./stream-session";
+import { createStreamSession } from "./stream-session";
 import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -183,7 +183,6 @@ export class CodexLanguageModel implements LanguageModelV3
 
     doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
-        const session = new StreamSession(this.config, this.modelId, options);
-        return session.execute();
+        return createStreamSession(this.config, this.modelId, options);
     }
 }
