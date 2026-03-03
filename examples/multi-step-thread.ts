@@ -22,14 +22,18 @@ const codex = createCodexAppServer({
     persistent: { scope: "global", poolSize: 1, idleTimeoutMs: 60_000 },
     debug: {
         logPackets: true,
-        logger: ({ message }: { message: any }) =>
+        logger: (packet) =>
         {
-            if (!threadId)
+            const message = packet.message as Record<string, unknown> | undefined;
+            const params = message?.params as Record<string, unknown> | undefined;
+            const msgThreadId = typeof params?.threadId === "string" ? params.threadId : undefined;
+
+            if (!threadId && msgThreadId)
             {
-                threadId = message?.params?.threadId;
+                threadId = msgThreadId;
             }
 
-            if (message?.params?.threadId && message?.params?.threadId != threadId)
+            if (msgThreadId && msgThreadId !== threadId)
             {
                 console.error("ERROR: threadId mismatch", threadId, message);
             }
@@ -72,7 +76,8 @@ console.log(`Final text: ${result.text}\n`);
 const threadIds = result.steps
     .map((step, i) =>
     {
-        const tid = step.providerMetadata?.[CODEX_PROVIDER_ID]?.["threadId"];
+        const raw = step.providerMetadata?.[CODEX_PROVIDER_ID]?.["threadId"];
+        const tid = typeof raw === "string" ? raw : undefined;
         console.log(`  Step ${i + 1} threadId: ${tid ?? "(none)"}`);
         return tid;
     })
@@ -82,7 +87,7 @@ const uniqueThreadIds = new Set(threadIds);
 
 if (uniqueThreadIds.size === 1)
 {
-    console.log(`\n✓ All steps used the same threadId: ${[...uniqueThreadIds][0]}`);
+    console.log(`\n✓ All steps used the same threadId: ${String([...uniqueThreadIds][0])}`);
 }
 else if (uniqueThreadIds.size === 0)
 {
@@ -90,7 +95,7 @@ else if (uniqueThreadIds.size === 0)
 }
 else
 {
-    console.log(`\n✗ Multiple threadIds found across steps: ${[...uniqueThreadIds].join(", ")}`);
+    console.log(`\n✗ Multiple threadIds found across steps: ${[...uniqueThreadIds].map(String).join(", ")}`);
 }
 
 await codex.shutdown();
