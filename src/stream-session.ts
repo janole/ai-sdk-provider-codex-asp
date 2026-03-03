@@ -285,7 +285,7 @@ export class StreamSession
                             // Best-effort only: always close/disconnect even if interrupt fails.
                         }
 
-                        await this.closeWithError(controller, new DOMException("Aborted", "AbortError"));
+                        await this.close(controller, new DOMException("Aborted", "AbortError"));
                     })();
                 };
 
@@ -322,7 +322,7 @@ export class StreamSession
                     }
                     catch (error)
                     {
-                        await this.closeWithError(controller, error);
+                        await this.close(controller, error);
                     }
                 })();
             },
@@ -348,9 +348,9 @@ export class StreamSession
 
     // ── Private lifecycle methods ────────────────────────────────────────
 
-    private async closeWithError(
+    private async close(
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
-        error: unknown,
+        error?: unknown,
     ): Promise<void>
     {
         if (this.closed)
@@ -359,7 +359,10 @@ export class StreamSession
         }
 
         this.session?.markInactive();
-        controller.enqueue({ type: "error", error });
+        if (error !== undefined)
+        {
+            controller.enqueue({ type: "error", error });
+        }
         this.closed = true;
 
         try
@@ -368,31 +371,7 @@ export class StreamSession
         }
         finally
         {
-            await this.fileResolver.cleanup();
-            await this.client.disconnect();
-        }
-    }
-
-    private async closeSuccessfully(
-        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
-    ): Promise<void>
-    {
-        if (this.closed)
-        {
-            return;
-        }
-
-        this.session?.markInactive();
-        this.closed = true;
-
-        try
-        {
-            controller.close();
-        }
-        finally
-        {
-            await this.fileResolver.cleanup();
-            await this.client.disconnect();
+            await Promise.all([this.fileResolver.cleanup(), this.client.disconnect()]);
         }
     }
 
@@ -768,7 +747,7 @@ export class StreamSession
                 usage: EMPTY_USAGE,
             }));
 
-            void this.closeSuccessfully(controller);
+            void this.close(controller);
 
             // Return a never-resolving promise to prevent auto-response
             return new Promise<CodexToolCallResult>(() => { });
