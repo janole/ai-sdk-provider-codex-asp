@@ -5,23 +5,13 @@ import type {
 } from "@ai-sdk/provider";
 
 import { ApprovalsDispatcher } from "../approvals";
-import { AppServerClient } from "../client/app-server-client";
 import { PersistentTransport } from "../client/transport-persistent";
-import { StdioTransport } from "../client/transport-stdio";
-import { WebSocketTransport } from "../client/transport-websocket";
 import { DynamicToolsDispatcher } from "../dynamic-tools";
 import type { CodexModelConfig } from "../model";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-info";
 import type { JsonValue } from "../protocol/app-server-protocol/serde_json/JsonValue";
 import type { ThreadResumeResponse } from "../protocol/app-server-protocol/v2/ThreadResumeResponse";
-import { CodexEventMapper } from "../protocol/event-mapper";
-import
-{
-    extractResumeThreadId,
-    extractThreadId,
-    extractToolResults,
-    extractTurnId,
-} from "../protocol/extractors";
+import { extractThreadId, extractToolResults, extractTurnId } from "../protocol/extractors";
 import { withProviderMetadata } from "../protocol/provider-metadata";
 import type {
     CodexInitializeParams,
@@ -41,7 +31,8 @@ import type {
 import type { CodexCompactionOnResumeContext } from "../provider-settings";
 import { EMPTY_USAGE, stripUndefined } from "../utils/object";
 import { CodexSessionImpl } from "./codex-session-impl";
-import { mapSystemPrompt, PromptFileResolver } from "./prompt-file-resolver";
+import { mapSystemPrompt } from "./prompt-file-resolver";
+import { createStreamSessionRuntime } from "./session-runtime";
 
 function sdkToolsToCodexDynamicTools(
     tools: NonNullable<LanguageModelV3CallOptions["tools"]>,
@@ -62,50 +53,16 @@ export function createStreamSession(
     options: LanguageModelV3CallOptions,
 ): Promise<LanguageModelV3StreamResult>
 {
-    const resumeThreadId = extractResumeThreadId(options.prompt);
-
-    const transport = config.providerSettings.transportFactory
-        ? config.providerSettings.transportFactory(stripUndefined({ signal: options.abortSignal, threadId: resumeThreadId }))
-        : config.providerSettings.transport?.type === "websocket"
-            ? new WebSocketTransport(config.providerSettings.transport.websocket)
-            : new StdioTransport(config.providerSettings.transport?.stdio);
-
-    const packetLogger = config.providerSettings.debug?.logPackets === true
-        ? config.providerSettings.debug.logger
-        ?? ((packet: { direction: "inbound" | "outbound"; message: unknown }) =>
-        {
-            if (packet.direction === "inbound")
-            {
-                console.debug("[codex packet]", packet.message);
-            }
-        })
-        : undefined;
-
-    const toolLogger = config.providerSettings.debug?.logToolCalls === true
-        ? config.providerSettings.debug.toolLogger
-        ?? ((event: { event: string; data?: unknown }) =>
-        {
-            console.debug("[codex tool]", event.event, event.data);
-        })
-        : undefined;
-
-    const debugLog = packetLogger
-        ? (direction: "inbound" | "outbound", label: string, data?: unknown) =>
-        {
-            packetLogger({ direction, message: { debug: label, data } });
-        }
-        : undefined;
-
-    const client = new AppServerClient(transport, stripUndefined({
-        onPacket: packetLogger,
-    }));
-
-    const mapper = new CodexEventMapper(stripUndefined({
-        emitPlanUpdates: config.providerSettings.emitPlanUpdates,
-    }));
-
-    const fileResolver = new PromptFileResolver();
-    const interruptTimeoutMs = config.providerSettings.interruptTimeoutMs ?? 10_000;
+    const {
+        resumeThreadId,
+        transport,
+        client,
+        mapper,
+        fileResolver,
+        interruptTimeoutMs,
+        debugLog,
+        toolLogger,
+    } = createStreamSessionRuntime(config, options);
 
     let activeThreadId: string | undefined;
     let activeTurnId: string | undefined;
