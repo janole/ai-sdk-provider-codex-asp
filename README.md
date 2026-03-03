@@ -152,6 +152,7 @@ See the [`examples/`](examples/) directory:
 - [`cross-call-tools.ts`](examples/cross-call-tools.ts) — Standard AI SDK tools via Codex
 - [`dynamic-tools.ts`](examples/dynamic-tools.ts) — Provider-level dynamic tools
 - [`thread-continuation.ts`](examples/thread-continuation.ts) — Multi-turn thread resumption
+- [`multi-step-thread.ts`](examples/multi-step-thread.ts) — Multi-step thread continuation with threadId verification
 - [`approvals.ts`](examples/approvals.ts) — Command and file-change approval handling
 
 Run any example with:
