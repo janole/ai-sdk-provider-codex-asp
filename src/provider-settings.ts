@@ -8,6 +8,12 @@ import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools"
 import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
 import type { CodexSession } from "./session";
 
+export interface TransportContext
+{
+    signal?: AbortSignal;
+    threadId?: string;
+}
+
 export interface CodexThreadDefaults
 {
     cwd?: string;
@@ -74,7 +80,7 @@ export interface CodexProviderSettings
     defaultThreadSettings?: CodexThreadDefaults;
     defaultTurnSettings?: CodexTurnDefaults;
     compaction?: CodexCompactionSettings;
-    transportFactory?: (signal?: AbortSignal, threadId?: string) => CodexTransport;
+    transportFactory?: (context: TransportContext) => CodexTransport;
     /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
     tools?: Record<string, DynamicToolDefinition>;
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */

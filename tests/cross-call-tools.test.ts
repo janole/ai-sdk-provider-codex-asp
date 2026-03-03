@@ -233,8 +233,8 @@ function createPersistentProvider(innerTransport: MockTransport)
     return {
         pool,
         provider: createCodexAppServer({
-            transportFactory: (signal?: AbortSignal, threadId?: string) =>
-                new PersistentTransport(stripUndefined({ pool, signal, threadId })),
+            transportFactory: (context) =>
+                new PersistentTransport(stripUndefined({ pool, signal: context.signal, threadId: context.threadId })),
             clientInfo: { name: "test", version: "1.0.0" },
         }),
     };

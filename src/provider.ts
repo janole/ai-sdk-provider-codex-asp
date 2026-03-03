@@ -12,7 +12,7 @@ import type { ModelListParams } from "./protocol/app-server-protocol/v2/ModelLis
 import type { ModelListResponse } from "./protocol/app-server-protocol/v2/ModelListResponse";
 import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 import type { CodexInitializeParams, CodexInitializeResult } from "./protocol/types";
-import type { CodexProviderSettings } from "./provider-settings";
+import type { CodexProviderSettings, TransportContext } from "./provider-settings";
 import { stripUndefined } from "./utils/object";
 export type { Model as CodexModel } from "./protocol/app-server-protocol/v2/Model";
 export type { CodexProviderSettings, McpServerConfig } from "./provider-settings";
@@ -55,7 +55,8 @@ export function createCodexAppServer(
         const poolSize = settings.persistent.poolSize ?? 1;
         const idleTimeoutMs = settings.persistent.idleTimeoutMs ?? 300_000;
         const poolTransportFactory = baseTransportFactory
-            ?? (settings.transport?.type === "websocket"
+            ? () => baseTransportFactory({})
+            : (settings.transport?.type === "websocket"
                 ? () => new WebSocketTransport(settings.transport?.websocket)
                 : () => new StdioTransport(settings.transport?.stdio));
 
@@ -70,8 +71,8 @@ export function createCodexAppServer(
 
     const persistentPool = persistentPoolHandle?.pool ?? null;
     const effectiveTransportFactory = persistentPool
-        ? (signal?: AbortSignal, threadId?: string) =>
-            new PersistentTransport(stripUndefined({ pool: persistentPool, signal, threadId }))
+        ? (context: TransportContext) =>
+            new PersistentTransport(stripUndefined({ pool: persistentPool, signal: context.signal, threadId: context.threadId }))
         : baseTransportFactory;
 
     const resolvedSettings: Readonly<CodexProviderSettings> = Object.freeze(stripUndefined({
@@ -155,7 +156,7 @@ export function createCodexAppServer(
         async listModels(params?: ModelListParams): Promise<Model[]>
         {
             const transport = effectiveTransportFactory
-                ? effectiveTransportFactory()
+                ? effectiveTransportFactory({})
                 : resolvedSettings.transport?.type === "websocket"
                     ? new WebSocketTransport(resolvedSettings.transport.websocket)
                     : new StdioTransport(resolvedSettings.transport?.stdio);

@@ -430,7 +430,7 @@ export class CodexLanguageModel implements LanguageModelV3
         const resumeThreadId = extractResumeThreadId(options.prompt);
 
         const transport = this.config.providerSettings.transportFactory
-            ? this.config.providerSettings.transportFactory(options.abortSignal, resumeThreadId)
+            ? this.config.providerSettings.transportFactory(stripUndefined({ signal: options.abortSignal, threadId: resumeThreadId }))
             : this.config.providerSettings.transport?.type === "websocket"
                 ? new WebSocketTransport(this.config.providerSettings.transport.websocket)
                 : new StdioTransport(this.config.providerSettings.transport?.stdio);
