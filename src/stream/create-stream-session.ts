@@ -259,9 +259,7 @@ export function createStreamSession(
         persistentTransport: PersistentTransport | null,
     ): Promise<void> =>
     {
-        const dynamicToolsEnabled =
-            config.providerSettings.experimentalApi === true;
-        if (dynamicToolsEnabled)
+        if (config.providerSettings.experimentalApi === true)
         {
             const dispatcher = new DynamicToolsDispatcher(stripUndefined({
                 tools: config.providerSettings.tools,
