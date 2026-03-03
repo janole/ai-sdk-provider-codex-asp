@@ -12,6 +12,7 @@
 
 import { generateText, type ModelMessage } from "ai";
 
+import { CODEX_PROVIDER_ID } from "../src";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
@@ -30,6 +31,9 @@ messages.push({ role: "user", content: "My secret number is 42. Please confirm y
 const turn1 = await generateText({ model, messages });
 
 console.log("Codex:", turn1.text);
+
+const threadId = turn1.providerMetadata?.[CODEX_PROVIDER_ID]?.["threadId"];
+console.log("\nThread ID:", threadId);
 
 // Append the full response messages — they carry the threadId in providerMetadata
 messages.push(...turn1.response.messages);
