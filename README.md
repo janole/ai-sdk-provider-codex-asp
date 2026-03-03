@@ -152,7 +152,13 @@ See the [`examples/`](examples/) directory:
 - [`cross-call-tools.ts`](examples/cross-call-tools.ts) — Standard AI SDK tools via Codex
 - [`dynamic-tools.ts`](examples/dynamic-tools.ts) — Provider-level dynamic tools
 - [`thread-continuation.ts`](examples/thread-continuation.ts) — Multi-turn thread resumption
+- [`multi-step-thread.ts`](examples/multi-step-thread.ts) — Multi-step thread continuation with threadId verification
 - [`approvals.ts`](examples/approvals.ts) — Command and file-change approval handling
+- [`image-input.ts`](examples/image-input.ts) — Image input with `generateText`
+- [`interrupt.ts`](examples/interrupt.ts) — Mid-turn interrupt via `onSessionCreated`
+- [`list-models.ts`](examples/list-models.ts) — Discover available models via app-server protocol
+- [`mid-turn-injection.ts`](examples/mid-turn-injection.ts) — Mid-turn message injection via `onSessionCreated`
+- [`provider-executed-tools.ts`](examples/provider-executed-tools.ts) — Provider-executed tool calls (server-side commands)
 
 Run any example with:
 
