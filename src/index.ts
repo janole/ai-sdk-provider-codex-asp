@@ -101,6 +101,7 @@ export {
     createCodexAppServer,
     createCodexProvider,
 } from "./provider";
+export type { TransportContext } from "./provider-settings";
 export type { CodexSession } from "./session";
 export type { FileWriter } from "./utils/prompt-file-resolver";
 export { mapSystemPrompt } from "./utils/prompt-file-resolver";
