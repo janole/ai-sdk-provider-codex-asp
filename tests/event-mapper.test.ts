@@ -534,7 +534,7 @@ describe("CodexEventMapper", () =>
     // Turn diffs are intentionally ignored — they carry full unified diffs
     // (often 50-100 KB) that crash/freeze the frontend markdown renderer when
     // emitted as reasoning. If re-enabling, use a dedicated part type with
-    // lazy/collapsed rendering instead of pushReasoningDelta.
+    // lazy/collapsed rendering instead of emitReasoningDelta.
     it("ignores turn diff notifications", () =>
     {
         const mapper = new CodexEventMapper();
