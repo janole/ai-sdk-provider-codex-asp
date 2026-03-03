@@ -523,27 +523,22 @@ export function createStreamSession(
             {
                 const compactParams: CodexThreadCompactStartParams = { threadId };
                 debugLog?.("outbound", "thread/compact/start", compactParams);
-                if (strictCompaction)
+                try
                 {
                     await client.request<CodexThreadCompactStartResult>(
                         "thread/compact/start",
                         compactParams,
                     );
                 }
-                else
+                catch (error)
                 {
-                    try
+                    debugLog?.("inbound", "thread/compact/start:error", {
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+
+                    if (strictCompaction)
                     {
-                        await client.request<CodexThreadCompactStartResult>(
-                            "thread/compact/start",
-                            compactParams,
-                        );
-                    }
-                    catch (error)
-                    {
-                        debugLog?.("inbound", "thread/compact/start:error", {
-                            message: error instanceof Error ? error.message : String(error),
-                        });
+                        throw error;
                     }
                 }
             }
