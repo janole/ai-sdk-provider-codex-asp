@@ -15,7 +15,8 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import {
+import
+{
     extractResumeThreadId,
     extractThreadId,
     extractToolResults,
