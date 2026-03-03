@@ -34,7 +34,7 @@ const codex = createCodexAppServer({
                 console.error("ERROR: threadId mismatch", threadId, message);
             }
         },
-    }
+    },
 });
 
 const model = codex("gpt-5.3-codex");
@@ -57,7 +57,7 @@ const result = await generateText({
                 console.log(`  [tool] lookup_ticket called with id: ${id}`);
                 return Promise.resolve(
                     `Ticket ${id}: status=open, priority=high, assigned to backend team. ` +
-                    `Customer reports intermittent 503 errors on /api/checkout since Monday.`,
+                    "Customer reports intermittent 503 errors on /api/checkout since Monday.",
                 );
             },
         }),
