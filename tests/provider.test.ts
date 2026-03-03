@@ -5,7 +5,7 @@ import { CODEX_PROVIDER_ID } from "../src";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { CodexLanguageModel } from "../src/model";
 import { createCodexAppServer } from "../src/provider";
-import type { CodexSession } from "../src/session";
+import type { CodexSession } from "../src/provider-settings";
 import { MockTransport } from "./helpers/mock-transport";
 
 class ScriptedTransport extends MockTransport

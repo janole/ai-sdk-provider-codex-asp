@@ -10,7 +10,7 @@ import type {
 
 import { CodexProviderError } from "./errors";
 import type { CodexProviderSettings } from "./provider-settings";
-import { createStreamSession } from "./stream-session";
+import { createStreamSession } from "./stream/session";
 import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

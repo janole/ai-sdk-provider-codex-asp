@@ -4,25 +4,25 @@ import type {
     LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 
-import { ApprovalsDispatcher } from "./approvals";
-import { AppServerClient } from "./client/app-server-client";
-import { PersistentTransport } from "./client/transport-persistent";
-import { StdioTransport } from "./client/transport-stdio";
-import { WebSocketTransport } from "./client/transport-websocket";
-import { DynamicToolsDispatcher } from "./dynamic-tools";
-import type { CodexModelConfig } from "./model";
-import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
-import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
-import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
-import { CodexEventMapper } from "./protocol/event-mapper";
+import { ApprovalsDispatcher } from "../approvals";
+import { AppServerClient } from "../client/app-server-client";
+import { PersistentTransport } from "../client/transport-persistent";
+import { StdioTransport } from "../client/transport-stdio";
+import { WebSocketTransport } from "../client/transport-websocket";
+import { DynamicToolsDispatcher } from "../dynamic-tools";
+import type { CodexModelConfig } from "../model";
+import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-info";
+import type { JsonValue } from "../protocol/app-server-protocol/serde_json/JsonValue";
+import type { ThreadResumeResponse } from "../protocol/app-server-protocol/v2/ThreadResumeResponse";
+import { CodexEventMapper } from "../protocol/event-mapper";
 import
 {
     extractResumeThreadId,
     extractThreadId,
     extractToolResults,
     extractTurnId,
-} from "./protocol/extractors";
-import { withProviderMetadata } from "./protocol/provider-metadata";
+} from "../protocol/extractors";
+import { withProviderMetadata } from "../protocol/provider-metadata";
 import type {
     CodexInitializeParams,
     CodexInitializeResult,
@@ -37,11 +37,11 @@ import type {
     CodexTurnInterruptResult,
     CodexTurnStartParams,
     CodexTurnStartResult,
-} from "./protocol/types";
-import type { CodexCompactionOnResumeContext } from "./provider-settings";
-import { CodexSessionImpl } from "./session";
-import { EMPTY_USAGE, stripUndefined } from "./utils/object";
-import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
+    UserInput,
+} from "../protocol/types";
+import type { CodexCompactionOnResumeContext, CodexSession } from "../provider-settings";
+import { EMPTY_USAGE, stripUndefined } from "../utils/object";
+import { mapSystemPrompt, PromptFileResolver } from "./prompt-file-resolver";
 
 function sdkToolsToCodexDynamicTools(
     tools: NonNullable<LanguageModelV3CallOptions["tools"]>,
@@ -54,6 +54,108 @@ function sdkToolsToCodexDynamicTools(
             description: t.description,
             inputSchema: t.inputSchema as Record<string, unknown>,
         }));
+}
+
+export class CodexSessionImpl implements CodexSession
+{
+    private readonly _threadId: string;
+    private _turnId: string | undefined;
+    private _active = true;
+    private readonly client: AppServerClient;
+    private readonly interruptTimeoutMs: number;
+
+    constructor(opts: {
+        client: AppServerClient;
+        threadId: string;
+        turnId: string | undefined;
+        interruptTimeoutMs: number;
+    })
+    {
+        this.client = opts.client;
+        this._threadId = opts.threadId;
+        this._turnId = opts.turnId;
+        this.interruptTimeoutMs = opts.interruptTimeoutMs;
+    }
+
+    get threadId(): string
+    {
+        return this._threadId;
+    }
+
+    get turnId(): string | undefined
+    {
+        return this._turnId;
+    }
+
+    /** @internal Called by the model when turn/started arrives with a turnId. */
+    setTurnId(turnId: string): void
+    {
+        this._turnId = turnId;
+    }
+
+    /** @internal Called by the model when the turn completes or the stream closes. */
+    markInactive(): void
+    {
+        this._active = false;
+    }
+
+    isActive(): boolean
+    {
+        return this._active;
+    }
+
+    /**
+     * Inject follow-up input into the current thread.
+     *
+     * Uses turn/start which the app-server routes through steer_input when a
+     * turn is already active, or starts a new turn otherwise. This avoids the
+     * strict timing requirements of turn/steer (which needs codex/event/task_started
+     * before it accepts input). We may revisit turn/steer in the future.
+     */
+    async injectMessage(input: string | UserInput[]): Promise<void>
+    {
+        if (!this._active)
+        {
+            throw new Error("Session is no longer active.");
+        }
+
+        const userInput: UserInput[] = typeof input === "string"
+            ? [{ type: "text", text: input, text_elements: [] }]
+            : input;
+
+        const turnStartParams: CodexTurnStartParams = {
+            threadId: this._threadId,
+            input: userInput,
+        };
+
+        const result = await this.client.request<CodexTurnStartResult & { turn?: { id?: string } }>("turn/start", turnStartParams);
+
+        // Update turnId if the server started a new turn
+        const newTurnId = result.turnId ?? result.turn?.id;
+        if (newTurnId)
+        {
+            this._turnId = newTurnId;
+        }
+    }
+
+    async interrupt(): Promise<void>
+    {
+        if (!this._active || !this._turnId)
+        {
+            return;
+        }
+
+        const interruptParams: CodexTurnInterruptParams = {
+            threadId: this._threadId,
+            turnId: this._turnId,
+        };
+
+        await this.client.request<CodexTurnInterruptResult>(
+            "turn/interrupt",
+            interruptParams,
+            this.interruptTimeoutMs,
+        );
+    }
 }
 
 export function createStreamSession(

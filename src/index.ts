@@ -103,4 +103,4 @@ export
     createCodexAppServer,
     createCodexProvider,
 } from "./provider";
-export type { CodexSession } from "./session";
+export type { CodexSession } from "./provider-settings";

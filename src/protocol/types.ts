@@ -41,6 +41,7 @@ export type { ThreadCompactStartParams };
 export type { ThreadCompactStartResponse };
 export type { TurnInterruptParams };
 export type { TurnInterruptResponse };
+export type { UserInput };
 
 // Re-export official v2 notification types used by the event mapper
 export type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
@@ -50,7 +51,8 @@ export type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/
 export type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
 export type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 
-export interface JsonRpcMessageBase {
+export interface JsonRpcMessageBase
+{
     id?: number | string;
     method?: string;
     params?: unknown;
@@ -62,7 +64,8 @@ export interface JsonRpcMessageBase {
     };
 }
 
-export interface CodexInitializeParams {
+export interface CodexInitializeParams
+{
     clientInfo: {
         name: string;
         version: string;
@@ -73,25 +76,29 @@ export interface CodexInitializeParams {
     };
 }
 
-export interface CodexInitializeResult {
+export interface CodexInitializeResult
+{
     serverInfo?: {
         name: string;
         version: string;
     };
 }
 
-export interface CodexInitializedNotification {
+export interface CodexInitializedNotification
+{
     method: "initialized";
     params?: Record<string, never>;
 }
 
-export interface CodexDynamicToolDefinition {
+export interface CodexDynamicToolDefinition
+{
     name: string;
     description?: string;
     inputSchema: Record<string, unknown>;
 }
 
-export interface CodexThreadStartParams {
+export interface CodexThreadStartParams
+{
     model?: string;
     cwd?: string;
     approvalPolicy?: AskForApproval;
@@ -101,7 +108,8 @@ export interface CodexThreadStartParams {
     developerInstructions?: string;
 }
 
-export interface CodexThreadStartResult {
+export interface CodexThreadStartResult
+{
     threadId: string;
     tools?: CodexDynamicToolDefinition[];
 }
@@ -124,11 +132,13 @@ export type CodexTurnInputMention = Extract<UserInput, { type: "mention" }>;
 
 export type CodexTurnStartParams = TurnStartParams;
 
-export interface CodexTurnStartResult {
+export interface CodexTurnStartResult
+{
     turnId: string;
 }
 
-export interface CodexToolCallStartedNotification {
+export interface CodexToolCallStartedNotification
+{
     method: "item/tool/callStarted";
     params: {
         callId: string;
@@ -136,7 +146,8 @@ export interface CodexToolCallStartedNotification {
     };
 }
 
-export interface CodexToolCallDeltaNotification {
+export interface CodexToolCallDeltaNotification
+{
     method: "item/tool/callDelta";
     params: {
         callId: string;
@@ -144,14 +155,16 @@ export interface CodexToolCallDeltaNotification {
     };
 }
 
-export interface CodexToolCallFinishedNotification {
+export interface CodexToolCallFinishedNotification
+{
     method: "item/tool/callFinished";
     params: {
         callId: string;
     };
 }
 
-export interface CodexToolCallRequestParams {
+export interface CodexToolCallRequestParams
+{
     threadId?: string;
     turnId?: string;
     callId?: string;
@@ -162,16 +175,17 @@ export interface CodexToolCallRequestParams {
 }
 
 export type CodexToolResultContentItem =
-  | { type: "inputText"; text: string }
-  | { type: "inputImage"; imageUrl: string };
+    | { type: "inputText"; text: string }
+    | { type: "inputImage"; imageUrl: string };
 
-export interface CodexToolCallResult {
+export interface CodexToolCallResult
+{
     success: boolean;
     contentItems: CodexToolResultContentItem[];
 }
 
 export type CodexNotification =
-  | CodexInitializedNotification
-  | CodexToolCallStartedNotification
-  | CodexToolCallDeltaNotification
-  | CodexToolCallFinishedNotification;
+    | CodexInitializedNotification
+    | CodexToolCallStartedNotification
+    | CodexToolCallDeltaNotification
+    | CodexToolCallFinishedNotification;

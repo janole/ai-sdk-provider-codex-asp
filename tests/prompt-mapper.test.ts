@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import type { FileWriter } from "../src/utils/prompt-file-resolver";
-import { mapSystemPrompt, PromptFileResolver } from "../src/utils/prompt-file-resolver";
+import type { FileWriter } from "../src/stream/prompt-file-resolver";
+import { mapSystemPrompt, PromptFileResolver } from "../src/stream/prompt-file-resolver";
 
 describe("PromptFileResolver", () =>
 {
