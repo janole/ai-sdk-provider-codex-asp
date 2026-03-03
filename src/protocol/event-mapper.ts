@@ -79,6 +79,9 @@ export function extractNotificationThreadId(params: unknown): string | undefined
     return undefined;
 }
 
+// No-op handler for intentionally ignored events.
+const NOOP = (): LanguageModelV3StreamPart[] => [];
+
 export class CodexEventMapper
 {
     private readonly options: Required<CodexEventMapperOptions>;
@@ -92,10 +95,44 @@ export class CodexEventMapper
     private turnId: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
 
+    private readonly handlers: Record<string, (params: unknown) => LanguageModelV3StreamPart[]>;
+
     constructor(options?: CodexEventMapperOptions)
     {
         this.options = {
             emitPlanUpdates: options?.emitPlanUpdates ?? true,
+        };
+
+        this.handlers = {
+            "turn/started": (p) => this.handleTurnStarted(p),
+            "item/started": (p) => this.handleItemStarted(p),
+            "item/agentMessage/delta": (p) => this.handleAgentMessageDelta(p),
+            "item/completed": (p) => this.handleItemCompleted(p),
+            "item/reasoning/textDelta": (p) => this.handleReasoningDelta(p),
+            "item/reasoning/summaryTextDelta": (p) => this.handleReasoningDelta(p),
+            "item/plan/delta": (p) => this.handleReasoningDelta(p),
+            "item/fileChange/outputDelta": (p) => this.handleReasoningDelta(p),
+            "item/reasoning/summaryPartAdded": (p) => this.handleSummaryPartAdded(p),
+            "turn/plan/updated": (p) => this.handlePlanUpdated(p),
+            "item/commandExecution/outputDelta": (p) => this.handleCommandOutputDelta(p),
+            "codex/event/mcp_tool_call_begin": (p) => this.handleMcpToolCallBegin(p),
+            "codex/event/mcp_tool_call_end": (p) => this.handleMcpToolCallEnd(p),
+            "item/mcpToolCall/progress": (p) => this.handleMcpToolCallProgress(p),
+            "item/tool/callStarted": (p) => this.handleToolCallStarted(p),
+            "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
+            "item/tool/callFinished": (p) => this.handleToolCallFinished(p),
+            "thread/tokenUsage/updated": (p) => this.handleTokenUsageUpdated(p),
+            "turn/completed": (p) => this.handleTurnCompleted(p),
+
+            // Intentionally ignored: wrapper/duplicate events handled by their canonical forms above.
+            "codex/event/agent_reasoning": NOOP,
+            "codex/event/agent_reasoning_section_break": NOOP,
+            "codex/event/plan_update": NOOP,
+
+            // Intentionally ignored: full diffs (often 50-100 KB) crash/freeze frontend renderers.
+            // If these need to surface, they should use a dedicated part type with lazy rendering.
+            "turn/diff/updated": NOOP,
+            "codex/event/turn_diff": NOOP,
         };
     }
 
@@ -114,6 +151,44 @@ export class CodexEventMapper
         return this.turnId;
     }
 
+    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
+    {
+        const handler = this.handlers[event.method];
+        return handler ? handler(event.params) : [];
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private withMeta<T extends LanguageModelV3StreamPart>(part: T): T
+    {
+        return withProviderMetadata(part, this.threadId, this.turnId);
+    }
+
+    private ensureStreamStarted(parts: LanguageModelV3StreamPart[]): void
+    {
+        if (!this.streamStarted)
+        {
+            parts.push({ type: "stream-start", warnings: [] });
+            this.streamStarted = true;
+        }
+    }
+
+    private emitReasoningDelta(parts: LanguageModelV3StreamPart[], id: string, delta: string): void
+    {
+        this.ensureStreamStarted(parts);
+
+        if (!this.openReasoningParts.has(id))
+        {
+            this.openReasoningParts.add(id);
+            parts.push(this.withMeta({ type: "reasoning-start", id }));
+        }
+
+        if (delta)
+        {
+            parts.push(this.withMeta({ type: "reasoning-delta", id, delta }));
+        }
+    }
+
     private nextPlanSequence(turnId: string): number
     {
         const next = (this.planSequenceByTurnId.get(turnId) ?? 0) + 1;
@@ -121,430 +196,415 @@ export class CodexEventMapper
         return next;
     }
 
-    map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
+    // ── Handlers ─────────────────────────────────────────────────────────────
+
+    // turn/started
+    private handleTurnStarted(params: unknown): LanguageModelV3StreamPart[]
     {
+        const p = params as TurnStartedNotification | undefined;
+        if (p?.turn?.id)
+        {
+            this.turnId = p.turn.id;
+        }
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+        return parts;
+    }
+
+    // item/started
+    private handleItemStarted(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as ItemStartedNotification;
+        const item = p.item;
+        if (!item?.id)
+        {
+            return [];
+        }
+
         const parts: LanguageModelV3StreamPart[] = [];
 
-        const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T =>
-            withProviderMetadata(part, this.threadId, this.turnId);
-
-        const pushStreamStart = () =>
+        switch (item.type)
         {
-            if (!this.streamStarted)
-            {
-                parts.push({ type: "stream-start", warnings: [] });
-                this.streamStarted = true;
-            }
-        };
-
-        const pushReasoningDelta = (id: string, delta: string) =>
-        {
-            pushStreamStart();
-
-            if (!this.openReasoningParts.has(id))
-            {
-                this.openReasoningParts.add(id);
-                parts.push(withMeta({ type: "reasoning-start", id }));
-            }
-
-            if (!delta)
-            {
-                return;
-            }
-
-            parts.push(withMeta({ type: "reasoning-delta", id, delta }));
-        };
-
-        switch (event.method)
-        {
-            case "turn/started": {
-                const turnStartedParams = event.params as TurnStartedNotification | undefined;
-                if (turnStartedParams?.turn?.id)
-                {
-                    this.turnId = turnStartedParams.turn.id;
-                }
-                pushStreamStart();
+            case "agentMessage": {
+                this.ensureStreamStarted(parts);
+                this.openTextParts.add(item.id);
+                parts.push(this.withMeta({ type: "text-start", id: item.id }));
                 break;
             }
-
-            case "item/started": {
-                const params = (event.params ?? {}) as ItemStartedNotification;
-                const item = params.item;
-                if (!item?.id)
-                {
-                    break;
-                }
-
-                switch (item.type)
-                {
-                    case "agentMessage": {
-                        pushStreamStart();
-                        this.openTextParts.add(item.id);
-                        parts.push(withMeta({ type: "text-start", id: item.id }));
-                        break;
-                    }
-                    case "commandExecution": {
-                        pushStreamStart();
-                        const toolName = "codex_command_execution";
-                        this.openToolCalls.set(item.id, { toolName, output: "" });
-                        parts.push(withMeta({
-                            type: "tool-call",
-                            toolCallId: item.id,
-                            toolName,
-                            input: JSON.stringify({ command: item.command, cwd: item.cwd }),
-                            providerExecuted: true,
-                            dynamic: true,
-                        }));
-                        break;
-                    }
-                    case "reasoning":
-                    case "plan":
-                    case "fileChange":
-                    case "mcpToolCall":
-                    case "collabAgentToolCall":
-                    case "webSearch":
-                    case "imageView":
-                    case "contextCompaction":
-                    case "enteredReviewMode":
-                    case "exitedReviewMode": {
-                        pushReasoningDelta(item.id, "");
-                        break;
-                    }
-                    default:
-                        break;
-                }
+            case "commandExecution": {
+                this.ensureStreamStarted(parts);
+                const toolName = "codex_command_execution";
+                this.openToolCalls.set(item.id, { toolName, output: "" });
+                parts.push(this.withMeta({
+                    type: "tool-call",
+                    toolCallId: item.id,
+                    toolName,
+                    input: JSON.stringify({ command: item.command, cwd: item.cwd }),
+                    providerExecuted: true,
+                    dynamic: true,
+                }));
                 break;
             }
-
-            case "item/agentMessage/delta": {
-                const delta = (event.params ?? {}) as AgentMessageDeltaNotification;
-                if (!delta.itemId || !delta.delta)
-                {
-                    break;
-                }
-
-                pushStreamStart();
-
-                if (!this.openTextParts.has(delta.itemId))
-                {
-                    this.openTextParts.add(delta.itemId);
-                    parts.push(withMeta({ type: "text-start", id: delta.itemId }));
-                }
-
-                parts.push(withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
-                this.textDeltaReceived.add(delta.itemId);
+            case "reasoning":
+            case "plan":
+            case "fileChange":
+            case "mcpToolCall":
+            case "collabAgentToolCall":
+            case "webSearch":
+            case "imageView":
+            case "contextCompaction":
+            case "enteredReviewMode":
+            case "exitedReviewMode": {
+                this.emitReasoningDelta(parts, item.id, "");
                 break;
             }
-
-            case "item/completed": {
-                const params = (event.params ?? {}) as ItemCompletedNotification;
-                const item = params.item;
-                if (!item?.id)
-                {
-                    break;
-                }
-
-                if (item.type === "agentMessage")
-                {
-                    // Fallback: if no deltas were streamed for this item,
-                    // emit the full text from the completed event so the
-                    // message isn't silently lost.
-                    if (!this.textDeltaReceived.has(item.id) && item.text)
-                    {
-                        pushStreamStart();
-
-                        if (!this.openTextParts.has(item.id))
-                        {
-                            this.openTextParts.add(item.id);
-                            parts.push(withMeta({ type: "text-start", id: item.id }));
-                        }
-
-                        parts.push(withMeta({ type: "text-delta", id: item.id, delta: item.text }));
-                    }
-
-                    if (this.openTextParts.has(item.id))
-                    {
-                        parts.push(withMeta({ type: "text-end", id: item.id }));
-                        this.openTextParts.delete(item.id);
-                    }
-                }
-                else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
-                {
-                    const tracked = this.openToolCalls.get(item.id)!;
-                    const output = item.aggregatedOutput ?? tracked.output;
-                    const exitCode = item.exitCode;
-                    const status = item.status;
-
-                    parts.push(withMeta({
-                        type: "tool-result",
-                        toolCallId: item.id,
-                        toolName: tracked.toolName,
-                        result: { output, exitCode, status },
-                    }));
-                    this.openToolCalls.delete(item.id);
-                }
-                else if (this.openReasoningParts.has(item.id))
-                {
-                    parts.push(withMeta({ type: "reasoning-end", id: item.id }));
-                    this.openReasoningParts.delete(item.id);
-                }
-                break;
-            }
-
-            case "item/reasoning/textDelta":
-            case "item/reasoning/summaryTextDelta":
-            case "item/plan/delta":
-            case "item/fileChange/outputDelta": {
-                const delta = (event.params ?? {}) as DeltaParams;
-                if (delta.itemId && delta.delta)
-                {
-                    pushReasoningDelta(delta.itemId, delta.delta);
-                }
-                break;
-            }
-
-            case "item/reasoning/summaryPartAdded": {
-                const params = (event.params ?? {}) as ReasoningSummaryPartAddedNotification;
-                if (params.itemId)
-                {
-                    pushReasoningDelta(params.itemId, "\n\n");
-                }
-                break;
-            }
-
-            // codex/event/agent_reasoning mirrors canonical reasoning summary
-            // stream events in current logs. Ignore wrapper to avoid duplicate
-            // reasoning text in consumers.
-            case "codex/event/agent_reasoning":
-                break;
-
-            // codex/event/agent_reasoning_section_break is the wrapper form of
-            // item/reasoning/summaryPartAdded (identical 1:1). Handled by the
-            // canonical event above — skip the wrapper to avoid double "\n\n".
-            case "codex/event/agent_reasoning_section_break":
-                break;
-
-            case "turn/plan/updated": {
-                if (!this.options.emitPlanUpdates)
-                {
-                    break;
-                }
-
-                const params = (event.params ?? {}) as {
-                    turnId?: string;
-                    explanation?: string | null;
-                    plan?: Array<{ step: string; status: string }>;
-                };
-                const turnId = params.turnId;
-                const plan = params.plan;
-                if (turnId && plan)
-                {
-                    pushStreamStart();
-                    const planSequence = this.nextPlanSequence(turnId);
-                    const toolCallId = `plan:${turnId}:${planSequence}`;
-                    const toolName = "codex_plan_update";
-
-                    parts.push(withMeta({
-                        type: "tool-call",
-                        toolCallId,
-                        toolName,
-                        input: JSON.stringify({}),
-                        providerExecuted: true,
-                        dynamic: true,
-                    }));
-
-                    parts.push(withMeta({
-                        type: "tool-result",
-                        toolCallId,
-                        toolName,
-                        result: { plan, explanation: params.explanation ?? undefined },
-                    }));
-                }
-                break;
-            }
-
-            // codex/event/plan_update is the wrapper form of turn/plan/updated (1:1).
-            case "codex/event/plan_update":
-                break;
-
-            // NOTE: turn/diff/updated and codex/event/turn_diff are intentionally
-            // NOT mapped. They carry full unified diffs (often 50-100 KB) which,
-            // when emitted as reasoning deltas, crash or freeze the frontend
-            // markdown renderer. If these need to surface in the UI, they should
-            // use a dedicated part type with lazy/collapsed rendering — not
-            // reasoning text.
-            case "turn/diff/updated":
-            case "codex/event/turn_diff":
-                break;
-
-            case "item/commandExecution/outputDelta": {
-                const delta = (event.params ?? {}) as CommandExecutionOutputDeltaNotification;
-                if (delta.itemId && delta.delta && this.openToolCalls.has(delta.itemId))
-                {
-                    const tracked = this.openToolCalls.get(delta.itemId)!;
-                    tracked.output += delta.delta;
-                    parts.push(withMeta({
-                        type: "tool-result",
-                        toolCallId: delta.itemId,
-                        toolName: tracked.toolName,
-                        result: { output: tracked.output },
-                        preliminary: true,
-                    }));
-                }
-                break;
-            }
-
-            case "codex/event/mcp_tool_call_begin": {
-                const params = (event.params ?? {}) as {
-                    msg?: {
-                        call_id?: string;
-                        invocation?: { server?: string; tool?: string; arguments?: unknown };
-                    };
-                };
-                const callId = params.msg?.call_id;
-                const inv = params.msg?.invocation;
-                if (callId && inv)
-                {
-                    pushStreamStart();
-                    const toolName = `mcp:${inv.server}/${inv.tool}`;
-                    this.openToolCalls.set(callId, { toolName, output: "" });
-                    parts.push(withMeta({
-                        type: "tool-call",
-                        toolCallId: callId,
-                        toolName,
-                        input: JSON.stringify(inv.arguments ?? {}),
-                        providerExecuted: true,
-                        dynamic: true,
-                    }));
-                }
-                break;
-            }
-
-            case "codex/event/mcp_tool_call_end": {
-                const params = (event.params ?? {}) as {
-                    msg?: {
-                        call_id?: string;
-                        result?: { Ok?: { content?: Array<{ type: string; text?: string }> }; Err?: unknown };
-                    };
-                };
-                const callId = params.msg?.call_id;
-                if (callId && this.openToolCalls.has(callId))
-                {
-                    const tracked = this.openToolCalls.get(callId)!;
-                    const result = params.msg?.result;
-                    const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
-                    const output = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
-
-                    parts.push(withMeta({
-                        type: "tool-result",
-                        toolCallId: callId,
-                        toolName: tracked.toolName,
-                        result: { output },
-                    }));
-                    this.openToolCalls.delete(callId);
-                }
-                break;
-            }
-
-            case "item/mcpToolCall/progress": {
-                const params = (event.params ?? {}) as McpToolCallProgressNotification;
-                if (params.itemId && params.message)
-                {
-                    pushReasoningDelta(params.itemId, params.message);
-                }
-                break;
-            }
-
-            case "item/tool/callStarted": {
-                const params = (event.params ?? {}) as { callId?: string; tool?: string };
-                if (params.callId && params.tool)
-                {
-                    pushStreamStart();
-                    parts.push(withMeta({ type: "tool-input-start", id: params.callId, toolName: params.tool, dynamic: true }));
-                }
-                break;
-            }
-
-            case "item/tool/callDelta": {
-                const params = (event.params ?? {}) as { callId?: string; delta?: string };
-                if (params.callId && params.delta)
-                {
-                    parts.push(withMeta({ type: "tool-input-delta", id: params.callId, delta: params.delta }));
-                }
-                break;
-            }
-
-            case "item/tool/callFinished": {
-                const params = (event.params ?? {}) as { callId?: string };
-                if (params.callId)
-                {
-                    parts.push(withMeta({ type: "tool-input-end", id: params.callId }));
-                }
-                break;
-            }
-
-            case "thread/tokenUsage/updated": {
-                const params = (event.params ?? {}) as ThreadTokenUsageUpdatedNotification;
-                const last = params.tokenUsage?.last;
-                if (last)
-                {
-                    this.latestUsage = {
-                        inputTokens: {
-                            total: last.inputTokens,
-                            noCache: undefined,
-                            cacheRead: last.cachedInputTokens,
-                            cacheWrite: undefined,
-                        },
-                        outputTokens: {
-                            total: last.outputTokens,
-                            text: undefined,
-                            reasoning: last.reasoningOutputTokens,
-                        },
-                    };
-                }
-                break;
-            }
-
-            case "turn/completed": {
-                pushStreamStart();
-
-                for (const itemId of this.openTextParts)
-                {
-                    parts.push(withMeta({ type: "text-end", id: itemId }));
-                }
-                this.openTextParts.clear();
-
-                for (const itemId of this.openReasoningParts)
-                {
-                    parts.push(withMeta({ type: "reasoning-end", id: itemId }));
-                }
-                this.openReasoningParts.clear();
-
-                for (const [itemId, tracked] of this.openToolCalls)
-                {
-                    parts.push(withMeta({
-                        type: "tool-result",
-                        toolCallId: itemId,
-                        toolName: tracked.toolName,
-                        result: { output: tracked.output },
-                    }));
-                }
-                this.openToolCalls.clear();
-
-                const completed = (event.params ?? {}) as TurnCompletedNotification;
-                if (completed.turn?.id)
-                {
-                    this.planSequenceByTurnId.delete(completed.turn.id);
-                }
-                const usage = this.latestUsage ?? EMPTY_USAGE;
-                parts.push(withMeta({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
-                break;
-            }
-
             default:
                 break;
         }
 
+        return parts;
+    }
+
+    // item/agentMessage/delta
+    private handleAgentMessageDelta(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const delta = (params ?? {}) as AgentMessageDeltaNotification;
+        if (!delta.itemId || !delta.delta)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+
+        if (!this.openTextParts.has(delta.itemId))
+        {
+            this.openTextParts.add(delta.itemId);
+            parts.push(this.withMeta({ type: "text-start", id: delta.itemId }));
+        }
+
+        parts.push(this.withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
+        this.textDeltaReceived.add(delta.itemId);
+        return parts;
+    }
+
+    // item/completed
+    private handleItemCompleted(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as ItemCompletedNotification;
+        const item = p.item;
+        if (!item?.id)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+
+        if (item.type === "agentMessage")
+        {
+            if (!this.textDeltaReceived.has(item.id) && item.text)
+            {
+                this.ensureStreamStarted(parts);
+
+                if (!this.openTextParts.has(item.id))
+                {
+                    this.openTextParts.add(item.id);
+                    parts.push(this.withMeta({ type: "text-start", id: item.id }));
+                }
+
+                parts.push(this.withMeta({ type: "text-delta", id: item.id, delta: item.text }));
+            }
+
+            if (this.openTextParts.has(item.id))
+            {
+                parts.push(this.withMeta({ type: "text-end", id: item.id }));
+                this.openTextParts.delete(item.id);
+            }
+        }
+        else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
+        {
+            const tracked = this.openToolCalls.get(item.id)!;
+            const output = item.aggregatedOutput ?? tracked.output;
+            const exitCode = item.exitCode;
+            const status = item.status;
+
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: item.id,
+                toolName: tracked.toolName,
+                result: { output, exitCode, status },
+            }));
+            this.openToolCalls.delete(item.id);
+        }
+        else if (this.openReasoningParts.has(item.id))
+        {
+            parts.push(this.withMeta({ type: "reasoning-end", id: item.id }));
+            this.openReasoningParts.delete(item.id);
+        }
+
+        return parts;
+    }
+
+    // item/reasoning/textDelta, item/reasoning/summaryTextDelta, item/plan/delta, item/fileChange/outputDelta
+    private handleReasoningDelta(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const delta = (params ?? {}) as DeltaParams;
+        if (!delta.itemId || !delta.delta)
+        {
+            return [];
+        }
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.emitReasoningDelta(parts, delta.itemId, delta.delta);
+        return parts;
+    }
+
+    // item/reasoning/summaryPartAdded
+    private handleSummaryPartAdded(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as ReasoningSummaryPartAddedNotification;
+        if (!p.itemId)
+        {
+            return [];
+        }
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.emitReasoningDelta(parts, p.itemId, "\n\n");
+        return parts;
+    }
+
+    // turn/plan/updated
+    private handlePlanUpdated(params: unknown): LanguageModelV3StreamPart[]
+    {
+        if (!this.options.emitPlanUpdates)
+        {
+            return [];
+        }
+
+        const p = (params ?? {}) as {
+            turnId?: string;
+            explanation?: string | null;
+            plan?: Array<{ step: string; status: string }>;
+        };
+        const turnId = p.turnId;
+        const plan = p.plan;
+        if (!turnId || !plan)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+        const planSequence = this.nextPlanSequence(turnId);
+        const toolCallId = `plan:${turnId}:${planSequence}`;
+        const toolName = "codex_plan_update";
+
+        parts.push(this.withMeta({
+            type: "tool-call",
+            toolCallId,
+            toolName,
+            input: JSON.stringify({}),
+            providerExecuted: true,
+            dynamic: true,
+        }));
+
+        parts.push(this.withMeta({
+            type: "tool-result",
+            toolCallId,
+            toolName,
+            result: { plan, explanation: p.explanation ?? undefined },
+        }));
+
+        return parts;
+    }
+
+    // item/commandExecution/outputDelta
+    private handleCommandOutputDelta(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const delta = (params ?? {}) as CommandExecutionOutputDeltaNotification;
+        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
+        {
+            return [];
+        }
+
+        const tracked = this.openToolCalls.get(delta.itemId)!;
+        tracked.output += delta.delta;
+        return [this.withMeta({
+            type: "tool-result",
+            toolCallId: delta.itemId,
+            toolName: tracked.toolName,
+            result: { output: tracked.output },
+            preliminary: true,
+        })];
+    }
+
+    // codex/event/mcp_tool_call_begin
+    private handleMcpToolCallBegin(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as {
+            msg?: {
+                call_id?: string;
+                invocation?: { server?: string; tool?: string; arguments?: unknown };
+            };
+        };
+        const callId = p.msg?.call_id;
+        const inv = p.msg?.invocation;
+        if (!callId || !inv)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+        const toolName = `mcp:${inv.server}/${inv.tool}`;
+        this.openToolCalls.set(callId, { toolName, output: "" });
+        parts.push(this.withMeta({
+            type: "tool-call",
+            toolCallId: callId,
+            toolName,
+            input: JSON.stringify(inv.arguments ?? {}),
+            providerExecuted: true,
+            dynamic: true,
+        }));
+        return parts;
+    }
+
+    // codex/event/mcp_tool_call_end
+    private handleMcpToolCallEnd(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as {
+            msg?: {
+                call_id?: string;
+                result?: { Ok?: { content?: Array<{ type: string; text?: string }> }; Err?: unknown };
+            };
+        };
+        const callId = p.msg?.call_id;
+        if (!callId || !this.openToolCalls.has(callId))
+        {
+            return [];
+        }
+
+        const tracked = this.openToolCalls.get(callId)!;
+        const result = p.msg?.result;
+        const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
+        const output = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
+
+        this.openToolCalls.delete(callId);
+        return [this.withMeta({
+            type: "tool-result",
+            toolCallId: callId,
+            toolName: tracked.toolName,
+            result: { output },
+        })];
+    }
+
+    // item/mcpToolCall/progress
+    private handleMcpToolCallProgress(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as McpToolCallProgressNotification;
+        if (!p.itemId || !p.message)
+        {
+            return [];
+        }
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.emitReasoningDelta(parts, p.itemId, p.message);
+        return parts;
+    }
+
+    // item/tool/callStarted
+    private handleToolCallStarted(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as { callId?: string; tool?: string };
+        if (!p.callId || !p.tool)
+        {
+            return [];
+        }
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+        parts.push(this.withMeta({ type: "tool-input-start", id: p.callId, toolName: p.tool, dynamic: true }));
+        return parts;
+    }
+
+    // item/tool/callDelta
+    private handleToolCallDelta(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as { callId?: string; delta?: string };
+        if (!p.callId || !p.delta)
+        {
+            return [];
+        }
+        return [this.withMeta({ type: "tool-input-delta", id: p.callId, delta: p.delta })];
+    }
+
+    // item/tool/callFinished
+    private handleToolCallFinished(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as { callId?: string };
+        if (!p.callId)
+        {
+            return [];
+        }
+        return [this.withMeta({ type: "tool-input-end", id: p.callId })];
+    }
+
+    // thread/tokenUsage/updated
+    private handleTokenUsageUpdated(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as ThreadTokenUsageUpdatedNotification;
+        const last = p.tokenUsage?.last;
+        if (last)
+        {
+            this.latestUsage = {
+                inputTokens: {
+                    total: last.inputTokens,
+                    noCache: undefined,
+                    cacheRead: last.cachedInputTokens,
+                    cacheWrite: undefined,
+                },
+                outputTokens: {
+                    total: last.outputTokens,
+                    text: undefined,
+                    reasoning: last.reasoningOutputTokens,
+                },
+            };
+        }
+        return [];
+    }
+
+    // turn/completed
+    private handleTurnCompleted(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+
+        for (const itemId of this.openTextParts)
+        {
+            parts.push(this.withMeta({ type: "text-end", id: itemId }));
+        }
+        this.openTextParts.clear();
+
+        for (const itemId of this.openReasoningParts)
+        {
+            parts.push(this.withMeta({ type: "reasoning-end", id: itemId }));
+        }
+        this.openReasoningParts.clear();
+
+        for (const [itemId, tracked] of this.openToolCalls)
+        {
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: itemId,
+                toolName: tracked.toolName,
+                result: { output: tracked.output },
+            }));
+        }
+        this.openToolCalls.clear();
+
+        const completed = (params ?? {}) as TurnCompletedNotification;
+        if (completed.turn?.id)
+        {
+            this.planSequenceByTurnId.delete(completed.turn.id);
+        }
+        const usage = this.latestUsage ?? EMPTY_USAGE;
+        parts.push(this.withMeta({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
         return parts;
     }
 }
