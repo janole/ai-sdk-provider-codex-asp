@@ -2,7 +2,6 @@ import type {
     LanguageModelV3CallOptions,
     LanguageModelV3StreamPart,
     LanguageModelV3StreamResult,
-    LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
 import { ApprovalsDispatcher } from "./approvals";
@@ -37,7 +36,7 @@ import type {
 } from "./protocol/types";
 import type { CodexCompactionOnResumeContext } from "./provider-settings";
 import { CodexSessionImpl } from "./session";
-import { stripUndefined } from "./utils/object";
+import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
 
 // ── Helpers (stream-only, moved from model.ts) ──────────────────────────
@@ -53,23 +52,6 @@ interface TurnStartResultLike extends CodexTurnStartResult
 {
     turn?: {
         id?: string;
-    };
-}
-
-function createEmptyUsage(): LanguageModelV3Usage
-{
-    return {
-        inputTokens: {
-            total: undefined,
-            noCache: undefined,
-            cacheRead: undefined,
-            cacheWrite: undefined,
-        },
-        outputTokens: {
-            total: undefined,
-            text: undefined,
-            reasoning: undefined,
-        },
     };
 }
 
@@ -783,7 +765,7 @@ export class StreamSession
             controller.enqueue(withMeta({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
-                usage: createEmptyUsage(),
+                usage: EMPTY_USAGE,
             }));
 
             void this.closeSuccessfully(controller);

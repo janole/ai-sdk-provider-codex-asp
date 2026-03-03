@@ -11,7 +11,7 @@ import type {
 import { CodexProviderError } from "./errors";
 import type { CodexProviderSettings } from "./provider-settings";
 import { StreamSession } from "./stream-session";
-import { stripUndefined } from "./utils/object";
+import { EMPTY_USAGE, stripUndefined } from "./utils/object";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CodexLanguageModelSettings
@@ -31,23 +31,6 @@ type PassThroughStreamContentPart = Extract<
     LanguageModelV3StreamPart,
     { type: "tool-call" | "tool-result" | "file" | "source" | "tool-approval-request" }
 >;
-
-function createEmptyUsage(): LanguageModelV3Usage
-{
-    return {
-        inputTokens: {
-            total: undefined,
-            noCache: undefined,
-            cacheRead: undefined,
-            cacheWrite: undefined,
-        },
-        outputTokens: {
-            total: undefined,
-            text: undefined,
-            reasoning: undefined,
-        },
-    };
-}
 
 function isPassThroughContentPart(
     part: LanguageModelV3StreamPart,
@@ -104,7 +87,7 @@ export class CodexLanguageModel implements LanguageModelV3
             unified: "other",
             raw: undefined,
         };
-        let usage: LanguageModelV3Usage = createEmptyUsage();
+        let usage: LanguageModelV3Usage = EMPTY_USAGE;
         let providerMetadata: LanguageModelV3GenerateResult["providerMetadata"];
 
         while (true)
