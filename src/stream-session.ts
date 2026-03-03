@@ -338,8 +338,7 @@ export class StreamSession
                 {
                     // Best-effort only: always disconnect to release resources.
                 }
-                await this.fileResolver.cleanup();
-                await this.client.disconnect();
+                await Promise.all([this.fileResolver.cleanup(), this.client.disconnect()]);
             },
         });
 
@@ -390,6 +389,45 @@ export class StreamSession
         await this.client.request<CodexTurnInterruptResult>("turn/interrupt", interruptParams, this.interruptTimeoutMs);
     }
 
+    private attachApprovals(): void
+    {
+        const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
+            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
+            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
+        }));
+        approvalsDispatcher.attach(this.client);
+    }
+
+    private attachNotificationHandler(
+        controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
+        syncTurnId: boolean,
+    ): void
+    {
+        this.client.onAnyNotification((method, params) =>
+        {
+            const parts = this.mapper.map({ method, params });
+
+            if (syncTurnId)
+            {
+                const mappedTurnId = this.mapper.getTurnId();
+                if (mappedTurnId && mappedTurnId !== this.activeTurnId)
+                {
+                    this.activeTurnId = mappedTurnId;
+                    this.session?.setTurnId(mappedTurnId);
+                }
+            }
+
+            for (const part of parts)
+            {
+                controller.enqueue(part);
+                if (part.type === "finish")
+                {
+                    void this.close(controller);
+                }
+            }
+        });
+    }
+
     // ── Cross-call resume flow ───────────────────────────────────────────
 
     private async runCrossCallResume(
@@ -418,18 +456,7 @@ export class StreamSession
         });
         this.mapper.setThreadId(pendingToolCall.threadId);
 
-        this.client.onAnyNotification((method, params) =>
-        {
-            const parts = this.mapper.map({ method, params });
-            for (const part of parts)
-            {
-                controller.enqueue(part);
-                if (part.type === "finish")
-                {
-                    void this.closeSuccessfully(controller);
-                }
-            }
-        });
+        this.attachNotificationHandler(controller, false);
 
         // Register cross-call handler again for chained tool calls
         this.registerCrossCallToolHandler(
@@ -437,11 +464,7 @@ export class StreamSession
             pendingToolCall.threadId,
         );
 
-        const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
-            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
-            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
-        }));
-        approvalsDispatcher.attach(this.client);
+        this.attachApprovals();
 
         const result = toolResult ?? {
             success: false,
@@ -484,34 +507,9 @@ export class StreamSession
             dispatcher.attach(this.client);
         }
 
-        const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
-            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
-            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
-        }));
-        approvalsDispatcher.attach(this.client);
+        this.attachApprovals();
 
-        this.client.onAnyNotification((method, params) =>
-        {
-            const parts = this.mapper.map({ method, params });
-
-            // Sync turnId from mapper after it processes turn/started
-            const mappedTurnId = this.mapper.getTurnId();
-            if (mappedTurnId && mappedTurnId !== this.activeTurnId)
-            {
-                this.activeTurnId = mappedTurnId;
-                this.session?.setTurnId(mappedTurnId);
-            }
-
-            for (const part of parts)
-            {
-                controller.enqueue(part);
-
-                if (part.type === "finish")
-                {
-                    void this.closeSuccessfully(controller);
-                }
-            }
-        });
+        this.attachNotificationHandler(controller, true);
 
         // Merge provider-level tools with SDK tools from options
         const providerToolDefs = this.config.providerSettings.tools;
