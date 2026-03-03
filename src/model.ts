@@ -359,10 +359,11 @@ export class CodexLanguageModel implements LanguageModelV3
                     return null;
                 }
 
-                return {
+                return stripUndefined({
                     type: "text" as const,
                     text,
-                };
+                    providerMetadata,
+                });
             })
             .filter((part): part is Extract<LanguageModelV3Content, { type: "text" }> => part !== null);
 
