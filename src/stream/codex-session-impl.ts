@@ -1,20 +1,6 @@
-import type { AppServerClient } from "./client/app-server-client";
-import type { UserInput } from "./protocol/app-server-protocol/v2/UserInput";
-import type {
-    CodexTurnInterruptParams,
-    CodexTurnInterruptResult,
-    CodexTurnStartParams,
-    CodexTurnStartResult,
-} from "./protocol/types";
-
-export interface CodexSession
-{
-    readonly threadId: string;
-    readonly turnId: string | undefined;
-    isActive(): boolean;
-    injectMessage(input: string | UserInput[]): Promise<void>;
-    interrupt(): Promise<void>;
-}
+import type { AppServerClient } from "../client/app-server-client";
+import type { CodexTurnInterruptParams, CodexTurnInterruptResult, CodexTurnStartParams, CodexTurnStartResult, UserInput } from "../protocol/types";
+import type { CodexSession } from "../provider-settings";
 
 export class CodexSessionImpl implements CodexSession
 {

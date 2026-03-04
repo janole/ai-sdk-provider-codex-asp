@@ -4,6 +4,7 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import { EMPTY_USAGE } from "../utils/object";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -28,20 +29,6 @@ interface DeltaParams
     itemId?: string;
     delta?: string;
 }
-
-const EMPTY_USAGE: LanguageModelV3Usage = {
-    inputTokens: {
-        total: undefined,
-        noCache: undefined,
-        cacheRead: undefined,
-        cacheWrite: undefined,
-    },
-    outputTokens: {
-        total: undefined,
-        text: undefined,
-        reasoning: undefined,
-    },
-};
 
 function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishReason
 {

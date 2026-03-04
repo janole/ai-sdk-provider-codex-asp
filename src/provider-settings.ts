@@ -5,8 +5,7 @@ import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
-import type { CodexSession } from "./session";
+import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy, UserInput } from "./protocol/types";
 
 export interface TransportContext
 {
@@ -60,6 +59,15 @@ export type CodexCompactionOnResumeDecision =
 export type McpServerConfig =
     | { type: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
     | { type: "http"; url: string; bearerToken?: string; headers?: Record<string, string> };
+
+export interface CodexSession
+{
+    readonly threadId: string;
+    readonly turnId: string | undefined;
+    isActive(): boolean;
+    injectMessage(input: string | UserInput[]): Promise<void>;
+    interrupt(): Promise<void>;
+}
 
 export interface CodexProviderSettings
 {
