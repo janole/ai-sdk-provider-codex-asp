@@ -47,7 +47,7 @@ function sdkToolsToCodexDynamicTools(
         }));
 }
 
-export function createStreamSession(
+export async function createStreamSession(
     config: CodexModelConfig,
     modelId: string,
     options: LanguageModelV3CallOptions,
@@ -254,7 +254,7 @@ export function createStreamSession(
         });
     };
 
-    const runFreshThread = async (
+    const runThreadFlow = async (
         controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
         persistentTransport: PersistentTransport | null,
     ): Promise<void> =>
@@ -511,7 +511,7 @@ export function createStreamSession(
                     }
                     else
                     {
-                        await runFreshThread(controller, persistentTransport);
+                        await runThreadFlow(controller, persistentTransport);
                     }
                 }
                 catch (error)
@@ -536,5 +536,5 @@ export function createStreamSession(
         },
     });
 
-    return Promise.resolve({ stream });
+    return { stream };
 }
