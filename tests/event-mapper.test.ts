@@ -382,12 +382,116 @@ describe("CodexEventMapper", () =>
             { type: "stream-start", warnings: [] },
             { type: "reasoning-start", id: "ws_1" },
             { type: "reasoning-start", id: "collab_1" },
+            { type: "reasoning-delta", id: "ws_1", delta: "Web search: vitest docs" },
             { type: "reasoning-end", id: "ws_1" },
             { type: "reasoning-end", id: "collab_1" },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
                 usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("maps dynamicToolCall lifecycle to provider-executed tool parts", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_1",
+                        tool: "readGithubFile",
+                        arguments: { owner: "badlogic", repo: "pi-mono", path: "README.md" },
+                        status: "inProgress",
+                        contentItems: null,
+                        success: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_1",
+                        tool: "readGithubFile",
+                        arguments: { owner: "badlogic", repo: "pi-mono", path: "README.md" },
+                        status: "completed",
+                        contentItems: [{ type: "inputText", text: "file content" }],
+                        success: true,
+                        durationMs: 123,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "call_1",
+                toolName: "readGithubFile",
+                input: JSON.stringify({ owner: "badlogic", repo: "pi-mono", path: "README.md" }),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "call_1",
+                toolName: "readGithubFile",
+                result: { output: "file content", success: true },
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("maps item/tool/call to provider-executed tool-call", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const parts = mapper.map({
+            method: "item/tool/call",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                callId: "call_2",
+                tool: "lookup",
+                arguments: { id: "ABC-1" },
+            },
+        });
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "call_2",
+                toolName: "lookup",
+                input: JSON.stringify({ id: "ABC-1" }),
+                providerExecuted: true,
+                dynamic: true,
             },
         ]);
     });

@@ -15,6 +15,7 @@ import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCom
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
+import type { CodexDynamicToolCallItem } from "./types";
 
 export interface CodexEventMapperInput
 {
@@ -28,6 +29,8 @@ interface DeltaParams
     itemId?: string;
     delta?: string;
 }
+
+type DynamicToolCallItem = CodexDynamicToolCallItem;
 
 const EMPTY_USAGE: LanguageModelV3Usage = {
     inputTokens: {
@@ -121,6 +124,9 @@ export class CodexEventMapper
             "item/tool/callStarted": (p) => this.handleToolCallStarted(p),
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
             "item/tool/callFinished": (p) => this.handleToolCallFinished(p),
+            "item/tool/call": (p) => this.handleToolCall(p),
+            "codex/event/web_search_begin": (p) => this.handleWebSearchBegin(p),
+            "codex/event/web_search_end": (p) => this.handleWebSearchEnd(p),
             "thread/tokenUsage/updated": (p) => this.handleTokenUsageUpdated(p),
             "turn/completed": (p) => this.handleTurnCompleted(p),
 
@@ -245,6 +251,10 @@ export class CodexEventMapper
                 }));
                 break;
             }
+            case "dynamicToolCall": {
+                parts.push(...this.startDynamicToolCall(item));
+                break;
+            }
             case "reasoning":
             case "plan":
             case "fileChange":
@@ -335,6 +345,37 @@ export class CodexEventMapper
                 result: { output, exitCode, status },
             }));
             this.openToolCalls.delete(item.id);
+        }
+        else if (item.type === "dynamicToolCall")
+        {
+            const dynamic = item;
+            const tracked = this.openToolCalls.get(item.id);
+            const toolName = tracked?.toolName ?? dynamic.tool ?? "dynamic_tool_call";
+            const output = this.stringifyDynamicToolResult(dynamic);
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: item.id,
+                toolName,
+                result: { output, success: dynamic.success ?? undefined },
+            }));
+            this.openToolCalls.delete(item.id);
+        }
+        else if (item.type === "webSearch")
+        {
+            const webSearchSummary = this.formatWebSearchItemSummary(item as {
+                query?: string;
+                action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
+            });
+            if (webSearchSummary)
+            {
+                this.emitReasoningDelta(parts, item.id, webSearchSummary);
+            }
+
+            if (this.openReasoningParts.has(item.id))
+            {
+                parts.push(this.withMeta({ type: "reasoning-end", id: item.id }));
+                this.openReasoningParts.delete(item.id);
+            }
         }
         else if (this.openReasoningParts.has(item.id))
         {
@@ -543,6 +584,165 @@ export class CodexEventMapper
             return [];
         }
         return [this.withMeta({ type: "tool-input-end", id: p.callId })];
+    }
+
+    // item/tool/call
+    private handleToolCall(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as { callId?: string; tool?: string; arguments?: unknown };
+        if (!p.callId || !p.tool)
+        {
+            return [];
+        }
+        return this.startDynamicToolCall({
+            id: p.callId,
+            tool: p.tool,
+            arguments: p.arguments ?? {},
+        });
+    }
+
+    // codex/event/web_search_begin
+    private handleWebSearchBegin(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as { msg?: { call_id?: string } };
+        const callId = p.msg?.call_id;
+        if (!callId)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.emitReasoningDelta(parts, callId, "");
+        return parts;
+    }
+
+    // codex/event/web_search_end
+    private handleWebSearchEnd(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const p = (params ?? {}) as {
+            msg?: {
+                call_id?: string;
+                query?: string;
+                action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
+            };
+        };
+        const callId = p.msg?.call_id;
+        if (!callId)
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        const summary = this.formatWebSearchItemSummary({
+            ...(p.msg?.query !== undefined ? { query: p.msg.query } : {}),
+            ...(p.msg?.action !== undefined ? { action: p.msg.action } : {}),
+        });
+        if (summary)
+        {
+            this.emitReasoningDelta(parts, callId, summary);
+        }
+
+        if (this.openReasoningParts.has(callId))
+        {
+            parts.push(this.withMeta({ type: "reasoning-end", id: callId }));
+            this.openReasoningParts.delete(callId);
+        }
+        return parts;
+    }
+
+    private startDynamicToolCall(item: Pick<DynamicToolCallItem, "id" | "tool" | "arguments">): LanguageModelV3StreamPart[]
+    {
+        if (!item.id || !item.tool)
+        {
+            return [];
+        }
+
+        if (this.openToolCalls.has(item.id))
+        {
+            return [];
+        }
+
+        const parts: LanguageModelV3StreamPart[] = [];
+        this.ensureStreamStarted(parts);
+
+        this.openToolCalls.set(item.id, { toolName: item.tool, output: "" });
+        parts.push(this.withMeta({
+            type: "tool-call",
+            toolCallId: item.id,
+            toolName: item.tool,
+            input: JSON.stringify(item.arguments ?? {}),
+            providerExecuted: true,
+            dynamic: true,
+        }));
+
+        return parts;
+    }
+
+    private stringifyDynamicToolResult(item: Pick<DynamicToolCallItem, "contentItems">): string
+    {
+        const contentItems = item.contentItems ?? [];
+        if (!contentItems.length)
+        {
+            return "";
+        }
+
+        const chunks: string[] = [];
+        for (const contentItem of contentItems)
+        {
+            if (contentItem.type === "inputText" && contentItem.text)
+            {
+                chunks.push(contentItem.text);
+                continue;
+            }
+
+            if (contentItem.type === "inputImage" && contentItem.imageUrl)
+            {
+                chunks.push(`[image] ${contentItem.imageUrl}`);
+            }
+        }
+        return chunks.join("\n");
+    }
+
+    private formatWebSearchItemSummary(item: {
+        query?: string;
+        action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
+    }): string
+    {
+        const query = item.query?.trim();
+        const actionType = item.action?.type;
+
+        if (actionType === "search")
+        {
+            if (query)
+            {
+                return `Web search: ${query}`;
+            }
+            const actionQuery = item.action?.query?.trim();
+            return actionQuery ? `Web search: ${actionQuery}` : "Web search";
+        }
+
+        if (actionType === "openPage" || actionType === "open_page")
+        {
+            const url = item.action?.url?.trim();
+            return url ? `Open page: ${url}` : "Open page";
+        }
+
+        if (actionType === "findInPage" || actionType === "find_in_page")
+        {
+            const pattern = item.action?.pattern?.trim();
+            const url = item.action?.url?.trim();
+            if (pattern && url)
+            {
+                return `Find in page: "${pattern}" (${url})`;
+            }
+            if (pattern)
+            {
+                return `Find in page: "${pattern}"`;
+            }
+            return url ? `Find in page: ${url}` : "Find in page";
+        }
+
+        return query ? `Web search: ${query}` : "";
     }
 
     // thread/tokenUsage/updated
