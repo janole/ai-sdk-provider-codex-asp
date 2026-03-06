@@ -489,6 +489,51 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
+    it("deduplicates web search summary when both wrapper and item/completed arrive", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const parts = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "codex/event/web_search_begin",
+                params: { threadId: "thr", turnId: "turn", msg: { call_id: "ws_dup" } },
+            },
+            {
+                method: "codex/event/web_search_end",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    msg: { call_id: "ws_dup", query: "vitest docs", action: { type: "search", query: "vitest docs" } },
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: { type: "webSearch", id: "ws_dup", query: "vitest docs", action: { type: "search", query: "vitest docs" } },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const reasoningDeltas = parts.filter((part) => part.type === "reasoning-delta");
+        const reasoningEnds = parts.filter((part) => part.type === "reasoning-end");
+        const summaryDeltas = reasoningDeltas.filter((part) =>
+            part.id === "ws_dup" && part.delta === "Web search: vitest docs");
+        const wsEnds = reasoningEnds.filter((part) => part.id === "ws_dup");
+
+        expect(summaryDeltas).toHaveLength(1);
+        expect(wsEnds).toHaveLength(1);
+    });
+
     it("maps dynamicToolCall lifecycle to provider-executed tool parts", () =>
     {
         const mapper = new CodexEventMapper();

@@ -95,6 +95,7 @@ export class CodexEventMapper
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
+    private readonly webSearchEndedByWrapper = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string; droppedChars: number }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
@@ -415,6 +416,12 @@ export class CodexEventMapper
         }
         else if (item.type === "webSearch")
         {
+            if (this.webSearchEndedByWrapper.has(item.id))
+            {
+                this.webSearchEndedByWrapper.delete(item.id);
+                return [];
+            }
+
             const webSearchSummary = this.formatWebSearchItemSummary(item as {
                 query?: string;
                 action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
@@ -701,6 +708,7 @@ export class CodexEventMapper
             parts.push(this.withMeta({ type: "reasoning-end", id: callId }));
             this.openReasoningParts.delete(callId);
         }
+        this.webSearchEndedByWrapper.add(callId);
         return parts;
     }
 
@@ -840,6 +848,7 @@ export class CodexEventMapper
             parts.push(this.withMeta({ type: "reasoning-end", id: itemId }));
         }
         this.openReasoningParts.clear();
+        this.webSearchEndedByWrapper.clear();
 
         for (const [itemId, tracked] of this.openToolCalls)
         {
