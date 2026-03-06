@@ -417,6 +417,84 @@ describe("CodexEventMapper", () =>
         });
     });
 
+    it("disables truncation when maxToolResultOutputChars is 0", () =>
+    {
+        const mapper = new CodexEventMapper({ maxToolResultOutputChars: 0 });
+
+        const parts = [
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_no_trunc_zero",
+                        command: "echo",
+                        cwd: "/project",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_no_trunc_zero", delta: "1234567890ABCDEF" },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        expect(parts).toContainEqual({
+            type: "tool-result",
+            toolCallId: "cmd_no_trunc_zero",
+            toolName: "codex_command_execution",
+            result: { output: "1234567890ABCDEF" },
+            preliminary: true,
+        });
+    });
+
+    it("disables truncation when maxToolResultOutputChars is negative", () =>
+    {
+        const mapper = new CodexEventMapper({ maxToolResultOutputChars: -1 });
+
+        const parts = [
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_no_trunc_negative",
+                        command: "echo",
+                        cwd: "/project",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_no_trunc_negative", delta: "1234567890ABCDEF" },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        expect(parts).toContainEqual({
+            type: "tool-result",
+            toolCallId: "cmd_no_trunc_negative",
+            toolName: "codex_command_execution",
+            result: { output: "1234567890ABCDEF" },
+            preliminary: true,
+        });
+    });
+
     it("maps new item types (webSearch, collabAgentToolCall) to reasoning parts", () =>
     {
         const mapper = new CodexEventMapper();

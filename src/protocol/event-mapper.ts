@@ -65,7 +65,10 @@ export interface CodexEventMapperOptions
 {
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
-    /** Max retained tool-result output chars; older content is truncated. Default: 32768. */
+    /**
+     * Max retained tool-result output chars; older content is truncated. Default: 32768.
+     * Set to 0 or a negative value to disable truncation.
+     */
     maxToolResultOutputChars?: number;
 }
 
@@ -213,7 +216,7 @@ export class CodexEventMapper
         const limit = this.options.maxToolResultOutputChars;
         if (limit <= 0)
         {
-            return { output: "", droppedChars: output.length };
+            return { output, droppedChars: 0 };
         }
 
         if (output.length <= limit)
