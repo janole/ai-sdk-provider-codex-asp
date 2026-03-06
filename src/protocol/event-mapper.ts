@@ -65,6 +65,8 @@ export interface CodexEventMapperOptions
 {
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
+    /** Max retained tool-result output chars; older content is truncated. Default: 32768. */
+    maxToolResultOutputChars?: number;
 }
 
 /**
@@ -84,6 +86,7 @@ export function extractNotificationThreadId(params: unknown): string | undefined
 
 // No-op handler for intentionally ignored events.
 const NOOP = (): LanguageModelV3StreamPart[] => [];
+const DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS = 32_768;
 
 export class CodexEventMapper
 {
@@ -92,7 +95,7 @@ export class CodexEventMapper
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
-    private readonly openToolCalls = new Map<string, { toolName: string; output: string }>();
+    private readonly openToolCalls = new Map<string, { toolName: string; output: string; droppedChars: number }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
@@ -104,6 +107,7 @@ export class CodexEventMapper
     {
         this.options = {
             emitPlanUpdates: options?.emitPlanUpdates ?? true,
+            maxToolResultOutputChars: options?.maxToolResultOutputChars ?? DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS,
         };
 
         this.handlers = {
@@ -202,6 +206,46 @@ export class CodexEventMapper
         return next;
     }
 
+    private applyOutputLimit(output: string): { output: string; droppedChars: number }
+    {
+        const limit = this.options.maxToolResultOutputChars;
+        if (limit <= 0)
+        {
+            return { output: "", droppedChars: output.length };
+        }
+
+        if (output.length <= limit)
+        {
+            return { output, droppedChars: 0 };
+        }
+
+        const droppedChars = output.length - limit;
+        return { output: output.slice(droppedChars), droppedChars };
+    }
+
+    private appendTrackedOutput(tracked: { output: string; droppedChars: number }, delta: string): void
+    {
+        if (!delta)
+        {
+            return;
+        }
+
+        const combined = tracked.output + delta;
+        const limited = this.applyOutputLimit(combined);
+        tracked.output = limited.output;
+        tracked.droppedChars += limited.droppedChars;
+    }
+
+    private formatToolOutput(output: string, droppedChars: number): string
+    {
+        if (droppedChars <= 0)
+        {
+            return output;
+        }
+
+        return `[output truncated: ${droppedChars} chars omitted]\n${output}`;
+    }
+
     // ── Handlers ─────────────────────────────────────────────────────────────
 
     // turn/started
@@ -240,7 +284,7 @@ export class CodexEventMapper
             case "commandExecution": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_command_execution";
-                this.openToolCalls.set(item.id, { toolName, output: "" });
+                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -334,7 +378,12 @@ export class CodexEventMapper
         else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
-            const output = item.aggregatedOutput ?? tracked.output;
+            const outputSource = item.aggregatedOutput ?? tracked.output;
+            const limitedOutput = this.applyOutputLimit(outputSource);
+            const output = this.formatToolOutput(
+                limitedOutput.output,
+                item.aggregatedOutput != null ? limitedOutput.droppedChars : tracked.droppedChars,
+            );
             const exitCode = item.exitCode;
             const status = item.status;
 
@@ -351,12 +400,16 @@ export class CodexEventMapper
             const dynamic = item;
             const tracked = this.openToolCalls.get(item.id);
             const toolName = tracked?.toolName ?? dynamic.tool ?? "dynamic_tool_call";
-            const output = this.stringifyDynamicToolResult(dynamic);
+            const rawOutput = this.stringifyDynamicToolResult(dynamic);
+            const limitedOutput = this.applyOutputLimit(rawOutput);
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName,
-                result: { output, success: dynamic.success ?? undefined },
+                result: {
+                    output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars),
+                    success: dynamic.success ?? undefined,
+                },
             }));
             this.openToolCalls.delete(item.id);
         }
@@ -467,12 +520,12 @@ export class CodexEventMapper
         }
 
         const tracked = this.openToolCalls.get(delta.itemId)!;
-        tracked.output += delta.delta;
+        this.appendTrackedOutput(tracked, delta.delta);
         return [this.withMeta({
             type: "tool-result",
             toolCallId: delta.itemId,
             toolName: tracked.toolName,
-            result: { output: tracked.output },
+            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
             preliminary: true,
         })];
     }
@@ -496,7 +549,7 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
         this.ensureStreamStarted(parts);
         const toolName = `mcp:${inv.server}/${inv.tool}`;
-        this.openToolCalls.set(callId, { toolName, output: "" });
+        this.openToolCalls.set(callId, { toolName, output: "", droppedChars: 0 });
         parts.push(this.withMeta({
             type: "tool-call",
             toolCallId: callId,
@@ -526,14 +579,15 @@ export class CodexEventMapper
         const tracked = this.openToolCalls.get(callId)!;
         const result = p.msg?.result;
         const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
-        const output = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
+        const rawOutput = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
+        const limitedOutput = this.applyOutputLimit(rawOutput);
 
         this.openToolCalls.delete(callId);
         return [this.withMeta({
             type: "tool-result",
             toolCallId: callId,
             toolName: tracked.toolName,
-            result: { output },
+            result: { output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars) },
         })];
     }
 
@@ -665,7 +719,7 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
         this.ensureStreamStarted(parts);
 
-        this.openToolCalls.set(item.id, { toolName: item.tool, output: "" });
+        this.openToolCalls.set(item.id, { toolName: item.tool, output: "", droppedChars: 0 });
         parts.push(this.withMeta({
             type: "tool-call",
             toolCallId: item.id,
@@ -793,7 +847,7 @@ export class CodexEventMapper
                 type: "tool-result",
                 toolCallId: itemId,
                 toolName: tracked.toolName,
-                result: { output: tracked.output },
+                result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
             }));
         }
         this.openToolCalls.clear();

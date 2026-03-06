@@ -311,6 +311,102 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
+    it("truncates streamed command output by default and marks omitted chars", () =>
+    {
+        const mapper = new CodexEventMapper();
+        const hugeDelta = "a".repeat(33_000);
+
+        const parts = [
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_trunc_default",
+                        command: "cat huge.log",
+                        cwd: "/project",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_trunc_default", delta: hugeDelta },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const preliminary = parts.find((part) =>
+            part.type === "tool-result"
+            && part.toolCallId === "cmd_trunc_default"
+            && part.preliminary === true);
+
+        expect(preliminary).toBeDefined();
+        const output = (preliminary as { result: { output: string } }).result.output;
+        const prefix = "[output truncated: 232 chars omitted]\n";
+        expect(output.startsWith(prefix)).toBe(true);
+        expect(output.length).toBe(prefix.length + 32_768);
+    });
+
+    it("uses configured maxToolResultOutputChars for command output", () =>
+    {
+        const mapper = new CodexEventMapper({ maxToolResultOutputChars: 10 });
+
+        const parts = [
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_trunc_custom",
+                        command: "echo",
+                        cwd: "/project",
+                        processId: null,
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "cmd_trunc_custom", delta: "1234567890ABCDEF" },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        expect(parts).toContainEqual({
+            type: "tool-result",
+            toolCallId: "cmd_trunc_custom",
+            toolName: "codex_command_execution",
+            result: { output: "[output truncated: 6 chars omitted]\n7890ABCDEF" },
+            preliminary: true,
+        });
+
+        expect(parts).toContainEqual({
+            type: "tool-result",
+            toolCallId: "cmd_trunc_custom",
+            toolName: "codex_command_execution",
+            result: { output: "[output truncated: 6 chars omitted]\n7890ABCDEF" },
+        });
+    });
+
     it("maps new item types (webSearch, collabAgentToolCall) to reasoning parts", () =>
     {
         const mapper = new CodexEventMapper();

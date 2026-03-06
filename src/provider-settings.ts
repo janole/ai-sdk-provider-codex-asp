@@ -116,6 +116,12 @@ export interface CodexProviderSettings
     };
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
+    /**
+     * Maximum number of characters retained for tool result output payloads.
+     * Applies to streamed command output and finalized tool results.
+     * Older content is dropped when the limit is exceeded. Default: 32768.
+     */
+    maxToolResultOutputChars?: number;
     /** Called when a streaming session is created, providing access to inject messages and interrupt. */
     onSessionCreated?: (session: CodexSession) => void;
 }
