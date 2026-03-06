@@ -95,7 +95,6 @@ export class CodexEventMapper
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
-    private readonly webSearchEndedByWrapper = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string; output: string; droppedChars: number }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
@@ -130,8 +129,6 @@ export class CodexEventMapper
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
             "item/tool/callFinished": (p) => this.handleToolCallFinished(p),
             "item/tool/call": (p) => this.handleToolCall(p),
-            "codex/event/web_search_begin": (p) => this.handleWebSearchBegin(p),
-            "codex/event/web_search_end": (p) => this.handleWebSearchEnd(p),
             "thread/tokenUsage/updated": (p) => this.handleTokenUsageUpdated(p),
             "turn/completed": (p) => this.handleTurnCompleted(p),
 
@@ -139,6 +136,10 @@ export class CodexEventMapper
             "codex/event/agent_reasoning": NOOP,
             "codex/event/agent_reasoning_section_break": NOOP,
             "codex/event/plan_update": NOOP,
+            // Intentionally ignored: web search wrappers mirror item events.
+            // We emit web-search reasoning only from item/started + item/completed.
+            "codex/event/web_search_begin": NOOP,
+            "codex/event/web_search_end": NOOP,
 
             // Intentionally ignored: full diffs (often 50-100 KB) crash/freeze frontend renderers.
             // If these need to surface, they should use a dedicated part type with lazy rendering.
@@ -418,12 +419,6 @@ export class CodexEventMapper
         }
         else if (item.type === "webSearch")
         {
-            if (this.webSearchEndedByWrapper.has(item.id))
-            {
-                this.webSearchEndedByWrapper.delete(item.id);
-                return [];
-            }
-
             const webSearchSummary = this.formatWebSearchItemSummary(item as {
                 query?: string;
                 action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
@@ -664,56 +659,6 @@ export class CodexEventMapper
         });
     }
 
-    // codex/event/web_search_begin
-    private handleWebSearchBegin(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as { msg?: { call_id?: string } };
-        const callId = p.msg?.call_id;
-        if (!callId)
-        {
-            return [];
-        }
-
-        const parts: LanguageModelV3StreamPart[] = [];
-        this.emitReasoningDelta(parts, callId, "");
-        return parts;
-    }
-
-    // codex/event/web_search_end
-    private handleWebSearchEnd(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as {
-            msg?: {
-                call_id?: string;
-                query?: string;
-                action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
-            };
-        };
-        const callId = p.msg?.call_id;
-        if (!callId)
-        {
-            return [];
-        }
-
-        const parts: LanguageModelV3StreamPart[] = [];
-        const summary = this.formatWebSearchItemSummary({
-            ...(p.msg?.query !== undefined ? { query: p.msg.query } : {}),
-            ...(p.msg?.action !== undefined ? { action: p.msg.action } : {}),
-        });
-        if (summary)
-        {
-            this.emitReasoningDelta(parts, callId, summary);
-        }
-
-        if (this.openReasoningParts.has(callId))
-        {
-            parts.push(this.withMeta({ type: "reasoning-end", id: callId }));
-            this.openReasoningParts.delete(callId);
-        }
-        this.webSearchEndedByWrapper.add(callId);
-        return parts;
-    }
-
     private startDynamicToolCall(item: Pick<DynamicToolCallItem, "id" | "tool" | "arguments">): LanguageModelV3StreamPart[]
     {
         if (!item.id || !item.tool)
@@ -850,7 +795,6 @@ export class CodexEventMapper
             parts.push(this.withMeta({ type: "reasoning-end", id: itemId }));
         }
         this.openReasoningParts.clear();
-        this.webSearchEndedByWrapper.clear();
 
         for (const [itemId, tracked] of this.openToolCalls)
         {

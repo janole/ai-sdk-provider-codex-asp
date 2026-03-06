@@ -499,7 +499,7 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("deduplicates web search summary when both wrapper and item/completed arrive", () =>
+    it("ignores codex/event web search wrappers", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -518,14 +518,6 @@ describe("CodexEventMapper", () =>
                 },
             },
             {
-                method: "item/completed",
-                params: {
-                    item: { type: "webSearch", id: "ws_dup", query: "vitest docs", action: { type: "search", query: "vitest docs" } },
-                    threadId: "thr",
-                    turnId: "turn",
-                },
-            },
-            {
                 method: "turn/completed",
                 params: {
                     threadId: "thr",
@@ -534,14 +526,14 @@ describe("CodexEventMapper", () =>
             },
         ].flatMap((event) => mapper.map(event));
 
-        const reasoningDeltas = parts.filter((part) => part.type === "reasoning-delta");
-        const reasoningEnds = parts.filter((part) => part.type === "reasoning-end");
-        const summaryDeltas = reasoningDeltas.filter((part) =>
-            part.id === "ws_dup" && part.delta === "Web search: vitest docs");
-        const wsEnds = reasoningEnds.filter((part) => part.id === "ws_dup");
-
-        expect(summaryDeltas).toHaveLength(1);
-        expect(wsEnds).toHaveLength(1);
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
     });
 
     it("maps dynamicToolCall lifecycle to provider-executed tool parts", () =>
