@@ -383,7 +383,9 @@ export class CodexEventMapper
             const limitedOutput = this.applyOutputLimit(outputSource);
             const output = this.formatToolOutput(
                 limitedOutput.output,
-                item.aggregatedOutput != null ? limitedOutput.droppedChars : tracked.droppedChars,
+                item.aggregatedOutput !== undefined && item.aggregatedOutput !== null
+                    ? limitedOutput.droppedChars
+                    : tracked.droppedChars,
             );
             const exitCode = item.exitCode;
             const status = item.status;

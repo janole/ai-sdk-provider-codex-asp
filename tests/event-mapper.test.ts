@@ -342,16 +342,26 @@ describe("CodexEventMapper", () =>
             },
         ].flatMap((event) => mapper.map(event));
 
-        const preliminary = parts.find((part) =>
-            part.type === "tool-result"
-            && part.toolCallId === "cmd_trunc_default"
-            && part.preliminary === true);
+        let output: string | undefined;
+        for (const part of parts)
+        {
+            if (part.type !== "tool-result" || part.toolCallId !== "cmd_trunc_default" || part.preliminary !== true)
+            {
+                continue;
+            }
 
-        expect(preliminary).toBeDefined();
-        const output = (preliminary as { result: { output: string } }).result.output;
+            const result = part.result as { output?: unknown };
+            if (typeof result.output === "string")
+            {
+                output = result.output;
+                break;
+            }
+        }
+
+        expect(output).toBeDefined();
         const prefix = "[output truncated: 232 chars omitted]\n";
-        expect(output.startsWith(prefix)).toBe(true);
-        expect(output.length).toBe(prefix.length + 32_768);
+        expect(output?.startsWith(prefix)).toBe(true);
+        expect(output?.length).toBe(prefix.length + 32_768);
     });
 
     it("uses configured maxToolResultOutputChars for command output", () =>
