@@ -21,6 +21,7 @@ import type { SandboxMode } from "./app-server-protocol/v2/SandboxMode";
 import type { SandboxPolicy } from "./app-server-protocol/v2/SandboxPolicy";
 import type { ThreadCompactStartParams } from "./app-server-protocol/v2/ThreadCompactStartParams";
 import type { ThreadCompactStartResponse } from "./app-server-protocol/v2/ThreadCompactStartResponse";
+import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
 import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
 import type { TurnInterruptParams } from "./app-server-protocol/v2/TurnInterruptParams";
@@ -123,6 +124,7 @@ export type CodexTurnInputSkill = Extract<UserInput, { type: "skill" }>;
 export type CodexTurnInputMention = Extract<UserInput, { type: "mention" }>;
 
 export type CodexTurnStartParams = TurnStartParams;
+export type CodexDynamicToolCallItem = Extract<ThreadItem, { type: "dynamicToolCall" }>;
 
 export interface CodexTurnStartResult {
     turnId: string;

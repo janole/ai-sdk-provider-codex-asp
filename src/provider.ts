@@ -114,6 +114,7 @@ export function createCodexAppServer(
         approvals: settings.approvals ? { ...settings.approvals } : undefined,
         debug: settings.debug ? { ...settings.debug } : undefined,
         emitPlanUpdates: settings.emitPlanUpdates,
+        maxToolResultOutputChars: settings.maxToolResultOutputChars,
         onSessionCreated: settings.onSessionCreated,
     }));
 
