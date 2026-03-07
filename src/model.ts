@@ -192,6 +192,11 @@ function extractToolResults(
                     {
                         contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
                     }
+                    else if (part.output.type === "error-json")
+                    {
+                        success = false;
+                        contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
+                    }
                     else if (part.output.type === "execution-denied")
                     {
                         success = false;
@@ -199,6 +204,16 @@ function extractToolResults(
                             type: "inputText",
                             text: part.output.reason ?? "Tool execution was denied.",
                         });
+                    }
+                    else if (part.output.type === "content")
+                    {
+                        for (const item of part.output.value)
+                        {
+                            if (item.type === "text")
+                            {
+                                contentItems.push({ type: "inputText", text: item.text });
+                            }
+                        }
                     }
                 }
             }
