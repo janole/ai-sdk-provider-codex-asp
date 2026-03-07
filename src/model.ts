@@ -180,9 +180,13 @@ function extractToolResults(
                         continue;
                     }
 
-                    if (part.output.type === "text")
+                    if (part.output.type === "text" || part.output.type === "error-text")
                     {
                         contentItems.push({ type: "inputText", text: part.output.value });
+                        if (part.output.type === "error-text")
+                        {
+                            success = false;
+                        }
                     }
                     else if (part.output.type === "json")
                     {
