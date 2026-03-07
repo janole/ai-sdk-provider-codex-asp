@@ -188,14 +188,13 @@ function extractToolResults(
                             success = false;
                         }
                     }
-                    else if (part.output.type === "json")
+                    else if (part.output.type === "json" || part.output.type === "error-json")
                     {
                         contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
-                    }
-                    else if (part.output.type === "error-json")
-                    {
-                        success = false;
-                        contentItems.push({ type: "inputText", text: JSON.stringify(part.output.value) });
+                        if (part.output.type === "error-json")
+                        {
+                            success = false;
+                        }
                     }
                     else if (part.output.type === "execution-denied")
                     {
