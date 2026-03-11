@@ -8,17 +8,9 @@ import type {
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,
 } from "./protocol/types";
-import { stripUndefined } from "./utils/object";
 
 export type CodexCommandApprovalRequest = CommandExecutionRequestApprovalParams;
-
-export interface CodexFileChangeApprovalRequest {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    reason?: string | null;
-    grantRoot?: string | null;
-}
+export type CodexFileChangeApprovalRequest = FileChangeRequestApprovalParams;
 
 export type CommandApprovalHandler = (
     request: CodexCommandApprovalRequest,
@@ -59,16 +51,7 @@ export class ApprovalsDispatcher
             "item/fileChange/requestApproval",
             async (params: unknown, _request: JsonRpcRequest) =>
             {
-                const p = params as FileChangeRequestApprovalParams;
-                const request: CodexFileChangeApprovalRequest = stripUndefined({
-                    threadId: p.threadId,
-                    turnId: p.turnId,
-                    itemId: p.itemId,
-                    reason: p.reason,
-                    grantRoot: p.grantRoot,
-                });
-
-                const decision = await this.onFileChangeApproval(request);
+                const decision = await this.onFileChangeApproval(params as CodexFileChangeApprovalRequest);
                 return { decision } satisfies FileChangeRequestApprovalResponse;
             },
         );
