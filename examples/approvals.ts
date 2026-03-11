@@ -2,6 +2,7 @@
  * Command and file-change approval handling.
  *
  * Registers approval handlers that auto-accept all requests.
+ * `onCommandApproval` receives the raw generated Codex protocol request object.
  * In production you'd prompt the user or apply policy checks.
  *
  * Run with:
