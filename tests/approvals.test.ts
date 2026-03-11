@@ -63,6 +63,7 @@ class ScriptedTransport extends MockTransport
                             cwd: "/repo",
                             commandActions: [{ type: "unknown", command: "git push origin main" }],
                             additionalPermissions: { network: true, fileSystem: null, macos: null },
+                            skillMetadata: { pathToSkillsMd: "/skills/my-skill/SKILL.md" },
                             proposedExecpolicyAmendment: ["git push *"],
                             proposedNetworkPolicyAmendments: [{ host: "github.com", action: "allow" }],
                         },
@@ -293,6 +294,7 @@ describe("ApprovalsDispatcher", () =>
             cwd: "/repo",
             commandActions: [{ type: "unknown", command: "git push origin main" }],
             additionalPermissions: { network: true, fileSystem: null, macos: null },
+            skillMetadata: { pathToSkillsMd: "/skills/my-skill/SKILL.md" },
             proposedExecpolicyAmendment: ["git push *"],
             proposedNetworkPolicyAmendments: [{ host: "github.com", action: "allow" }],
         });

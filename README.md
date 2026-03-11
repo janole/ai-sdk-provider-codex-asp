@@ -126,6 +126,11 @@ codex.chat(modelId)           // explicit alias
 codex.shutdown()              // clean up persistent workers
 ```
 
+Approval callback notes:
+
+- `approvals.onCommandApproval(request)` receives the raw generated Codex protocol payload: `CommandExecutionRequestApprovalParams`.
+- `approvals.onFileChangeApproval(request)` receives the raw generated Codex protocol payload: `FileChangeRequestApprovalParams`.
+
 Rich sandbox policy example (turn-level):
 
 ```ts

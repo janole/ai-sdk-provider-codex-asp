@@ -8,30 +8,9 @@ import type {
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,
 } from "./protocol/types";
-import { stripUndefined } from "./utils/object";
 
-export interface CodexCommandApprovalRequest {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    approvalId?: string | null;
-    reason?: string | null;
-    networkApprovalContext?: CommandExecutionRequestApprovalParams["networkApprovalContext"];
-    command?: string | null;
-    cwd?: string | null;
-    commandActions?: CommandExecutionRequestApprovalParams["commandActions"];
-    additionalPermissions?: CommandExecutionRequestApprovalParams["additionalPermissions"];
-    proposedExecpolicyAmendment?: CommandExecutionRequestApprovalParams["proposedExecpolicyAmendment"];
-    proposedNetworkPolicyAmendments?: CommandExecutionRequestApprovalParams["proposedNetworkPolicyAmendments"];
-}
-
-export interface CodexFileChangeApprovalRequest {
-    threadId: string;
-    turnId: string;
-    itemId: string;
-    reason?: string | null;
-    grantRoot?: string | null;
-}
+export type CodexCommandApprovalRequest = CommandExecutionRequestApprovalParams;
+export type CodexFileChangeApprovalRequest = FileChangeRequestApprovalParams;
 
 export type CommandApprovalHandler = (
     request: CodexCommandApprovalRequest,
@@ -63,23 +42,7 @@ export class ApprovalsDispatcher
             "item/commandExecution/requestApproval",
             async (params: unknown, _request: JsonRpcRequest) =>
             {
-                const p = params as CommandExecutionRequestApprovalParams;
-                const request: CodexCommandApprovalRequest = stripUndefined({
-                    threadId: p.threadId,
-                    turnId: p.turnId,
-                    itemId: p.itemId,
-                    approvalId: p.approvalId,
-                    reason: p.reason,
-                    networkApprovalContext: p.networkApprovalContext,
-                    command: p.command,
-                    cwd: p.cwd,
-                    commandActions: p.commandActions,
-                    additionalPermissions: p.additionalPermissions,
-                    proposedExecpolicyAmendment: p.proposedExecpolicyAmendment,
-                    proposedNetworkPolicyAmendments: p.proposedNetworkPolicyAmendments,
-                });
-
-                const decision = await this.onCommandApproval(request);
+                const decision = await this.onCommandApproval(params as CodexCommandApprovalRequest);
                 return { decision } satisfies CommandExecutionRequestApprovalResponse;
             },
         );
@@ -88,16 +51,7 @@ export class ApprovalsDispatcher
             "item/fileChange/requestApproval",
             async (params: unknown, _request: JsonRpcRequest) =>
             {
-                const p = params as FileChangeRequestApprovalParams;
-                const request: CodexFileChangeApprovalRequest = stripUndefined({
-                    threadId: p.threadId,
-                    turnId: p.turnId,
-                    itemId: p.itemId,
-                    reason: p.reason,
-                    grantRoot: p.grantRoot,
-                });
-
-                const decision = await this.onFileChangeApproval(request);
+                const decision = await this.onFileChangeApproval(params as CodexFileChangeApprovalRequest);
                 return { decision } satisfies FileChangeRequestApprovalResponse;
             },
         );

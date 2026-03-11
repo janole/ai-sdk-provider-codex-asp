@@ -2,6 +2,7 @@
  * Command and file-change approval handling.
  *
  * Registers approval handlers that auto-accept all requests.
+ * Both approval callbacks receive the raw generated Codex protocol request objects.
  * In production you'd prompt the user or apply policy checks.
  *
  * Run with:
