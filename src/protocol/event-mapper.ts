@@ -121,7 +121,7 @@ export class CodexEventMapper
             "item/reasoning/textDelta": (p) => this.handleReasoningDelta(p),
             "item/reasoning/summaryTextDelta": (p) => this.handleReasoningDelta(p),
             "item/plan/delta": (p) => this.handleReasoningDelta(p),
-            "item/fileChange/outputDelta": (p) => this.handleReasoningDelta(p),
+            "item/fileChange/outputDelta": (p) => this.handleFileChangeOutputDelta(p),
             "item/reasoning/summaryPartAdded": (p) => this.handleSummaryPartAdded(p),
             "turn/plan/updated": (p) => this.handlePlanUpdated(p),
             "item/commandExecution/outputDelta": (p) => this.handleCommandOutputDelta(p),
@@ -304,12 +304,38 @@ export class CodexEventMapper
                 parts.push(...this.startDynamicToolCall(item));
                 break;
             }
+            case "fileChange": {
+                this.ensureStreamStarted(parts);
+                const toolName = "codex_file_change";
+                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                parts.push(this.withMeta({
+                    type: "tool-call",
+                    toolCallId: item.id,
+                    toolName,
+                    input: JSON.stringify({ changes: item.changes, status: item.status }),
+                    providerExecuted: true,
+                    dynamic: true,
+                }));
+                break;
+            }
+            case "webSearch": {
+                this.ensureStreamStarted(parts);
+                const toolName = "codex_web_search";
+                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                parts.push(this.withMeta({
+                    type: "tool-call",
+                    toolCallId: item.id,
+                    toolName,
+                    input: JSON.stringify({ query: item.query, action: item.action }),
+                    providerExecuted: true,
+                    dynamic: true,
+                }));
+                break;
+            }
             case "reasoning":
             case "plan":
-            case "fileChange":
             case "mcpToolCall":
             case "collabAgentToolCall":
-            case "webSearch":
             case "imageView":
             case "contextCompaction":
             case "enteredReviewMode":
@@ -420,22 +446,41 @@ export class CodexEventMapper
             }));
             this.openToolCalls.delete(item.id);
         }
+        else if (item.type === "fileChange")
+        {
+            const tracked = this.openToolCalls.get(item.id);
+            const toolName = tracked?.toolName ?? "codex_file_change";
+            const output = tracked
+                ? this.formatToolOutput(tracked.output, tracked.droppedChars)
+                : "";
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: item.id,
+                toolName,
+                result: { output, status: item.status, changes: item.changes },
+            }));
+            this.openToolCalls.delete(item.id);
+        }
         else if (item.type === "webSearch")
         {
             const webSearchSummary = this.formatWebSearchItemSummary(item as {
                 query?: string;
                 action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
             });
-            if (webSearchSummary)
-            {
-                this.emitReasoningDelta(parts, item.id, webSearchSummary);
-            }
-
-            if (this.openReasoningParts.has(item.id))
-            {
-                parts.push(this.withMeta({ type: "reasoning-end", id: item.id }));
-                this.openReasoningParts.delete(item.id);
-            }
+            const tracked = this.openToolCalls.get(item.id);
+            const toolName = tracked?.toolName ?? "codex_web_search";
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: item.id,
+                toolName,
+                result: {
+                    output: webSearchSummary || "",
+                    query: item.query,
+                    action: item.action ?? undefined,
+                    summary: webSearchSummary || undefined,
+                },
+            }));
+            this.openToolCalls.delete(item.id);
         }
         else if (this.openReasoningParts.has(item.id))
         {
@@ -446,7 +491,7 @@ export class CodexEventMapper
         return parts;
     }
 
-    // item/reasoning/textDelta, item/reasoning/summaryTextDelta, item/plan/delta, item/fileChange/outputDelta
+    // item/reasoning/textDelta, item/reasoning/summaryTextDelta, item/plan/delta
     private handleReasoningDelta(params: unknown): LanguageModelV3StreamPart[]
     {
         const delta = (params ?? {}) as DeltaParams;
@@ -457,6 +502,26 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
         this.emitReasoningDelta(parts, delta.itemId, delta.delta);
         return parts;
+    }
+
+    // item/fileChange/outputDelta
+    private handleFileChangeOutputDelta(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const delta = (params ?? {}) as DeltaParams;
+        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
+        {
+            return [];
+        }
+
+        const tracked = this.openToolCalls.get(delta.itemId)!;
+        this.appendTrackedOutput(tracked, delta.delta);
+        return [this.withMeta({
+            type: "tool-result",
+            toolCallId: delta.itemId,
+            toolName: tracked.toolName,
+            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
+            preliminary: true,
+        })];
     }
 
     // item/reasoning/summaryPartAdded
