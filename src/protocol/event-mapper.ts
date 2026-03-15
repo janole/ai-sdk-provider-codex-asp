@@ -446,7 +446,7 @@ export class CodexEventMapper
             }));
             this.openToolCalls.delete(item.id);
         }
-        else if (item.type === "fileChange")
+        else if (item.type === "fileChange" && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id);
             const toolName = tracked?.toolName ?? "codex_file_change";
@@ -461,7 +461,7 @@ export class CodexEventMapper
             }));
             this.openToolCalls.delete(item.id);
         }
-        else if (item.type === "webSearch")
+        else if (item.type === "webSearch" && this.openToolCalls.has(item.id))
         {
             const webSearchSummary = this.formatWebSearchItemSummary(item as {
                 query?: string;
