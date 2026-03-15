@@ -91,10 +91,6 @@ describe("CodexEventMapper", () =>
                 params: { threadId: "thr", turnId: "turn", itemId: "plan_1", delta: "1. Inspect code" },
             },
             {
-                method: "item/fileChange/outputDelta",
-                params: { threadId: "thr", turnId: "turn", itemId: "file_1", delta: "Updated src/model.ts" },
-            },
-            {
                 method: "item/mcpToolCall/progress",
                 params: { threadId: "thr", turnId: "turn", itemId: "mcp_1", message: "Searching docs..." },
             },
@@ -123,14 +119,89 @@ describe("CodexEventMapper", () =>
             { type: "reasoning-delta", id: "reason_1", delta: "Thinking" },
             { type: "reasoning-start", id: "plan_1" },
             { type: "reasoning-delta", id: "plan_1", delta: "1. Inspect code" },
-            { type: "reasoning-start", id: "file_1" },
-            { type: "reasoning-delta", id: "file_1", delta: "Updated src/model.ts" },
             { type: "reasoning-start", id: "mcp_1" },
             { type: "reasoning-delta", id: "mcp_1", delta: "Searching docs..." },
             { type: "reasoning-end", id: "reason_1" },
             { type: "reasoning-end", id: "plan_1" },
-            { type: "reasoning-end", id: "file_1" },
             { type: "reasoning-end", id: "mcp_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("maps fileChange lifecycle to provider-executed tool parts", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "fileChange",
+                        id: "file_1",
+                        status: "inProgress",
+                        changes: [],
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/fileChange/outputDelta",
+                params: { threadId: "thr", turnId: "turn", itemId: "file_1", delta: "Updated src/model.ts" },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "fileChange",
+                        id: "file_1",
+                        status: "completed",
+                        changes: [],
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "file_1",
+                toolName: "codex_file_change",
+                input: JSON.stringify({ changes: [], status: "inProgress" }),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "file_1",
+                toolName: "codex_file_change",
+                result: { output: "Updated src/model.ts" },
+                preliminary: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "file_1",
+                toolName: "codex_file_change",
+                result: { output: "Updated src/model.ts", status: "completed", changes: [] },
+            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
@@ -495,7 +566,7 @@ describe("CodexEventMapper", () =>
         });
     });
 
-    it("maps new item types (webSearch, collabAgentToolCall) to reasoning parts", () =>
+    it("maps webSearch to provider-executed tool parts and keeps collabAgentToolCall as reasoning", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -564,10 +635,25 @@ describe("CodexEventMapper", () =>
 
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            { type: "reasoning-start", id: "ws_1" },
+            {
+                type: "tool-call",
+                toolCallId: "ws_1",
+                toolName: "codex_web_search",
+                input: JSON.stringify({ query: "vitest docs", action: null }),
+                providerExecuted: true,
+                dynamic: true,
+            },
             { type: "reasoning-start", id: "collab_1" },
-            { type: "reasoning-delta", id: "ws_1", delta: "Web search: vitest docs" },
-            { type: "reasoning-end", id: "ws_1" },
+            {
+                type: "tool-result",
+                toolCallId: "ws_1",
+                toolName: "codex_web_search",
+                result: {
+                    output: "Web search: vitest docs",
+                    query: "vitest docs",
+                    summary: "Web search: vitest docs",
+                },
+            },
             { type: "reasoning-end", id: "collab_1" },
             {
                 type: "finish",
