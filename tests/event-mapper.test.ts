@@ -639,7 +639,7 @@ describe("CodexEventMapper", () =>
                 type: "tool-call",
                 toolCallId: "ws_1",
                 toolName: "codex_web_search",
-                input: JSON.stringify({ query: "vitest docs", action: null }),
+                input: JSON.stringify({ query: "vitest docs" }),
                 providerExecuted: true,
                 dynamic: true,
             },

@@ -326,7 +326,7 @@ export class CodexEventMapper
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
-                    input: JSON.stringify({ query: item.query, action: item.action }),
+                    input: JSON.stringify({ query: item.query, action: item.action ?? undefined }),
                     providerExecuted: true,
                     dynamic: true,
                 }));
