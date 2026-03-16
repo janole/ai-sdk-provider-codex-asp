@@ -200,7 +200,7 @@ describe("CodexEventMapper", () =>
                 type: "tool-result",
                 toolCallId: "file_1",
                 toolName: "codex_file_change",
-                result: { output: "Updated src/model.ts", status: "completed", changes: [] },
+                result: { item: { type: "fileChange", id: "file_1", status: "completed", changes: [] } },
             },
             {
                 type: "finish",
@@ -301,7 +301,20 @@ describe("CodexEventMapper", () =>
                 type: "tool-result",
                 toolCallId: "cmd_1",
                 toolName: "codex_command_execution",
-                result: { output: "PASS src/test.ts", exitCode: 0, status: "completed" },
+                result: {
+                    item: {
+                        type: "commandExecution",
+                        id: "cmd_1",
+                        command: "npm test",
+                        cwd: "/project",
+                        processId: "123",
+                        status: "completed",
+                        commandActions: [],
+                        aggregatedOutput: "PASS src/test.ts",
+                        exitCode: 0,
+                        durationMs: 1500,
+                    },
+                },
             },
             {
                 type: "finish",
@@ -648,11 +661,7 @@ describe("CodexEventMapper", () =>
                 type: "tool-result",
                 toolCallId: "ws_1",
                 toolName: "codex_web_search",
-                result: {
-                    output: "Web search: vitest docs",
-                    query: "vitest docs",
-                    summary: "Web search: vitest docs",
-                },
+                result: { item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null } },
             },
             { type: "reasoning-end", id: "collab_1" },
             {
@@ -765,7 +774,18 @@ describe("CodexEventMapper", () =>
                 type: "tool-result",
                 toolCallId: "call_1",
                 toolName: "readGithubFile",
-                result: { output: "file content", success: true },
+                result: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_1",
+                        tool: "readGithubFile",
+                        arguments: { owner: "acme", repo: "widgets", path: "README.md" },
+                        status: "completed",
+                        contentItems: [{ type: "inputText", text: "file content" }],
+                        success: true,
+                        durationMs: 123,
+                    },
+                },
             },
             {
                 type: "finish",
