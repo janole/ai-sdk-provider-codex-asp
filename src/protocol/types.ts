@@ -40,6 +40,7 @@ export type { SandboxMode };
 export type { SandboxPolicy };
 export type { ThreadCompactStartParams };
 export type { ThreadCompactStartResponse };
+export type { ThreadItem };
 export type { TurnInterruptParams };
 export type { TurnInterruptResponse };
 
