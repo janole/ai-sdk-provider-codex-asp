@@ -485,7 +485,6 @@ export class CodexLanguageModel implements LanguageModelV3
 
         const mapper = new CodexEventMapper(stripUndefined({
             emitPlanUpdates: this.config.providerSettings.emitPlanUpdates,
-            maxToolResultOutputChars: this.config.providerSettings.maxToolResultOutputChars,
         }));
 
         let activeThreadId: string | undefined;

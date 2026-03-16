@@ -68,11 +68,6 @@ export interface CodexEventMapperOptions
 {
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
-    /**
-     * Max retained tool-result output chars; older content is truncated. Default: 32768.
-     * Set to 0 or a negative value to disable truncation.
-     */
-    maxToolResultOutputChars?: number;
 }
 
 /**
@@ -92,8 +87,6 @@ export function extractNotificationThreadId(params: unknown): string | undefined
 
 // No-op handler for intentionally ignored events.
 const NOOP = (): LanguageModelV3StreamPart[] => [];
-const DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS = 32_768;
-
 export class CodexEventMapper
 {
     private readonly options: Required<CodexEventMapperOptions>;
@@ -113,7 +106,6 @@ export class CodexEventMapper
     {
         this.options = {
             emitPlanUpdates: options?.emitPlanUpdates ?? true,
-            maxToolResultOutputChars: options?.maxToolResultOutputChars ?? DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS,
         };
 
         this.handlers = {
