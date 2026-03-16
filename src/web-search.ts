@@ -1,8 +1,19 @@
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 
-type JsonRecord = Record<string, unknown>;
+import type { WebSearchAction } from "./protocol/app-server-protocol/v2/WebSearchAction";
+
 type ToolCallPart = Extract<LanguageModelV3StreamPart, { type: "tool-call" }>;
 type ToolResultPart = Extract<LanguageModelV3StreamPart, { type: "tool-result" }>;
+
+type WebSearchPayload = {
+    query?: string;
+    action?: WebSearchAction | null;
+};
+
+type WebSearchResultPayload = WebSearchPayload & {
+    output?: string;
+    summary?: string;
+};
 
 /** Typed web-search action exposed to consumers. */
 export type CodexWebSearchAction =
@@ -33,55 +44,21 @@ export type CodexWebSearchToolResult = {
     };
 };
 
-function asRecord(value: unknown): JsonRecord | undefined
+function parseJson<T>(value: string): T | undefined
 {
-    if (typeof value !== "object" || value === null || Array.isArray(value))
-    {
-        return undefined;
-    }
-
-    return value as JsonRecord;
-}
-
-function asString(value: unknown): string | undefined
-{
-    return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asStringArray(value: unknown): string[] | undefined
-{
-    if (!Array.isArray(value))
-    {
-        return undefined;
-    }
-
-    const strings = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
-
-    return strings.length > 0 ? strings : undefined;
-}
-
-function parseJson(value: unknown): unknown
-{
-    if (typeof value !== "string")
-    {
-        return value;
-    }
-
     try
     {
-        return JSON.parse(value) as unknown;
+        return JSON.parse(value) as T;
     }
     catch
     {
-        return value;
+        return undefined;
     }
 }
 
-function parseAction(value: unknown): CodexWebSearchAction | undefined
+function toAction(action: WebSearchAction | null | undefined): CodexWebSearchAction | undefined
 {
-    const action = asRecord(value);
-
-    if (!action || typeof action.type !== "string")
+    if (!action)
     {
         return undefined;
     }
@@ -89,93 +66,29 @@ function parseAction(value: unknown): CodexWebSearchAction | undefined
     switch (action.type)
     {
         case "search": {
-            const query = asString(action.query);
-            const queries = asStringArray(action.queries);
-
             return {
                 type: "search",
-                ...(query ? { query } : {}),
-                ...(queries ? { queries } : {}),
+                ...(action.query ? { query: action.query } : {}),
+                ...(action.queries?.length ? { queries: action.queries } : {}),
             };
         }
-        case "openPage":
-        case "open_page": {
-            const url = asString(action.url);
-
+        case "openPage": {
             return {
                 type: "openPage",
-                ...(url ? { url } : {}),
+                ...(action.url ? { url: action.url } : {}),
             };
         }
-        case "findInPage":
-        case "find_in_page": {
-            const url = asString(action.url);
-            const pattern = asString(action.pattern);
-
+        case "findInPage": {
             return {
                 type: "findInPage",
-                ...(url ? { url } : {}),
-                ...(pattern ? { pattern } : {}),
+                ...(action.url ? { url: action.url } : {}),
+                ...(action.pattern ? { pattern: action.pattern } : {}),
             };
         }
         case "other": {
             return { type: "other" };
         }
-        default: {
-            return undefined;
-        }
     }
-}
-
-function parseInput(value: unknown): CodexWebSearchToolCall["input"] | undefined
-{
-    const input = asRecord(parseJson(value));
-
-    if (!input)
-    {
-        return undefined;
-    }
-
-    const query = asString(input.query);
-    const action = parseAction(input.action);
-
-    if (!query && !action)
-    {
-        return undefined;
-    }
-
-    return {
-        ...(query ? { query } : {}),
-        ...(action ? { action } : {}),
-    };
-}
-
-function parseResultPayload(value: unknown): CodexWebSearchToolResult["result"] | undefined
-{
-    const result = asRecord(parseJson(value));
-
-    if (!result)
-    {
-        return undefined;
-    }
-
-    const payload = result.type === "json" ? asRecord(result.value) ?? result : result;
-    const output = asString(payload.output) ?? "";
-    const query = asString(payload.query);
-    const action = parseAction(payload.action);
-    const summary = asString(payload.summary);
-
-    if (!output && !query && !action && !summary)
-    {
-        return undefined;
-    }
-
-    return {
-        output,
-        ...(query ? { query } : {}),
-        ...(action ? { action } : {}),
-        ...(summary ? { summary } : {}),
-    };
 }
 
 /** Parses a Vercel tool-call part for `codex_web_search`. */
@@ -186,17 +99,24 @@ export function parseToolCall(part: ToolCallPart): CodexWebSearchToolCall | unde
         return undefined;
     }
 
-    const input = parseInput(part.input);
+    const payload = typeof part.input === "string"
+        ? parseJson<WebSearchPayload>(part.input)
+        : undefined;
 
-    if (!input)
+    if (!payload)
     {
         return undefined;
     }
 
+    const action = toAction(payload.action);
+
     return {
         toolCallId: part.toolCallId,
         toolName: "codex_web_search",
-        input,
+        input: {
+            ...(payload.query ? { query: payload.query } : {}),
+            ...(action ? { action } : {}),
+        },
     };
 }
 
@@ -208,16 +128,17 @@ export function parseToolResult(part: ToolResultPart): CodexWebSearchToolResult 
         return undefined;
     }
 
-    const result = parseResultPayload(part.result);
-
-    if (!result)
-    {
-        return undefined;
-    }
+    const payload = part.result as WebSearchResultPayload;
+    const action = toAction(payload.action);
 
     return {
         toolCallId: part.toolCallId,
         toolName: "codex_web_search",
-        result,
+        result: {
+            output: payload.output ?? "",
+            ...(payload.query ? { query: payload.query } : {}),
+            ...(action ? { action } : {}),
+            ...(payload.summary ? { summary: payload.summary } : {}),
+        },
     };
 }
