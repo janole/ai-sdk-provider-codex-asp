@@ -91,10 +91,6 @@ describe("CodexEventMapper", () =>
                 params: { threadId: "thr", turnId: "turn", itemId: "plan_1", delta: "1. Inspect code" },
             },
             {
-                method: "item/mcpToolCall/progress",
-                params: { threadId: "thr", turnId: "turn", itemId: "mcp_1", message: "Searching docs..." },
-            },
-            {
                 method: "item/completed",
                 params: {
                     item: { type: "reasoning", id: "reason_1", summary: [], content: [] },
@@ -119,11 +115,8 @@ describe("CodexEventMapper", () =>
             { type: "reasoning-delta", id: "reason_1", delta: "Thinking" },
             { type: "reasoning-start", id: "plan_1" },
             { type: "reasoning-delta", id: "plan_1", delta: "1. Inspect code" },
-            { type: "reasoning-start", id: "mcp_1" },
-            { type: "reasoning-delta", id: "mcp_1", delta: "Searching docs..." },
             { type: "reasoning-end", id: "reason_1" },
             { type: "reasoning-end", id: "plan_1" },
-            { type: "reasoning-end", id: "mcp_1" },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
@@ -951,9 +944,39 @@ describe("CodexEventMapper", () =>
 
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            { type: "reasoning-start", id: "mcp_1" },
-            { type: "reasoning-delta", id: "mcp_1", delta: "Searching..." },
-            { type: "reasoning-end", id: "mcp_1" },
+            {
+                type: "tool-call",
+                toolCallId: "mcp_1",
+                toolName: "mcp:docs-server/search",
+                input: JSON.stringify({ query: "test" }),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "mcp_1",
+                toolName: "mcp:docs-server/search",
+                result: { output: "Searching..." },
+                preliminary: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "mcp_1",
+                toolName: "mcp:docs-server/search",
+                result: {
+                    item: {
+                        type: "mcpToolCall",
+                        id: "mcp_1",
+                        server: "docs-server",
+                        tool: "search",
+                        status: "completed",
+                        arguments: { query: "test" },
+                        result: { content: [{ type: "text", text: "found" }], isError: false },
+                        error: null,
+                        durationMs: 250,
+                    },
+                },
+            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
@@ -1304,7 +1327,7 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps MCP tool calls from codex/event wrapper events", () =>
+    it("ignores codex/event MCP wrapper events", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -1320,7 +1343,7 @@ describe("CodexEventMapper", () =>
                         invocation: {
                             server: "github",
                             tool: "get_file_contents",
-                            arguments: { owner: "janole", repo: "test", path: "README.md" },
+                            arguments: { owner: "acme", repo: "test", path: "README.md" },
                         },
                     },
                     conversationId: "thr",
@@ -1336,7 +1359,7 @@ describe("CodexEventMapper", () =>
                         invocation: {
                             server: "github",
                             tool: "get_file_contents",
-                            arguments: { owner: "janole", repo: "test", path: "README.md" },
+                            arguments: { owner: "acme", repo: "test", path: "README.md" },
                         },
                         result: {
                             Ok: {
@@ -1362,20 +1385,6 @@ describe("CodexEventMapper", () =>
 
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            {
-                type: "tool-call",
-                toolCallId: "call_mcp_1",
-                toolName: "mcp:github/get_file_contents",
-                input: JSON.stringify({ owner: "janole", repo: "test", path: "README.md" }),
-                providerExecuted: true,
-                dynamic: true,
-            },
-            {
-                type: "tool-result",
-                toolCallId: "call_mcp_1",
-                toolName: "mcp:github/get_file_contents",
-                result: { output: "# Test Repo" },
-            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },

@@ -563,19 +563,20 @@ export class CodexEventMapper
             return [];
         }
         const tracked = this.openToolCalls.get(p.itemId);
-        if (tracked)
+        if (!tracked)
         {
-            return [this.withMeta({
-                type: "tool-result",
-                toolCallId: p.itemId,
-                toolName: tracked.toolName,
-                result: { output: p.message },
-                preliminary: true,
-            })];
+            return [];
         }
-        const parts: LanguageModelV3StreamPart[] = [];
-        this.emitReasoningDelta(parts, p.itemId, p.message);
-        return parts;
+        // preliminary: true causes the AI SDK to replace the previous tool-result
+        // with this one, so each progress message overwrites the last rather than
+        // accumulating. p.message is just the current status (e.g. "Searching...").
+        return [this.withMeta({
+            type: "tool-result",
+            toolCallId: p.itemId,
+            toolName: tracked.toolName,
+            result: { output: p.message },
+            preliminary: true,
+        })];
     }
 
     // item/tool/callStarted
