@@ -620,7 +620,8 @@ export class CodexEventMapper
                 type: "tool-result",
                 toolCallId: itemId,
                 toolName: tracked.toolName,
-                result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
+                result: { error: "Tool call did not complete before turn ended" },
+                isError: true,
             }));
         }
         this.openToolCalls.clear();

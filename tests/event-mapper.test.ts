@@ -334,7 +334,8 @@ describe("CodexEventMapper", () =>
                 type: "tool-result",
                 toolCallId: "cmd_orphan",
                 toolName: "codex_command_execution",
-                result: {},
+                result: { error: "Tool call did not complete before turn ended" },
+                isError: true,
             },
             {
                 type: "finish",
