@@ -1,29 +1,36 @@
-type JsonRecord = Record<string, unknown>;
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 
-/** Consumer-facing web-search action shape with normalized camelCase variants. */
+type JsonRecord = Record<string, unknown>;
+type ToolCallPart = Extract<LanguageModelV3StreamPart, { type: "tool-call" }>;
+type ToolResultPart = Extract<LanguageModelV3StreamPart, { type: "tool-result" }>;
+
+/** Typed web-search action exposed to consumers. */
 export type CodexWebSearchAction =
   | { type: "search"; query?: string; queries?: string[] }
   | { type: "openPage"; url?: string }
   | { type: "findInPage"; url?: string; pattern?: string }
   | { type: "other" };
 
-/** Consumer-facing tool input for `codex_web_search`. */
-export type CodexWebSearchToolInput = {
-    query?: string;
-    action?: CodexWebSearchAction;
+/** Parsed `codex_web_search` tool-call payload. */
+export type CodexWebSearchToolCall = {
+    toolCallId: string;
+    toolName: "codex_web_search";
+    input: {
+        query?: string;
+        action?: CodexWebSearchAction;
+    };
 };
 
-/** Consumer-facing tool result for `codex_web_search`. */
+/** Parsed `codex_web_search` tool-result payload. */
 export type CodexWebSearchToolResult = {
-    output: string;
-    query?: string;
-    action?: CodexWebSearchAction;
-    summary?: string;
-};
-
-type WebSearchLike = {
-    query?: string;
-    action?: unknown;
+    toolCallId: string;
+    toolName: "codex_web_search";
+    result: {
+        output: string;
+        query?: string;
+        action?: CodexWebSearchAction;
+        summary?: string;
+    };
 };
 
 function asRecord(value: unknown): JsonRecord | undefined
@@ -53,32 +60,27 @@ function asStringArray(value: unknown): string[] | undefined
     return strings.length > 0 ? strings : undefined;
 }
 
-function unwrapItem(value: unknown): JsonRecord | undefined
+function parseJson(value: unknown): unknown
 {
-    const record = asRecord(value);
-
-    if (!record)
+    if (typeof value !== "string")
     {
-        return undefined;
+        return value;
     }
 
-    if (record.direction === "inbound")
+    try
     {
-        const message = asRecord(record.message);
-        const params = asRecord(message?.params);
-        const item = asRecord(params?.item);
-
-        if (item)
-        {
-            return item;
-        }
+        return JSON.parse(value) as unknown;
     }
-
-    return record;
+    catch
+    {
+        return value;
+    }
 }
 
-function normalizeActionRecord(action: JsonRecord | undefined): CodexWebSearchAction | undefined
+function parseAction(value: unknown): CodexWebSearchAction | undefined
 {
+    const action = asRecord(value);
+
     if (!action || typeof action.type !== "string")
     {
         return undefined;
@@ -96,8 +98,8 @@ function normalizeActionRecord(action: JsonRecord | undefined): CodexWebSearchAc
                 ...(queries ? { queries } : {}),
             };
         }
-        case "open_page":
-        case "openPage": {
+        case "openPage":
+        case "open_page": {
             const url = asString(action.url);
 
             return {
@@ -105,8 +107,8 @@ function normalizeActionRecord(action: JsonRecord | undefined): CodexWebSearchAc
                 ...(url ? { url } : {}),
             };
         }
-        case "find_in_page":
-        case "findInPage": {
+        case "findInPage":
+        case "find_in_page": {
             const url = asString(action.url);
             const pattern = asString(action.pattern);
 
@@ -125,51 +127,17 @@ function normalizeActionRecord(action: JsonRecord | undefined): CodexWebSearchAc
     }
 }
 
-/** Normalizes a generated web-search action for consumers. */
-export function normalizeCodexWebSearchAction(action: unknown): CodexWebSearchAction | undefined
+function parseInput(value: unknown): CodexWebSearchToolCall["input"] | undefined
 {
-    return normalizeActionRecord(asRecord(action));
-}
+    const input = asRecord(parseJson(value));
 
-/** Creates a stable `codex_web_search` tool input from a protocol item. */
-export function createCodexWebSearchToolInput(item: WebSearchLike): CodexWebSearchToolInput
-{
-    const action = normalizeCodexWebSearchAction(item.action);
-
-    return {
-        ...(item.query ? { query: item.query } : {}),
-        ...(action ? { action } : {}),
-    };
-}
-
-/** Creates a stable `codex_web_search` tool result from a protocol item. */
-export function createCodexWebSearchToolResult(
-    item: WebSearchLike,
-    summary?: string,
-): CodexWebSearchToolResult
-{
-    const action = normalizeCodexWebSearchAction(item.action);
-
-    return {
-        output: summary ?? "",
-        ...(item.query ? { query: item.query } : {}),
-        ...(action ? { action } : {}),
-        ...(summary ? { summary } : {}),
-    };
-}
-
-/** Parses `codex_web_search` tool input from either raw protocol or emitted tool payloads. */
-export function parseCodexWebSearchToolInput(value: unknown): CodexWebSearchToolInput | undefined
-{
-    const record = unwrapItem(value);
-
-    if (!record)
+    if (!input)
     {
         return undefined;
     }
 
-    const query = asString(record.query);
-    const action = normalizeActionRecord(asRecord(record.action));
+    const query = asString(input.query);
+    const action = parseAction(input.action);
 
     if (!query && !action)
     {
@@ -182,30 +150,74 @@ export function parseCodexWebSearchToolInput(value: unknown): CodexWebSearchTool
     };
 }
 
-/** Parses `codex_web_search` tool result from emitted tool payloads or wrapped JSON values. */
-export function parseCodexWebSearchToolResult(value: unknown): CodexWebSearchToolResult | undefined
+function parseResultPayload(value: unknown): CodexWebSearchToolResult["result"] | undefined
 {
-    const record = asRecord(value);
+    const result = asRecord(parseJson(value));
 
-    if (!record)
+    if (!result)
     {
         return undefined;
     }
 
-    const payload = record.type === "json" ? asRecord(record.value) ?? record : record;
-    const parsedInput = parseCodexWebSearchToolInput(payload);
+    const payload = result.type === "json" ? asRecord(result.value) ?? result : result;
     const output = asString(payload.output) ?? "";
+    const query = asString(payload.query);
+    const action = parseAction(payload.action);
     const summary = asString(payload.summary);
 
-    if (!parsedInput && !output && !summary)
+    if (!output && !query && !action && !summary)
     {
         return undefined;
     }
 
     return {
         output,
-        ...(parsedInput?.query ? { query: parsedInput.query } : {}),
-        ...(parsedInput?.action ? { action: parsedInput.action } : {}),
+        ...(query ? { query } : {}),
+        ...(action ? { action } : {}),
         ...(summary ? { summary } : {}),
+    };
+}
+
+/** Parses a Vercel tool-call part for `codex_web_search`. */
+export function parseToolCall(part: ToolCallPart): CodexWebSearchToolCall | undefined
+{
+    if (part.toolName !== "codex_web_search")
+    {
+        return undefined;
+    }
+
+    const input = parseInput(part.input);
+
+    if (!input)
+    {
+        return undefined;
+    }
+
+    return {
+        toolCallId: part.toolCallId,
+        toolName: "codex_web_search",
+        input,
+    };
+}
+
+/** Parses a Vercel tool-result part for `codex_web_search`. */
+export function parseToolResult(part: ToolResultPart): CodexWebSearchToolResult | undefined
+{
+    if (part.toolName !== "codex_web_search")
+    {
+        return undefined;
+    }
+
+    const result = parseResultPayload(part.result);
+
+    if (!result)
+    {
+        return undefined;
+    }
+
+    return {
+        toolCallId: part.toolCallId,
+        toolName: "codex_web_search",
+        result,
     };
 }

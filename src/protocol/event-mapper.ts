@@ -4,7 +4,6 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
-import { createCodexWebSearchToolInput, createCodexWebSearchToolResult } from "../web-search";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -327,7 +326,7 @@ export class CodexEventMapper
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
-                    input: JSON.stringify(createCodexWebSearchToolInput(item)),
+                    input: JSON.stringify({ query: item.query, action: item.action ?? undefined }),
                     providerExecuted: true,
                     dynamic: true,
                 }));
@@ -474,7 +473,12 @@ export class CodexEventMapper
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName,
-                result: createCodexWebSearchToolResult(item, webSearchSummary || undefined),
+                result: {
+                    output: webSearchSummary || "",
+                    query: item.query,
+                    action: item.action ?? undefined,
+                    summary: webSearchSummary || undefined,
+                },
             }));
             this.openToolCalls.delete(item.id);
         }

@@ -108,13 +108,10 @@ export { mapSystemPrompt } from "./utils/prompt-file-resolver";
 export { LocalFileWriter, PromptFileResolver } from "./utils/prompt-file-resolver";
 export type {
     CodexWebSearchAction,
-    CodexWebSearchToolInput,
+    CodexWebSearchToolCall,
     CodexWebSearchToolResult,
 } from "./web-search";
 export {
-    createCodexWebSearchToolInput,
-    createCodexWebSearchToolResult,
-    normalizeCodexWebSearchAction,
-    parseCodexWebSearchToolInput,
-    parseCodexWebSearchToolResult,
+    parseToolCall,
+    parseToolResult,
 } from "./web-search";
