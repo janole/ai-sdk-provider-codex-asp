@@ -10,6 +10,7 @@ import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCom
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
+import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
@@ -17,7 +18,7 @@ import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
 
-const NATIVE_TOOL_RESULT_TYPES = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
+const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
 
 export interface CodexEventMapperInput
 {
