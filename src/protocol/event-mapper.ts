@@ -17,6 +17,8 @@ import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
 
+const NATIVE_TOOL_RESULT_TYPES = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
+
 export interface CodexEventMapperInput
 {
     method: string;
@@ -406,46 +408,7 @@ export class CodexEventMapper
                 this.openTextParts.delete(item.id);
             }
         }
-        else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
-        {
-            const tracked = this.openToolCalls.get(item.id)!;
-
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName: tracked.toolName,
-                result: { item },
-            }));
-
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "dynamicToolCall" && this.openToolCalls.has(item.id))
-        {
-            const tracked = this.openToolCalls.get(item.id)!;
-
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName: tracked.toolName,
-                result: { item },
-            }));
-
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "fileChange" && this.openToolCalls.has(item.id))
-        {
-            const tracked = this.openToolCalls.get(item.id)!;
-
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName: tracked.toolName,
-                result: { item },
-            }));
-
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "webSearch" && this.openToolCalls.has(item.id))
+        else if (NATIVE_TOOL_RESULT_TYPES.has(item.type) && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
 
