@@ -86,6 +86,7 @@ export type {
     ItemStartedNotification,
     JsonRpcMessageBase,
     SandboxMode,
+    ThreadItem,
     ThreadTokenUsageUpdatedNotification,
     TurnCompletedNotification,
     TurnStartedNotification,
