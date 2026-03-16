@@ -5,7 +5,6 @@ import type {
 } from "@ai-sdk/provider";
 
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
-import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
@@ -94,7 +93,7 @@ export class CodexEventMapper
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
-    private readonly openToolCalls = new Map<string, { toolName: string; output: string; droppedChars: number }>();
+    private readonly openToolCalls = new Map<string, { toolName: string }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
@@ -116,10 +115,8 @@ export class CodexEventMapper
             "item/reasoning/textDelta": (p) => this.handleReasoningDelta(p),
             "item/reasoning/summaryTextDelta": (p) => this.handleReasoningDelta(p),
             "item/plan/delta": (p) => this.handleReasoningDelta(p),
-            "item/fileChange/outputDelta": (p) => this.handleFileChangeOutputDelta(p),
             "item/reasoning/summaryPartAdded": (p) => this.handleSummaryPartAdded(p),
             "turn/plan/updated": (p) => this.handlePlanUpdated(p),
-            "item/commandExecution/outputDelta": (p) => this.handleCommandOutputDelta(p),
             "item/mcpToolCall/progress": (p) => this.handleMcpToolCallProgress(p),
             "item/tool/callStarted": (p) => this.handleToolCallStarted(p),
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
@@ -137,6 +134,11 @@ export class CodexEventMapper
             "codex/event/web_search_end": NOOP,
             "codex/event/mcp_tool_call_begin": NOOP,
             "codex/event/mcp_tool_call_end": NOOP,
+
+            // Intentionally ignored: streaming output deltas — the full output arrives
+            // in item/completed (aggregatedOutput), making these redundant.
+            "item/commandExecution/outputDelta": NOOP,
+            "item/fileChange/outputDelta": NOOP,
 
             // Intentionally ignored: full diffs (often 50-100 KB) crash/freeze frontend renderers.
             // If these need to surface, they should use a dedicated part type with lazy rendering.
@@ -205,46 +207,6 @@ export class CodexEventMapper
         return next;
     }
 
-    private applyOutputLimit(output: string): { output: string; droppedChars: number }
-    {
-        const limit = this.options.maxToolResultOutputChars;
-        if (limit <= 0)
-        {
-            return { output, droppedChars: 0 };
-        }
-
-        if (output.length <= limit)
-        {
-            return { output, droppedChars: 0 };
-        }
-
-        const droppedChars = output.length - limit;
-        return { output: output.slice(droppedChars), droppedChars };
-    }
-
-    private appendTrackedOutput(tracked: { output: string; droppedChars: number }, delta: string): void
-    {
-        if (!delta)
-        {
-            return;
-        }
-
-        const combined = tracked.output + delta;
-        const limited = this.applyOutputLimit(combined);
-        tracked.output = limited.output;
-        tracked.droppedChars += limited.droppedChars;
-    }
-
-    private formatToolOutput(output: string, droppedChars: number): string
-    {
-        if (droppedChars <= 0)
-        {
-            return output;
-        }
-
-        return `[output truncated: ${droppedChars} chars omitted]\n${output}`;
-    }
-
     // ── Handlers ─────────────────────────────────────────────────────────────
 
     // turn/started
@@ -283,7 +245,7 @@ export class CodexEventMapper
             case "commandExecution": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_command_execution";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -301,7 +263,7 @@ export class CodexEventMapper
             case "fileChange": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_file_change";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -315,7 +277,7 @@ export class CodexEventMapper
             case "webSearch": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_web_search";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -329,7 +291,7 @@ export class CodexEventMapper
             case "mcpToolCall": {
                 this.ensureStreamStarted(parts);
                 const toolName = `mcp:${item.server}/${item.tool}`;
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -448,26 +410,6 @@ export class CodexEventMapper
         return parts;
     }
 
-    // item/fileChange/outputDelta
-    private handleFileChangeOutputDelta(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const delta = (params ?? {}) as DeltaParams;
-        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(delta.itemId)!;
-        this.appendTrackedOutput(tracked, delta.delta);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: delta.itemId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
-            preliminary: true,
-        })];
-    }
-
     // item/reasoning/summaryPartAdded
     private handleSummaryPartAdded(params: unknown): LanguageModelV3StreamPart[]
     {
@@ -524,26 +466,6 @@ export class CodexEventMapper
         }));
 
         return parts;
-    }
-
-    // item/commandExecution/outputDelta
-    private handleCommandOutputDelta(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const delta = (params ?? {}) as CommandExecutionOutputDeltaNotification;
-        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(delta.itemId)!;
-        this.appendTrackedOutput(tracked, delta.delta);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: delta.itemId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
-            preliminary: true,
-        })];
     }
 
     // item/mcpToolCall/progress
@@ -637,7 +559,7 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
         this.ensureStreamStarted(parts);
 
-        this.openToolCalls.set(item.id, { toolName: item.tool, output: "", droppedChars: 0 });
+        this.openToolCalls.set(item.id, { toolName: item.tool });
         parts.push(this.withMeta({
             type: "tool-call",
             toolCallId: item.id,
