@@ -409,77 +409,53 @@ export class CodexEventMapper
         else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
-            const outputSource = item.aggregatedOutput ?? tracked.output;
-            const limitedOutput = this.applyOutputLimit(outputSource);
-            const output = this.formatToolOutput(
-                limitedOutput.output,
-                item.aggregatedOutput !== undefined && item.aggregatedOutput !== null
-                    ? limitedOutput.droppedChars
-                    : tracked.droppedChars,
-            );
-            const exitCode = item.exitCode;
-            const status = item.status;
 
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName: tracked.toolName,
-                result: { output, exitCode, status },
+                result: { item },
             }));
+
             this.openToolCalls.delete(item.id);
         }
-        else if (item.type === "dynamicToolCall")
+        else if (item.type === "dynamicToolCall" && this.openToolCalls.has(item.id))
         {
-            const dynamic = item;
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? dynamic.tool ?? "dynamic_tool_call";
-            const rawOutput = this.stringifyDynamicToolResult(dynamic);
-            const limitedOutput = this.applyOutputLimit(rawOutput);
+            const tracked = this.openToolCalls.get(item.id)!;
+
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
-                toolName,
-                result: {
-                    output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars),
-                    success: dynamic.success ?? undefined,
-                },
+                toolName: tracked.toolName,
+                result: { item },
             }));
+
             this.openToolCalls.delete(item.id);
         }
         else if (item.type === "fileChange" && this.openToolCalls.has(item.id))
         {
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? "codex_file_change";
-            const output = tracked
-                ? this.formatToolOutput(tracked.output, tracked.droppedChars)
-                : "";
+            const tracked = this.openToolCalls.get(item.id)!;
+
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
-                toolName,
-                result: { output, status: item.status, changes: item.changes },
+                toolName: tracked.toolName,
+                result: { item },
             }));
+
             this.openToolCalls.delete(item.id);
         }
         else if (item.type === "webSearch" && this.openToolCalls.has(item.id))
         {
-            const webSearchSummary = this.formatWebSearchItemSummary(item as {
-                query?: string;
-                action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
-            });
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? "codex_web_search";
+            const tracked = this.openToolCalls.get(item.id)!;
+
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
-                toolName,
-                result: {
-                    output: webSearchSummary || "",
-                    query: item.query,
-                    action: item.action ?? undefined,
-                    summary: webSearchSummary || undefined,
-                },
+                toolName: tracked.toolName,
+                result: { item },
             }));
+
             this.openToolCalls.delete(item.id);
         }
         else if (this.openReasoningParts.has(item.id))
