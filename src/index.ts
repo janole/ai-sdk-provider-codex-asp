@@ -106,3 +106,15 @@ export type { CodexSession } from "./session";
 export type { FileWriter } from "./utils/prompt-file-resolver";
 export { mapSystemPrompt } from "./utils/prompt-file-resolver";
 export { LocalFileWriter, PromptFileResolver } from "./utils/prompt-file-resolver";
+export type {
+    CodexWebSearchAction,
+    CodexWebSearchToolInput,
+    CodexWebSearchToolResult,
+} from "./web-search";
+export {
+    createCodexWebSearchToolInput,
+    createCodexWebSearchToolResult,
+    normalizeCodexWebSearchAction,
+    parseCodexWebSearchToolInput,
+    parseCodexWebSearchToolResult,
+} from "./web-search";
