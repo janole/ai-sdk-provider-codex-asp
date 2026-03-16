@@ -18,7 +18,7 @@ import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
 
-const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
+const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "mcpToolCall", "webSearch"]);
 
 export interface CodexEventMapperInput
 {
@@ -128,8 +128,6 @@ export class CodexEventMapper
             "item/reasoning/summaryPartAdded": (p) => this.handleSummaryPartAdded(p),
             "turn/plan/updated": (p) => this.handlePlanUpdated(p),
             "item/commandExecution/outputDelta": (p) => this.handleCommandOutputDelta(p),
-            "codex/event/mcp_tool_call_begin": (p) => this.handleMcpToolCallBegin(p),
-            "codex/event/mcp_tool_call_end": (p) => this.handleMcpToolCallEnd(p),
             "item/mcpToolCall/progress": (p) => this.handleMcpToolCallProgress(p),
             "item/tool/callStarted": (p) => this.handleToolCallStarted(p),
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
@@ -142,10 +140,11 @@ export class CodexEventMapper
             "codex/event/agent_reasoning": NOOP,
             "codex/event/agent_reasoning_section_break": NOOP,
             "codex/event/plan_update": NOOP,
-            // Intentionally ignored: web search wrappers mirror item events.
-            // We emit web-search reasoning only from item/started + item/completed.
+            // Intentionally ignored: web search and MCP wrappers mirror item events.
             "codex/event/web_search_begin": NOOP,
             "codex/event/web_search_end": NOOP,
+            "codex/event/mcp_tool_call_begin": NOOP,
+            "codex/event/mcp_tool_call_end": NOOP,
 
             // Intentionally ignored: full diffs (often 50-100 KB) crash/freeze frontend renderers.
             // If these need to surface, they should use a dedicated part type with lazy rendering.
@@ -335,9 +334,22 @@ export class CodexEventMapper
                 }));
                 break;
             }
+            case "mcpToolCall": {
+                this.ensureStreamStarted(parts);
+                const toolName = `mcp:${item.server}/${item.tool}`;
+                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                parts.push(this.withMeta({
+                    type: "tool-call",
+                    toolCallId: item.id,
+                    toolName,
+                    input: JSON.stringify(item.arguments ?? {}),
+                    providerExecuted: true,
+                    dynamic: true,
+                }));
+                break;
+            }
             case "reasoning":
             case "plan":
-            case "mcpToolCall":
             case "collabAgentToolCall":
             case "imageView":
             case "contextCompaction":
@@ -542,67 +554,6 @@ export class CodexEventMapper
         })];
     }
 
-    // codex/event/mcp_tool_call_begin
-    private handleMcpToolCallBegin(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as {
-            msg?: {
-                call_id?: string;
-                invocation?: { server?: string; tool?: string; arguments?: unknown };
-            };
-        };
-        const callId = p.msg?.call_id;
-        const inv = p.msg?.invocation;
-        if (!callId || !inv)
-        {
-            return [];
-        }
-
-        const parts: LanguageModelV3StreamPart[] = [];
-        this.ensureStreamStarted(parts);
-        const toolName = `mcp:${inv.server}/${inv.tool}`;
-        this.openToolCalls.set(callId, { toolName, output: "", droppedChars: 0 });
-        parts.push(this.withMeta({
-            type: "tool-call",
-            toolCallId: callId,
-            toolName,
-            input: JSON.stringify(inv.arguments ?? {}),
-            providerExecuted: true,
-            dynamic: true,
-        }));
-        return parts;
-    }
-
-    // codex/event/mcp_tool_call_end
-    private handleMcpToolCallEnd(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as {
-            msg?: {
-                call_id?: string;
-                result?: { Ok?: { content?: Array<{ type: string; text?: string }> }; Err?: unknown };
-            };
-        };
-        const callId = p.msg?.call_id;
-        if (!callId || !this.openToolCalls.has(callId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(callId)!;
-        const result = p.msg?.result;
-        const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
-        const rawOutput = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
-        const limitedOutput = this.applyOutputLimit(rawOutput);
-
-        this.openToolCalls.delete(callId);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: callId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars) },
-        })];
-    }
-
     // item/mcpToolCall/progress
     private handleMcpToolCallProgress(params: unknown): LanguageModelV3StreamPart[]
     {
@@ -610,6 +561,17 @@ export class CodexEventMapper
         if (!p.itemId || !p.message)
         {
             return [];
+        }
+        const tracked = this.openToolCalls.get(p.itemId);
+        if (tracked)
+        {
+            return [this.withMeta({
+                type: "tool-result",
+                toolCallId: p.itemId,
+                toolName: tracked.toolName,
+                result: { output: p.message },
+                preliminary: true,
+            })];
         }
         const parts: LanguageModelV3StreamPart[] = [];
         this.emitReasoningDelta(parts, p.itemId, p.message);
