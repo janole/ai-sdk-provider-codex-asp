@@ -20,6 +20,22 @@ describe("web-search tool parsers", () =>
             }),
             providerExecuted: true,
             dynamic: true,
+            providerMetadata: {
+                "@janole/ai-sdk-provider-codex-asp": {
+                    threadId: "thr_123",
+                    turnId: "turn_123",
+                    item: {
+                        type: "webSearch",
+                        id: "ws_123",
+                        query: "weather: Berlin, Germany",
+                        action: {
+                            type: "search",
+                            query: "weather: Berlin, Germany",
+                            queries: ["weather: Berlin, Germany"],
+                        },
+                    },
+                },
+            },
         });
 
         expect(parsed).toEqual({
@@ -51,6 +67,22 @@ describe("web-search tool parsers", () =>
                     queries: ["weather: Berlin, Germany"],
                 },
                 summary: "Web search: weather: Berlin, Germany",
+            },
+            providerMetadata: {
+                "@janole/ai-sdk-provider-codex-asp": {
+                    threadId: "thr_123",
+                    turnId: "turn_123",
+                    item: {
+                        type: "webSearch",
+                        id: "ws_123",
+                        query: "weather: Berlin, Germany",
+                        action: {
+                            type: "search",
+                            query: "weather: Berlin, Germany",
+                            queries: ["weather: Berlin, Germany"],
+                        },
+                    },
+                },
             },
         });
 

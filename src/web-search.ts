@@ -1,9 +1,12 @@
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 
+import type { ThreadItem } from "./protocol/app-server-protocol/v2/ThreadItem";
 import type { WebSearchAction } from "./protocol/app-server-protocol/v2/WebSearchAction";
+import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
 
 type ToolCallPart = Extract<LanguageModelV3StreamPart, { type: "tool-call" }>;
 type ToolResultPart = Extract<LanguageModelV3StreamPart, { type: "tool-result" }>;
+type WebSearchItem = Extract<ThreadItem, { type: "webSearch" }>;
 
 type WebSearchPayload = {
     query?: string;
@@ -56,6 +59,25 @@ function parseJson<T>(value: string): T | undefined
     }
 }
 
+function extractMetadataItem(part: ToolCallPart | ToolResultPart): WebSearchItem | undefined
+{
+    const providerMetadata = part.providerMetadata?.[CODEX_PROVIDER_ID];
+
+    if (!providerMetadata || typeof providerMetadata !== "object" || !("item" in providerMetadata))
+    {
+        return undefined;
+    }
+
+    const item = (providerMetadata as { item?: unknown }).item;
+
+    if (!item || typeof item !== "object" || (item as { type?: unknown }).type !== "webSearch")
+    {
+        return undefined;
+    }
+
+    return item as WebSearchItem;
+}
+
 function toAction(action: WebSearchAction | null | undefined): CodexWebSearchAction | undefined
 {
     if (!action)
@@ -99,9 +121,10 @@ export function parseToolCall(part: ToolCallPart): CodexWebSearchToolCall | unde
         return undefined;
     }
 
-    const payload = typeof part.input === "string"
+    const item = extractMetadataItem(part);
+    const payload = item ?? (typeof part.input === "string"
         ? parseJson<WebSearchPayload>(part.input)
-        : undefined;
+        : undefined);
 
     if (!payload)
     {
@@ -128,7 +151,10 @@ export function parseToolResult(part: ToolResultPart): CodexWebSearchToolResult 
         return undefined;
     }
 
-    const payload = part.result as WebSearchResultPayload;
+    const item = extractMetadataItem(part);
+    const payload = item
+        ? { output: (part.result as WebSearchResultPayload).output, summary: (part.result as WebSearchResultPayload).summary, ...item }
+        : part.result as WebSearchResultPayload;
     const action = toAction(payload.action);
 
     return {

@@ -642,6 +642,12 @@ describe("CodexEventMapper", () =>
                 input: JSON.stringify({ query: "vitest docs" }),
                 providerExecuted: true,
                 dynamic: true,
+                providerMetadata: {
+                    "@janole/ai-sdk-provider-codex-asp": {
+                        turnId: "turn",
+                        item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    },
+                },
             },
             { type: "reasoning-start", id: "collab_1" },
             {
@@ -652,6 +658,12 @@ describe("CodexEventMapper", () =>
                     output: "Web search: vitest docs",
                     query: "vitest docs",
                     summary: "Web search: vitest docs",
+                },
+                providerMetadata: {
+                    "@janole/ai-sdk-provider-codex-asp": {
+                        turnId: "turn",
+                        item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    },
                 },
             },
             { type: "reasoning-end", id: "collab_1" },
