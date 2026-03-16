@@ -5,7 +5,6 @@ import type {
 } from "@ai-sdk/provider";
 
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
-import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
@@ -18,7 +17,7 @@ import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
 
-const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
+const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "mcpToolCall", "webSearch"]);
 
 export interface CodexEventMapperInput
 {
@@ -68,11 +67,6 @@ export interface CodexEventMapperOptions
 {
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
     emitPlanUpdates?: boolean;
-    /**
-     * Max retained tool-result output chars; older content is truncated. Default: 32768.
-     * Set to 0 or a negative value to disable truncation.
-     */
-    maxToolResultOutputChars?: number;
 }
 
 /**
@@ -92,8 +86,6 @@ export function extractNotificationThreadId(params: unknown): string | undefined
 
 // No-op handler for intentionally ignored events.
 const NOOP = (): LanguageModelV3StreamPart[] => [];
-const DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS = 32_768;
-
 export class CodexEventMapper
 {
     private readonly options: Required<CodexEventMapperOptions>;
@@ -101,7 +93,7 @@ export class CodexEventMapper
     private readonly openTextParts = new Set<string>();
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
-    private readonly openToolCalls = new Map<string, { toolName: string; output: string; droppedChars: number }>();
+    private readonly openToolCalls = new Map<string, { toolName: string }>();
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
@@ -113,7 +105,6 @@ export class CodexEventMapper
     {
         this.options = {
             emitPlanUpdates: options?.emitPlanUpdates ?? true,
-            maxToolResultOutputChars: options?.maxToolResultOutputChars ?? DEFAULT_MAX_TOOL_RESULT_OUTPUT_CHARS,
         };
 
         this.handlers = {
@@ -124,12 +115,8 @@ export class CodexEventMapper
             "item/reasoning/textDelta": (p) => this.handleReasoningDelta(p),
             "item/reasoning/summaryTextDelta": (p) => this.handleReasoningDelta(p),
             "item/plan/delta": (p) => this.handleReasoningDelta(p),
-            "item/fileChange/outputDelta": (p) => this.handleFileChangeOutputDelta(p),
             "item/reasoning/summaryPartAdded": (p) => this.handleSummaryPartAdded(p),
             "turn/plan/updated": (p) => this.handlePlanUpdated(p),
-            "item/commandExecution/outputDelta": (p) => this.handleCommandOutputDelta(p),
-            "codex/event/mcp_tool_call_begin": (p) => this.handleMcpToolCallBegin(p),
-            "codex/event/mcp_tool_call_end": (p) => this.handleMcpToolCallEnd(p),
             "item/mcpToolCall/progress": (p) => this.handleMcpToolCallProgress(p),
             "item/tool/callStarted": (p) => this.handleToolCallStarted(p),
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
@@ -142,10 +129,16 @@ export class CodexEventMapper
             "codex/event/agent_reasoning": NOOP,
             "codex/event/agent_reasoning_section_break": NOOP,
             "codex/event/plan_update": NOOP,
-            // Intentionally ignored: web search wrappers mirror item events.
-            // We emit web-search reasoning only from item/started + item/completed.
+            // Intentionally ignored: web search and MCP wrappers mirror item events.
             "codex/event/web_search_begin": NOOP,
             "codex/event/web_search_end": NOOP,
+            "codex/event/mcp_tool_call_begin": NOOP,
+            "codex/event/mcp_tool_call_end": NOOP,
+
+            // Intentionally ignored: streaming output deltas — the full output arrives
+            // in item/completed (aggregatedOutput), making these redundant.
+            "item/commandExecution/outputDelta": NOOP,
+            "item/fileChange/outputDelta": NOOP,
 
             // Intentionally ignored: full diffs (often 50-100 KB) crash/freeze frontend renderers.
             // If these need to surface, they should use a dedicated part type with lazy rendering.
@@ -214,46 +207,6 @@ export class CodexEventMapper
         return next;
     }
 
-    private applyOutputLimit(output: string): { output: string; droppedChars: number }
-    {
-        const limit = this.options.maxToolResultOutputChars;
-        if (limit <= 0)
-        {
-            return { output, droppedChars: 0 };
-        }
-
-        if (output.length <= limit)
-        {
-            return { output, droppedChars: 0 };
-        }
-
-        const droppedChars = output.length - limit;
-        return { output: output.slice(droppedChars), droppedChars };
-    }
-
-    private appendTrackedOutput(tracked: { output: string; droppedChars: number }, delta: string): void
-    {
-        if (!delta)
-        {
-            return;
-        }
-
-        const combined = tracked.output + delta;
-        const limited = this.applyOutputLimit(combined);
-        tracked.output = limited.output;
-        tracked.droppedChars += limited.droppedChars;
-    }
-
-    private formatToolOutput(output: string, droppedChars: number): string
-    {
-        if (droppedChars <= 0)
-        {
-            return output;
-        }
-
-        return `[output truncated: ${droppedChars} chars omitted]\n${output}`;
-    }
-
     // ── Handlers ─────────────────────────────────────────────────────────────
 
     // turn/started
@@ -292,7 +245,7 @@ export class CodexEventMapper
             case "commandExecution": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_command_execution";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -310,7 +263,7 @@ export class CodexEventMapper
             case "fileChange": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_file_change";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -324,7 +277,7 @@ export class CodexEventMapper
             case "webSearch": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_web_search";
-                this.openToolCalls.set(item.id, { toolName, output: "", droppedChars: 0 });
+                this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
                     type: "tool-call",
                     toolCallId: item.id,
@@ -335,9 +288,22 @@ export class CodexEventMapper
                 }));
                 break;
             }
+            case "mcpToolCall": {
+                this.ensureStreamStarted(parts);
+                const toolName = `mcp:${item.server}/${item.tool}`;
+                this.openToolCalls.set(item.id, { toolName });
+                parts.push(this.withMeta({
+                    type: "tool-call",
+                    toolCallId: item.id,
+                    toolName,
+                    input: JSON.stringify(item.arguments ?? {}),
+                    providerExecuted: true,
+                    dynamic: true,
+                }));
+                break;
+            }
             case "reasoning":
             case "plan":
-            case "mcpToolCall":
             case "collabAgentToolCall":
             case "imageView":
             case "contextCompaction":
@@ -444,26 +410,6 @@ export class CodexEventMapper
         return parts;
     }
 
-    // item/fileChange/outputDelta
-    private handleFileChangeOutputDelta(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const delta = (params ?? {}) as DeltaParams;
-        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(delta.itemId)!;
-        this.appendTrackedOutput(tracked, delta.delta);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: delta.itemId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
-            preliminary: true,
-        })];
-    }
-
     // item/reasoning/summaryPartAdded
     private handleSummaryPartAdded(params: unknown): LanguageModelV3StreamPart[]
     {
@@ -522,87 +468,6 @@ export class CodexEventMapper
         return parts;
     }
 
-    // item/commandExecution/outputDelta
-    private handleCommandOutputDelta(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const delta = (params ?? {}) as CommandExecutionOutputDeltaNotification;
-        if (!delta.itemId || !delta.delta || !this.openToolCalls.has(delta.itemId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(delta.itemId)!;
-        this.appendTrackedOutput(tracked, delta.delta);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: delta.itemId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
-            preliminary: true,
-        })];
-    }
-
-    // codex/event/mcp_tool_call_begin
-    private handleMcpToolCallBegin(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as {
-            msg?: {
-                call_id?: string;
-                invocation?: { server?: string; tool?: string; arguments?: unknown };
-            };
-        };
-        const callId = p.msg?.call_id;
-        const inv = p.msg?.invocation;
-        if (!callId || !inv)
-        {
-            return [];
-        }
-
-        const parts: LanguageModelV3StreamPart[] = [];
-        this.ensureStreamStarted(parts);
-        const toolName = `mcp:${inv.server}/${inv.tool}`;
-        this.openToolCalls.set(callId, { toolName, output: "", droppedChars: 0 });
-        parts.push(this.withMeta({
-            type: "tool-call",
-            toolCallId: callId,
-            toolName,
-            input: JSON.stringify(inv.arguments ?? {}),
-            providerExecuted: true,
-            dynamic: true,
-        }));
-        return parts;
-    }
-
-    // codex/event/mcp_tool_call_end
-    private handleMcpToolCallEnd(params: unknown): LanguageModelV3StreamPart[]
-    {
-        const p = (params ?? {}) as {
-            msg?: {
-                call_id?: string;
-                result?: { Ok?: { content?: Array<{ type: string; text?: string }> }; Err?: unknown };
-            };
-        };
-        const callId = p.msg?.call_id;
-        if (!callId || !this.openToolCalls.has(callId))
-        {
-            return [];
-        }
-
-        const tracked = this.openToolCalls.get(callId)!;
-        const result = p.msg?.result;
-        const textParts = result?.Ok?.content?.filter(c => c.type === "text").map(c => c.text) ?? [];
-        const rawOutput = textParts.join("\n") || (result?.Err ? JSON.stringify(result.Err) : "");
-        const limitedOutput = this.applyOutputLimit(rawOutput);
-
-        this.openToolCalls.delete(callId);
-        return [this.withMeta({
-            type: "tool-result",
-            toolCallId: callId,
-            toolName: tracked.toolName,
-            result: { output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars) },
-        })];
-    }
-
     // item/mcpToolCall/progress
     private handleMcpToolCallProgress(params: unknown): LanguageModelV3StreamPart[]
     {
@@ -611,9 +476,21 @@ export class CodexEventMapper
         {
             return [];
         }
-        const parts: LanguageModelV3StreamPart[] = [];
-        this.emitReasoningDelta(parts, p.itemId, p.message);
-        return parts;
+        const tracked = this.openToolCalls.get(p.itemId);
+        if (!tracked)
+        {
+            return [];
+        }
+        // preliminary: true causes the AI SDK to replace the previous tool-result
+        // with this one, so each progress message overwrites the last rather than
+        // accumulating. p.message is just the current status (e.g. "Searching...").
+        return [this.withMeta({
+            type: "tool-result",
+            toolCallId: p.itemId,
+            toolName: tracked.toolName,
+            result: { output: p.message },
+            preliminary: true,
+        })];
     }
 
     // item/tool/callStarted
@@ -682,7 +559,7 @@ export class CodexEventMapper
         const parts: LanguageModelV3StreamPart[] = [];
         this.ensureStreamStarted(parts);
 
-        this.openToolCalls.set(item.id, { toolName: item.tool, output: "", droppedChars: 0 });
+        this.openToolCalls.set(item.id, { toolName: item.tool });
         parts.push(this.withMeta({
             type: "tool-call",
             toolCallId: item.id,
@@ -693,73 +570,6 @@ export class CodexEventMapper
         }));
 
         return parts;
-    }
-
-    private stringifyDynamicToolResult(item: Pick<DynamicToolCallItem, "contentItems">): string
-    {
-        const contentItems = item.contentItems ?? [];
-        if (!contentItems.length)
-        {
-            return "";
-        }
-
-        const chunks: string[] = [];
-        for (const contentItem of contentItems)
-        {
-            if (contentItem.type === "inputText" && contentItem.text)
-            {
-                chunks.push(contentItem.text);
-                continue;
-            }
-
-            if (contentItem.type === "inputImage" && contentItem.imageUrl)
-            {
-                chunks.push(`[image] ${contentItem.imageUrl}`);
-            }
-        }
-        return chunks.join("\n");
-    }
-
-    private formatWebSearchItemSummary(item: {
-        query?: string;
-        action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
-    }): string
-    {
-        const query = item.query?.trim();
-        const actionType = item.action?.type;
-
-        if (actionType === "search")
-        {
-            if (query)
-            {
-                return `Web search: ${query}`;
-            }
-            const actionQuery = item.action?.query?.trim();
-            return actionQuery ? `Web search: ${actionQuery}` : "Web search";
-        }
-
-        if (actionType === "openPage" || actionType === "open_page")
-        {
-            const url = item.action?.url?.trim();
-            return url ? `Open page: ${url}` : "Open page";
-        }
-
-        if (actionType === "findInPage" || actionType === "find_in_page")
-        {
-            const pattern = item.action?.pattern?.trim();
-            const url = item.action?.url?.trim();
-            if (pattern && url)
-            {
-                return `Find in page: "${pattern}" (${url})`;
-            }
-            if (pattern)
-            {
-                return `Find in page: "${pattern}"`;
-            }
-            return url ? `Find in page: ${url}` : "Find in page";
-        }
-
-        return query ? `Web search: ${query}` : "";
     }
 
     // thread/tokenUsage/updated
@@ -810,7 +620,8 @@ export class CodexEventMapper
                 type: "tool-result",
                 toolCallId: itemId,
                 toolName: tracked.toolName,
-                result: { output: this.formatToolOutput(tracked.output, tracked.droppedChars) },
+                result: { error: "Tool call did not complete before turn ended" },
+                isError: true,
             }));
         }
         this.openToolCalls.clear();
