@@ -10,12 +10,15 @@ import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCom
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
+import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
+
+const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "webSearch"]);
 
 export interface CodexEventMapperInput
 {
@@ -406,80 +409,17 @@ export class CodexEventMapper
                 this.openTextParts.delete(item.id);
             }
         }
-        else if (item.type === "commandExecution" && this.openToolCalls.has(item.id))
+        else if (NATIVE_TOOL_RESULT_TYPES.has(item.type) && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
-            const outputSource = item.aggregatedOutput ?? tracked.output;
-            const limitedOutput = this.applyOutputLimit(outputSource);
-            const output = this.formatToolOutput(
-                limitedOutput.output,
-                item.aggregatedOutput !== undefined && item.aggregatedOutput !== null
-                    ? limitedOutput.droppedChars
-                    : tracked.droppedChars,
-            );
-            const exitCode = item.exitCode;
-            const status = item.status;
 
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName: tracked.toolName,
-                result: { output, exitCode, status },
+                result: { item },
             }));
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "dynamicToolCall")
-        {
-            const dynamic = item;
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? dynamic.tool ?? "dynamic_tool_call";
-            const rawOutput = this.stringifyDynamicToolResult(dynamic);
-            const limitedOutput = this.applyOutputLimit(rawOutput);
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName,
-                result: {
-                    output: this.formatToolOutput(limitedOutput.output, limitedOutput.droppedChars),
-                    success: dynamic.success ?? undefined,
-                },
-            }));
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "fileChange" && this.openToolCalls.has(item.id))
-        {
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? "codex_file_change";
-            const output = tracked
-                ? this.formatToolOutput(tracked.output, tracked.droppedChars)
-                : "";
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName,
-                result: { output, status: item.status, changes: item.changes },
-            }));
-            this.openToolCalls.delete(item.id);
-        }
-        else if (item.type === "webSearch" && this.openToolCalls.has(item.id))
-        {
-            const webSearchSummary = this.formatWebSearchItemSummary(item as {
-                query?: string;
-                action?: { type?: string; query?: string | null; url?: string | null; pattern?: string | null };
-            });
-            const tracked = this.openToolCalls.get(item.id);
-            const toolName = tracked?.toolName ?? "codex_web_search";
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: item.id,
-                toolName,
-                result: {
-                    output: webSearchSummary || "",
-                    query: item.query,
-                    action: item.action ?? undefined,
-                    summary: webSearchSummary || undefined,
-                },
-            }));
+
             this.openToolCalls.delete(item.id);
         }
         else if (this.openReasoningParts.has(item.id))
