@@ -4,6 +4,7 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import { stripUndefined } from "../utils/object";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { CommandExecutionOutputDeltaNotification } from "./app-server-protocol/v2/CommandExecutionOutputDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -174,9 +175,9 @@ export class CodexEventMapper
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private withMeta<T extends LanguageModelV3StreamPart>(part: T): T
+    private withMeta<T extends LanguageModelV3StreamPart>(part: T, extra?: Record<string, unknown>): T
     {
-        return withProviderMetadata(part, this.threadId, this.turnId);
+        return withProviderMetadata(part, this.threadId, this.turnId, extra);
     }
 
     private ensureStreamStarted(parts: LanguageModelV3StreamPart[]): void
@@ -329,7 +330,7 @@ export class CodexEventMapper
                     input: JSON.stringify({ query: item.query, action: item.action ?? undefined }),
                     providerExecuted: true,
                     dynamic: true,
-                }));
+                }, { item }));
                 break;
             }
             case "reasoning":
@@ -473,13 +474,13 @@ export class CodexEventMapper
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName,
-                result: {
+                result: stripUndefined({
                     output: webSearchSummary || "",
                     query: item.query,
                     action: item.action ?? undefined,
                     summary: webSearchSummary || undefined,
-                },
-            }));
+                }),
+            }, { item }));
             this.openToolCalls.delete(item.id);
         }
         else if (this.openReasoningParts.has(item.id))
