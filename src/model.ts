@@ -36,7 +36,7 @@ import type {
     CodexTurnStartParams,
     CodexTurnStartResult,
 } from "./protocol/types";
-import type { CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
+import type { CodexCallOptions, CodexCompactionOnResumeContext, CodexProviderSettings } from "./provider-settings";
 import { CodexSessionImpl } from "./session";
 import { stripUndefined } from "./utils/object";
 import { mapSystemPrompt, PromptFileResolver } from "./utils/prompt-file-resolver";
@@ -47,7 +47,7 @@ export interface CodexLanguageModelSettings
     // intentionally empty — settings will be added as the API evolves
 }
 
-export type { CodexThreadDefaults, CodexTurnDefaults } from "./provider-settings";
+export type { CodexCallOptions, CodexThreadDefaults, CodexTurnDefaults } from "./provider-settings";
 
 export interface CodexModelConfig
 {
@@ -446,6 +446,7 @@ export class CodexLanguageModel implements LanguageModelV3
     doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
     {
         const resumeThreadId = extractResumeThreadId(options.prompt);
+        const callOptions = options.providerOptions?.[CODEX_PROVIDER_ID] as CodexCallOptions | undefined;
 
         const transport = this.config.providerSettings.transportFactory
             ? this.config.providerSettings.transportFactory(stripUndefined({ signal: options.abortSignal, threadId: resumeThreadId }))
@@ -768,6 +769,10 @@ export class CodexLanguageModel implements LanguageModelV3
                                 threadId: resumeThreadId,
                                 persistExtendedHistory: false,
                                 developerInstructions,
+                                cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
+                                approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
+                                model: callOptions?.model ?? this.config.providerSettings.defaultModel,
                             });
                             debugLog?.("outbound", "thread/resume", resumeParams);
                             const resumeResult = await client.request<ThreadResumeResponse>(
@@ -851,9 +856,9 @@ export class CodexLanguageModel implements LanguageModelV3
                                 dynamicTools,
                                 developerInstructions,
                                 config,
-                                cwd: this.config.providerSettings.defaultThreadSettings?.cwd,
-                                approvalPolicy: this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
-                                sandbox: this.config.providerSettings.defaultThreadSettings?.sandbox,
+                                cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
+                                approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
                             });
                             debugLog?.("outbound", "thread/start", threadStartParams);
                             const threadStartResult = await client.request<ThreadStartResultLike>(
@@ -879,12 +884,12 @@ export class CodexLanguageModel implements LanguageModelV3
                         const turnStartParams: CodexTurnStartParams = stripUndefined({
                             threadId,
                             input: turnInput,
-                            cwd: this.config.providerSettings.defaultTurnSettings?.cwd,
-                            approvalPolicy: this.config.providerSettings.defaultTurnSettings?.approvalPolicy,
-                            sandboxPolicy: this.config.providerSettings.defaultTurnSettings?.sandboxPolicy,
-                            model: this.config.providerSettings.defaultTurnSettings?.model,
-                            effort: this.config.providerSettings.defaultTurnSettings?.effort,
-                            summary: this.config.providerSettings.defaultTurnSettings?.summary,
+                            cwd: callOptions?.cwd ?? this.config.providerSettings.defaultTurnSettings?.cwd,
+                            approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultTurnSettings?.approvalPolicy,
+                            sandboxPolicy: callOptions?.sandboxPolicy ?? this.config.providerSettings.defaultTurnSettings?.sandboxPolicy,
+                            model: callOptions?.model ?? this.config.providerSettings.defaultTurnSettings?.model,
+                            effort: callOptions?.effort ?? this.config.providerSettings.defaultTurnSettings?.effort,
+                            summary: callOptions?.summary ?? this.config.providerSettings.defaultTurnSettings?.summary,
                             outputSchema: options.responseFormat?.type === "json"
                                 ? options.responseFormat.schema as JsonValue | undefined
                                 : undefined,
