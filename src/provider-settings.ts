@@ -31,6 +31,25 @@ export interface CodexTurnDefaults
     summary?: "auto" | "concise" | "detailed" | "none";
 }
 
+/**
+ * Per-call overrides passed via `providerOptions[CODEX_PROVIDER_ID]` in
+ * `streamText()` / `generateText()`. Values here take precedence over
+ * `defaultThreadSettings` and `defaultTurnSettings` from the provider.
+ */
+export interface CodexCallOptions
+{
+    // Thread-level (only applied when starting a new thread)
+    cwd?: string;
+    approvalPolicy?: AskForApproval;
+    sandbox?: SandboxMode;
+
+    // Turn-level
+    effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+    model?: string;
+    sandboxPolicy?: SandboxPolicy;
+    summary?: "auto" | "concise" | "detailed" | "none";
+}
+
 export interface CodexCompactionSettings
 {
     /**

@@ -41,6 +41,7 @@ export {
     CodexProviderError,
 } from "./errors";
 export type {
+    CodexCallOptions,
     CodexLanguageModelSettings,
     CodexModelConfig,
     CodexThreadDefaults,
