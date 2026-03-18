@@ -769,6 +769,10 @@ export class CodexLanguageModel implements LanguageModelV3
                                 threadId: resumeThreadId,
                                 persistExtendedHistory: false,
                                 developerInstructions,
+                                cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
+                                approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
+                                model: callOptions?.model ?? this.config.providerSettings.defaultModel,
                             });
                             debugLog?.("outbound", "thread/resume", resumeParams);
                             const resumeResult = await client.request<ThreadResumeResponse>(
