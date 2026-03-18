@@ -14,20 +14,31 @@ export interface TransportContext
     threadId?: string;
 }
 
+/** Default settings applied when starting a new thread. */
 export interface CodexThreadDefaults
 {
+    /** Working directory for the thread. */
     cwd?: string;
+    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ reject: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
+    /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
 }
 
+/** Default settings applied to every turn. */
 export interface CodexTurnDefaults
 {
+    /** Working directory for the turn (overrides thread-level `cwd`). */
     cwd?: string;
+    /** Tool-use approval policy for this turn. */
     approvalPolicy?: AskForApproval;
+    /** Fine-grained sandbox policy — `{ type: "dangerFullAccess" }` | `{ type: "readOnly", … }` | `{ type: "workspaceWrite", … }` | `{ type: "externalSandbox", … }`. See {@link SandboxPolicy}. */
     sandboxPolicy?: SandboxPolicy;
+    /** Model to use for this turn (overrides provider-level `defaultModel`). */
     model?: string;
+    /** How much effort the model should spend on the response. */
     effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+    /** Controls turn summary generation. */
     summary?: "auto" | "concise" | "detailed" | "none";
 }
 
@@ -38,15 +49,24 @@ export interface CodexTurnDefaults
  */
 export interface CodexCallOptions
 {
-    // Thread-level (only applied when starting a new thread)
+    // — Thread-level (applied to thread/start and thread/resume) —
+
+    /** Working directory for this call. Also sent as turn-level `cwd`. */
     cwd?: string;
+    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ reject: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
+    /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
 
-    // Turn-level
+    // — Turn-level —
+
+    /** How much effort the model should spend on the response. */
     effort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+    /** Model to use for this turn. */
     model?: string;
+    /** Fine-grained sandbox policy — `{ type: "dangerFullAccess" }` | `{ type: "readOnly", … }` | `{ type: "workspaceWrite", … }` | `{ type: "externalSandbox", … }`. See {@link SandboxPolicy}. */
     sandboxPolicy?: SandboxPolicy;
+    /** Controls turn summary generation. */
     summary?: "auto" | "concise" | "detailed" | "none";
 }
 
@@ -80,37 +100,49 @@ export type McpServerConfig =
     | { type: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
     | { type: "http"; url: string; bearerToken?: string; headers?: Record<string, string> };
 
+/** Settings for the Codex provider, passed to `createCodexAppServer()`. */
 export interface CodexProviderSettings
 {
+    /** Model ID used when none is specified per-call (e.g. `"o4-mini"`). */
     defaultModel?: string;
-    /** MCP servers to make available to Codex (additive behavior TBD — needs empirical testing). */
+    /** MCP servers to make available to Codex. */
     mcpServers?: Record<string, McpServerConfig>;
+    /** Identifies the client application to the Codex server. */
     clientInfo?: {
         name: string;
         version: string;
         title?: string;
     };
+    /** Enable experimental / unstable API features. */
     experimentalApi?: boolean;
+    /** Transport layer configuration (stdio or websocket). */
     transport?: {
         type?: "stdio" | "websocket";
         stdio?: StdioTransportSettings;
         websocket?: WebSocketTransportSettings;
     };
+    /** Defaults applied when starting a new thread (can be overridden per-call via `codexCallOptions()`). */
     defaultThreadSettings?: CodexThreadDefaults;
+    /** Defaults applied to every turn (can be overridden per-call via `codexCallOptions()`). */
     defaultTurnSettings?: CodexTurnDefaults;
+    /** Controls automatic thread compaction on resume. */
     compaction?: CodexCompactionSettings;
+    /** Custom factory for creating transport instances (advanced). */
     transportFactory?: (context: TransportContext) => CodexTransport;
     /** Tools with schema (description + inputSchema) advertised to Codex + local handlers. */
     tools?: Record<string, DynamicToolDefinition>;
     /** Legacy: handler-only tools, not advertised to Codex. Use `tools` for full schema support. */
     toolHandlers?: Record<string, DynamicToolHandler>;
+    /** Max time (ms) to wait for a dynamic tool call to complete. */
     toolTimeoutMs?: number;
-    /** Max time to wait for `turn/interrupt` response on abort. */
+    /** Max time (ms) to wait for `turn/interrupt` response on abort. */
     interruptTimeoutMs?: number;
+    /** Callbacks invoked when Codex requests approval for commands or file changes. */
     approvals?: {
         onCommandApproval?: CommandApprovalHandler;
         onFileChangeApproval?: FileChangeApprovalHandler;
     };
+    /** Diagnostic logging options. */
     debug?: {
         /** Log all JSON-RPC packets exchanged with Codex. */
         logPackets?: boolean;
@@ -127,10 +159,15 @@ export interface CodexProviderSettings
             data?: unknown;
         }) => void;
     };
+    /** Keep Codex processes alive across calls for faster subsequent turns. */
     persistent?: {
+        /** Number of worker processes to keep in the pool. */
         poolSize?: number;
+        /** Time (ms) before an idle worker is shut down. */
         idleTimeoutMs?: number;
+        /** `"provider"` = pool per provider instance; `"global"` = shared across all instances. */
         scope?: "provider" | "global";
+        /** Custom key for pool deduplication (only with `scope: "global"`). */
         key?: string;
     };
     /** Emit plan updates as tool-call/tool-result parts. Default: true. */
