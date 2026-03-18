@@ -1,5 +1,6 @@
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 
+import type { CodexCallOptions } from "../provider-settings";
 import { stripUndefined } from "../utils/object";
 
 export const CODEX_PROVIDER_ID = "@janole/ai-sdk-provider-codex-asp";
@@ -12,6 +13,11 @@ export function codexProviderMetadata(threadId: string | undefined, turnId?: str
     }
 
     return { [CODEX_PROVIDER_ID]: stripUndefined({ threadId, turnId }) };
+}
+
+export function codexCallOptions(options: CodexCallOptions): Record<string, CodexCallOptions>
+{
+    return { [CODEX_PROVIDER_ID]: options };
 }
 
 export function withProviderMetadata<T extends LanguageModelV3StreamPart>(
