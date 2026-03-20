@@ -14,8 +14,9 @@ Follow this workflow when generated protocol files changed.
 3. Search runtime consumers in `src/` and adapt mappings/exhaustive switches.
 4. Update focused tests that prove new context/variants are handled.
 5. Ensure generated import closure for tracked files, force-adding missing generated dependencies.
-6. Run `npm run typecheck` and relevant tests.
-7. Commit with clear split between manual adaptation and generated dependency additions.
+6. Check for tracked generated files that are no longer referenced after regeneration, and remove them from git when they are truly obsolete.
+7. Run `npm run typecheck` and relevant tests.
+8. Commit with clear split between manual adaptation and generated dependency additions/removals.
 
 ## Commands
 
@@ -74,6 +75,49 @@ Then force-add missing generated files:
 
 ```bash
 git add -f <each-missing-generated-file>
+```
+
+Also check for obsolete tracked generated files. A common case is a renamed generated type
+where the old file remains tracked but nothing imports it anymore.
+
+Quick check for a specific file:
+
+```bash
+rg -n "FunctionCallOutputPayload" src/protocol/app-server-protocol src tests
+```
+
+If that returns nothing, verify no tracked generated file imports it:
+
+```bash
+python3 - <<'PY'
+import pathlib, re, subprocess
+
+repo = pathlib.Path('.').resolve()
+tracked = [
+    pathlib.Path(p) for p in subprocess.check_output(
+        ["git", "ls-files", "src/protocol/app-server-protocol"], text=True
+    ).splitlines() if p.endswith('.ts')
+]
+import_re = re.compile(r'^import type .* from "(\\./|\\.\\./)([^"]+)";', re.M)
+
+for rel in tracked:
+    f = repo / rel
+    if not f.exists():
+        continue
+    text = f.read_text(encoding='utf-8')
+    for m in import_re.finditer(text):
+        dep = (f.parent / (m.group(1) + m.group(2))).with_suffix('.ts').resolve()
+        dep_rel = dep.relative_to(repo)
+        if dep_rel not in tracked and dep.exists():
+            print(dep_rel)
+PY
+```
+
+If the symbol is unused and the closure is still complete, stage the deletion:
+
+```bash
+git rm --cached -- <obsolete-generated-file>
+git add -u -- <obsolete-generated-file>
 ```
 
 ## Validation

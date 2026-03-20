@@ -19,7 +19,7 @@ export interface CodexThreadDefaults
 {
     /** Working directory for the thread. */
     cwd?: string;
-    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ reject: … }`. See {@link AskForApproval}. */
+    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
@@ -53,7 +53,7 @@ export interface CodexCallOptions
 
     /** Working directory for this call. Also sent as turn-level `cwd`. */
     cwd?: string;
-    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ reject: … }`. See {@link AskForApproval}. */
+    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
