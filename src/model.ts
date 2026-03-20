@@ -246,6 +246,21 @@ function sdkToolsToCodexDynamicTools(
         }));
 }
 
+function resolveApprovalHandlers(
+    providerSettings: Readonly<CodexProviderSettings>,
+    callOptions: CodexCallOptions | undefined,
+)
+{
+    return stripUndefined({
+        onCommandApproval:
+            callOptions?.approvals?.onCommandApproval
+            ?? providerSettings.approvals?.onCommandApproval,
+        onFileChangeApproval:
+            callOptions?.approvals?.onFileChangeApproval
+            ?? providerSettings.approvals?.onFileChangeApproval,
+    });
+}
+
 function isPassThroughContentPart(
     part: LanguageModelV3StreamPart,
 ): part is PassThroughStreamContentPart 
@@ -491,6 +506,7 @@ export class CodexLanguageModel implements LanguageModelV3
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
         let session: CodexSessionImpl | undefined;
+        let detachApprovals: (() => void) | undefined;
 
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
 
@@ -533,6 +549,8 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
+                        detachApprovals?.();
+                        detachApprovals = undefined;
                         await fileResolver.cleanup();
                         await client.disconnect();
                     }
@@ -554,6 +572,8 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
+                        detachApprovals?.();
+                        detachApprovals = undefined;
                         await fileResolver.cleanup();
                         await client.disconnect();
                     }
@@ -641,11 +661,10 @@ export class CodexLanguageModel implements LanguageModelV3
                                 pendingToolCall.threadId, closeSuccessfully,
                             );
 
-                            const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
-                                onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
-                                onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
-                            }));
-                            approvalsDispatcher.attach(client);
+                            const approvalsDispatcher = new ApprovalsDispatcher(
+                                resolveApprovalHandlers(this.config.providerSettings, callOptions),
+                            );
+                            detachApprovals = approvalsDispatcher.attach(client);
 
                             const result = toolResult ?? {
                                 success: false,
@@ -684,11 +703,10 @@ export class CodexLanguageModel implements LanguageModelV3
                             dispatcher.attach(client);
                         }
 
-                        const approvalsDispatcher = new ApprovalsDispatcher(stripUndefined({
-                            onCommandApproval: this.config.providerSettings.approvals?.onCommandApproval,
-                            onFileChangeApproval: this.config.providerSettings.approvals?.onFileChangeApproval,
-                        }));
-                        approvalsDispatcher.attach(client);
+                        const approvalsDispatcher = new ApprovalsDispatcher(
+                            resolveApprovalHandlers(this.config.providerSettings, callOptions),
+                        );
+                        detachApprovals = approvalsDispatcher.attach(client);
 
                         client.onAnyNotification((method, params) =>
                         {
