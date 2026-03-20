@@ -5,7 +5,7 @@ import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
 import type { DynamicToolDefinition, DynamicToolHandler } from "./dynamic-tools";
-import type { AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
+import type { ApprovalsReviewer, AskForApproval, CodexThreadResumeResult, SandboxMode, SandboxPolicy } from "./protocol/types";
 import type { CodexSession } from "./session";
 
 export interface TransportContext
@@ -21,6 +21,8 @@ export interface CodexThreadDefaults
     cwd?: string;
     /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
+    /** Routes approval requests for the thread to `"user"` or `"guardian_subagent"`. */
+    approvalsReviewer?: ApprovalsReviewer;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
 }
@@ -32,6 +34,8 @@ export interface CodexTurnDefaults
     cwd?: string;
     /** Tool-use approval policy for this turn. */
     approvalPolicy?: AskForApproval;
+    /** Routes approval requests for this turn to `"user"` or `"guardian_subagent"`. */
+    approvalsReviewer?: ApprovalsReviewer;
     /** Fine-grained sandbox policy — `{ type: "dangerFullAccess" }` | `{ type: "readOnly", … }` | `{ type: "workspaceWrite", … }` | `{ type: "externalSandbox", … }`. See {@link SandboxPolicy}. */
     sandboxPolicy?: SandboxPolicy;
     /** Model to use for this turn (overrides provider-level `defaultModel`). */
@@ -55,6 +59,8 @@ export interface CodexCallOptions
     cwd?: string;
     /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
+    /** Routes approval requests to `"user"` or `"guardian_subagent"`. */
+    approvalsReviewer?: ApprovalsReviewer;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
 

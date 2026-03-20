@@ -113,8 +113,8 @@ const codex = createCodexAppServer({
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
   compaction?: { shouldCompactOnResume?, strict? }, // optional thread/compact/start before resumed turns
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
-  defaultThreadSettings?: { cwd?, approvalPolicy?, sandbox? },
-  defaultTurnSettings?: { cwd?, approvalPolicy?, sandboxPolicy?, model?, effort?, summary? },
+  defaultThreadSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandbox? },
+  defaultTurnSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandboxPolicy?, model?, effort?, summary? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000
   interruptTimeoutMs?: number,             // default: 10000
@@ -140,6 +140,28 @@ const codex = createCodexAppServer({
     sandboxPolicy: {
       type: "externalSandbox",
       networkAccess: "enabled",
+    },
+  },
+});
+```
+
+Approval reviewer example:
+
+Set `approvalsReviewer` to `"guardian_subagent"` to let Codex route approval decisions to its built-in reviewer agent instead of prompting the human user.
+
+```ts
+const codex = createCodexAppServer({
+  defaultThreadSettings: {
+    approvalsReviewer: "guardian_subagent",
+  },
+});
+
+await streamText({
+  model: codex("gpt-5.3-codex"),
+  prompt: "Delete the old generated protocol files under src/protocol/app-server-protocol if they are no longer referenced, then regenerate the current ones.",
+  providerOptions: {
+    "@janole/ai-sdk-provider-codex-asp": {
+      approvalsReviewer: "user",
     },
   },
 });

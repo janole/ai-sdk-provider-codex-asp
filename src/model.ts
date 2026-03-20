@@ -771,6 +771,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 developerInstructions,
                                 cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
                                 approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                approvalsReviewer: callOptions?.approvalsReviewer ?? this.config.providerSettings.defaultThreadSettings?.approvalsReviewer,
                                 sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
                                 model: callOptions?.model ?? this.config.providerSettings.defaultModel,
                             });
@@ -858,6 +859,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 config,
                                 cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
                                 approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
+                                approvalsReviewer: callOptions?.approvalsReviewer ?? this.config.providerSettings.defaultThreadSettings?.approvalsReviewer,
                                 sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
                             });
                             debugLog?.("outbound", "thread/start", threadStartParams);
@@ -886,6 +888,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             input: turnInput,
                             cwd: callOptions?.cwd ?? this.config.providerSettings.defaultTurnSettings?.cwd,
                             approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultTurnSettings?.approvalPolicy,
+                            approvalsReviewer: callOptions?.approvalsReviewer ?? this.config.providerSettings.defaultTurnSettings?.approvalsReviewer,
                             sandboxPolicy: callOptions?.sandboxPolicy ?? this.config.providerSettings.defaultTurnSettings?.sandboxPolicy,
                             model: callOptions?.model ?? this.config.providerSettings.defaultTurnSettings?.model,
                             effort: callOptions?.effort ?? this.config.providerSettings.defaultTurnSettings?.effort,
