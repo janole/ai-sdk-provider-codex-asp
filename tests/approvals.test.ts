@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
+import { codexCallOptions } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
@@ -306,6 +307,50 @@ describe("ApprovalsDispatcher", () =>
         expect(approvalResponse?.result.decision).toBe("decline");
     });
 
+    it("prefers per-call command approval handler over provider-level approvals", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.setApprovalScenario("command");
+
+        const originalSendMessage = transport.sendMessage.bind(transport);
+        transport.sendMessage = async (message: JsonRpcMessage) =>
+        {
+            await originalSendMessage(message);
+            transport.handleApprovalResponse(message);
+        };
+
+        const providerOnCommandApproval = vi.fn().mockResolvedValue("decline");
+        const callOnCommandApproval = vi.fn().mockResolvedValue("accept");
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            approvals: {
+                onCommandApproval: providerOnCommandApproval,
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        await readAll((await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
+            providerOptions: codexCallOptions({
+                approvals: {
+                    onCommandApproval: callOnCommandApproval,
+                },
+            }),
+        })).stream);
+
+        expect(callOnCommandApproval).toHaveBeenCalledOnce();
+        expect(providerOnCommandApproval).not.toHaveBeenCalled();
+
+        const approvalResponse = transport.sentMessages.find(
+            (msg) => "id" in msg && msg.id === 100 && "result" in msg,
+        ) as { id: number; result: { decision: string } } | undefined;
+
+        expect(approvalResponse?.result.decision).toBe("accept");
+    });
+
     it("calls onFileChangeApproval callback and sends the decision", async () =>
     {
         const transport = new ScriptedTransport();
@@ -343,6 +388,50 @@ describe("ApprovalsDispatcher", () =>
             itemId: "item_fc_1",
             reason: "Write to /etc/config",
         });
+
+        const approvalResponse = transport.sentMessages.find(
+            (msg) => "id" in msg && msg.id === 100 && "result" in msg,
+        ) as { id: number; result: { decision: string } } | undefined;
+
+        expect(approvalResponse?.result.decision).toBe("accept");
+    });
+
+    it("falls back to provider-level file change approval when call-level approvals omit it", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.setApprovalScenario("fileChange");
+
+        const originalSendMessage = transport.sendMessage.bind(transport);
+        transport.sendMessage = async (message: JsonRpcMessage) =>
+        {
+            await originalSendMessage(message);
+            transport.handleApprovalResponse(message);
+        };
+
+        const providerOnFileChangeApproval = vi.fn().mockResolvedValue("accept");
+        const callOnCommandApproval = vi.fn().mockResolvedValue("decline");
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            approvals: {
+                onFileChangeApproval: providerOnFileChangeApproval,
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        await readAll((await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],
+            providerOptions: codexCallOptions({
+                approvals: {
+                    onCommandApproval: callOnCommandApproval,
+                },
+            }),
+        })).stream);
+
+        expect(providerOnFileChangeApproval).toHaveBeenCalledOnce();
+        expect(callOnCommandApproval).not.toHaveBeenCalled();
 
         const approvalResponse = transport.sentMessages.find(
             (msg) => "id" in msg && msg.id === 100 && "result" in msg,

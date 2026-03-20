@@ -159,11 +159,12 @@ const codex = createCodexAppServer({
 await streamText({
   model: codex("gpt-5.3-codex"),
   prompt: "Delete the old generated protocol files under src/protocol/app-server-protocol if they are no longer referenced, then regenerate the current ones.",
-  providerOptions: {
-    "@janole/ai-sdk-provider-codex-asp": {
-      approvalsReviewer: "user",
+  providerOptions: codexCallOptions({
+    approvalsReviewer: "user",
+    approvals: {
+      onCommandApproval: async () => "decline",
     },
-  },
+  }),
 });
 ```
 
