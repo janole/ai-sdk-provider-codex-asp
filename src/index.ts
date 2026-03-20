@@ -53,6 +53,7 @@ export { CodexEventMapper } from "./protocol/event-mapper";
 export { CODEX_PROVIDER_ID, codexCallOptions, codexProviderMetadata, withProviderMetadata } from "./protocol/provider-metadata";
 export type {
     AgentMessageDeltaNotification,
+    ApprovalsReviewer,
     AskForApproval,
     CodexDynamicToolDefinition,
     CodexInitializedNotification,

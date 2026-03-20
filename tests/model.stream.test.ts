@@ -51,6 +51,7 @@ class ScriptedTransport extends MockTransport
                     modelProvider: "openai",
                     cwd: "/tmp",
                     approvalPolicy: "never",
+                    approvalsReviewer: "user",
                     sandbox: { type: "dangerFullAccess" },
                     reasoningEffort: null,
                 },
@@ -683,6 +684,99 @@ describe("CodexLanguageModel.doStream", () =>
                 type: "externalSandbox",
                 networkAccess: "enabled",
             },
+        });
+    });
+
+    it("passes approvalsReviewer defaults through thread/start and turn/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            defaultThreadSettings: {
+                approvalsReviewer: "guardian_subagent",
+            },
+            defaultTurnSettings: {
+                approvalsReviewer: "guardian_subagent",
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        });
+
+        await readAll(stream);
+
+        const threadStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/start",
+        );
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+
+        expect(threadStartMessage?.params).toMatchObject({
+            approvalsReviewer: "guardian_subagent",
+        });
+        expect(turnStartMessage?.params).toMatchObject({
+            approvalsReviewer: "guardian_subagent",
+        });
+    });
+
+    it("passes per-call approvalsReviewer overrides through thread/resume and turn/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            defaultThreadSettings: {
+                approvalsReviewer: "user",
+            },
+            defaultTurnSettings: {
+                approvalsReviewer: "user",
+            },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [
+                { role: "user", content: [{ type: "text", text: "hi" }] },
+                {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Hello" }],
+                    providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_existing" } },
+                },
+                { role: "user", content: [{ type: "text", text: "continue" }] },
+            ],
+            providerOptions: {
+                [CODEX_PROVIDER_ID]: {
+                    approvalsReviewer: "guardian_subagent",
+                },
+            },
+        });
+
+        await readAll(stream);
+
+        const threadResumeMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/resume",
+        );
+        const turnStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "turn/start",
+        );
+
+        expect(threadResumeMessage?.params).toMatchObject({
+            approvalsReviewer: "guardian_subagent",
+        });
+        expect(turnStartMessage?.params).toMatchObject({
+            approvalsReviewer: "guardian_subagent",
         });
     });
 

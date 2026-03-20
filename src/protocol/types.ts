@@ -11,6 +11,7 @@
  */
 import type { JsonValue } from "./app-server-protocol/serde_json/JsonValue";
 import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
+import type { ApprovalsReviewer } from "./app-server-protocol/v2/ApprovalsReviewer";
 import type { CommandExecutionApprovalDecision } from "./app-server-protocol/v2/CommandExecutionApprovalDecision";
 import type { CommandExecutionRequestApprovalParams } from "./app-server-protocol/v2/CommandExecutionRequestApprovalParams";
 import type { CommandExecutionRequestApprovalResponse } from "./app-server-protocol/v2/CommandExecutionRequestApprovalResponse";
@@ -30,6 +31,7 @@ import type { TurnStartParams } from "./app-server-protocol/v2/TurnStartParams";
 import type { UserInput } from "./app-server-protocol/v2/UserInput";
 
 export type { AskForApproval };
+export type { ApprovalsReviewer };
 export type { CommandExecutionApprovalDecision };
 export type { CommandExecutionRequestApprovalParams };
 export type { CommandExecutionRequestApprovalResponse };
@@ -103,6 +105,7 @@ export interface CodexThreadStartParams
     model?: string;
     cwd?: string;
     approvalPolicy?: AskForApproval;
+    approvalsReviewer?: ApprovalsReviewer;
     sandbox?: SandboxMode;
     config?: Record<string, JsonValue | undefined>;
     dynamicTools?: CodexDynamicToolDefinition[];
