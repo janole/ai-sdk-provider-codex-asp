@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { JsonRpcMessage } from "../src/client/transport";
+import { codexCallOptions } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
@@ -333,13 +334,11 @@ describe("ApprovalsDispatcher", () =>
 
         await readAll((await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
-            providerOptions: {
-                "@janole/ai-sdk-provider-codex-asp": {
-                    approvals: {
-                        onCommandApproval: callOnCommandApproval,
-                    },
+            providerOptions: codexCallOptions({
+                approvals: {
+                    onCommandApproval: callOnCommandApproval,
                 },
-            },
+            }),
         })).stream);
 
         expect(callOnCommandApproval).toHaveBeenCalledOnce();
@@ -424,13 +423,11 @@ describe("ApprovalsDispatcher", () =>
 
         await readAll((await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],
-            providerOptions: {
-                "@janole/ai-sdk-provider-codex-asp": {
-                    approvals: {
-                        onCommandApproval: callOnCommandApproval,
-                    },
+            providerOptions: codexCallOptions({
+                approvals: {
+                    onCommandApproval: callOnCommandApproval,
                 },
-            },
+            }),
         })).stream);
 
         expect(providerOnFileChangeApproval).toHaveBeenCalledOnce();
