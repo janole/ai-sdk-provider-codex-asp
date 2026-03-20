@@ -10,8 +10,8 @@
  * and serve as the authoritative reference. V2 types (camelCase) are in the v2/ subdirectory.
  */
 import type { JsonValue } from "./app-server-protocol/serde_json/JsonValue";
-import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
 import type { ApprovalsReviewer } from "./app-server-protocol/v2/ApprovalsReviewer";
+import type { AskForApproval } from "./app-server-protocol/v2/AskForApproval";
 import type { CommandExecutionApprovalDecision } from "./app-server-protocol/v2/CommandExecutionApprovalDecision";
 import type { CommandExecutionRequestApprovalParams } from "./app-server-protocol/v2/CommandExecutionRequestApprovalParams";
 import type { CommandExecutionRequestApprovalResponse } from "./app-server-protocol/v2/CommandExecutionRequestApprovalResponse";
