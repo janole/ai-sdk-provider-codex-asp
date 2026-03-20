@@ -74,6 +74,11 @@ export interface CodexCallOptions
     sandboxPolicy?: SandboxPolicy;
     /** Controls turn summary generation. */
     summary?: "auto" | "concise" | "detailed" | "none";
+    /** Approval callbacks for this call; falls back to provider-level `approvals`. */
+    approvals?: {
+        onCommandApproval?: CommandApprovalHandler;
+        onFileChangeApproval?: FileChangeApprovalHandler;
+    };
 }
 
 export interface CodexCompactionSettings
