@@ -174,7 +174,7 @@ export interface CodexProviderSettings
     persistent?: {
         /** Number of worker processes to keep in the pool. */
         poolSize?: number;
-        /** Time (ms) before an idle worker is shut down. */
+        /** Time (ms) before an idle worker is shut down. Set to `0` to disable (worker stays alive indefinitely). */
         idleTimeoutMs?: number;
         /** `"provider"` = pool per provider instance; `"global"` = shared across all instances. */
         scope?: "provider" | "global";
