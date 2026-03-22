@@ -507,6 +507,7 @@ export class CodexLanguageModel implements LanguageModelV3
         let activeTurnId: string | undefined;
         let session: CodexSessionImpl | undefined;
         let detachApprovals: (() => void) | undefined;
+        let detachDynamicTools: (() => void) | undefined;
 
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
 
@@ -549,6 +550,8 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
+                        detachDynamicTools?.();
+                        detachDynamicTools = undefined;
                         detachApprovals?.();
                         detachApprovals = undefined;
                         await fileResolver.cleanup();
@@ -572,6 +575,8 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                     finally
                     {
+                        detachDynamicTools?.();
+                        detachDynamicTools = undefined;
                         detachApprovals?.();
                         detachApprovals = undefined;
                         await fileResolver.cleanup();
@@ -700,7 +705,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 timeoutMs: this.config.providerSettings.toolTimeoutMs,
                                 onDebugEvent: toolLogger,
                             }));
-                            dispatcher.attach(client);
+                            detachDynamicTools = dispatcher.attach(client);
                         }
 
                         const approvalsDispatcher = new ApprovalsDispatcher(
