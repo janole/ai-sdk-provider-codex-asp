@@ -475,7 +475,7 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps dynamicToolCall lifecycle to provider-executed tool parts", () =>
+    it("mapper is silent for dynamicToolCall lifecycle (cross-call handler owns emission)", () =>
     {
         const mapper = new CodexEventMapper();
 
@@ -496,6 +496,17 @@ describe("CodexEventMapper", () =>
                     },
                     threadId: "thr",
                     turnId: "turn",
+                },
+            },
+            // item/tool/call fires for the same ID — mapper must stay silent (dedup via _sdkDynamicToolCallIds)
+            {
+                method: "item/tool/call",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    callId: "call_1",
+                    tool: "readGithubFile",
+                    arguments: { owner: "acme", repo: "widgets", path: "README.md" },
                 },
             },
             {
@@ -526,33 +537,10 @@ describe("CodexEventMapper", () =>
 
         const parts = events.flatMap((event) => mapper.map(event));
 
+        // The mapper emits nothing for dynamicToolCall items.
+        // The cross-call handler in model.ts emits the definitive tool-call (no providerExecuted) + finish.
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            {
-                type: "tool-call",
-                toolCallId: "call_1",
-                toolName: "readGithubFile",
-                input: JSON.stringify({ owner: "acme", repo: "widgets", path: "README.md" }),
-                providerExecuted: true,
-                dynamic: true,
-            },
-            {
-                type: "tool-result",
-                toolCallId: "call_1",
-                toolName: "readGithubFile",
-                result: {
-                    item: {
-                        type: "dynamicToolCall",
-                        id: "call_1",
-                        tool: "readGithubFile",
-                        arguments: { owner: "acme", repo: "widgets", path: "README.md" },
-                        status: "completed",
-                        contentItems: [{ type: "inputText", text: "file content" }],
-                        success: true,
-                        durationMs: 123,
-                    },
-                },
-            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
