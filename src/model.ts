@@ -899,6 +899,7 @@ export class CodexLanguageModel implements LanguageModelV3
                         // Register cross-call tool handler for SDK tools
                         if (hasSdkTools && persistentTransport)
                         {
+                            mapper.enableCrossCallMode();
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
                                 threadId, closeSuccessfully,
