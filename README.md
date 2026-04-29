@@ -147,12 +147,15 @@ const codex = createCodexAppServer({
 
 Approval reviewer example:
 
-Set `approvalsReviewer` to `"guardian_subagent"` to let Codex route approval decisions to its built-in reviewer agent instead of prompting the human user.
+`approvalsReviewer` supports:
+- `"user"`: ask the human user directly
+- `"auto_review"`: use Codex's risk-based automatic reviewer flow
+- `"guardian_subagent"`: route review to Codex's reviewer subagent
 
 ```ts
 const codex = createCodexAppServer({
   defaultThreadSettings: {
-    approvalsReviewer: "guardian_subagent",
+    approvalsReviewer: "auto_review",
   },
 });
 
