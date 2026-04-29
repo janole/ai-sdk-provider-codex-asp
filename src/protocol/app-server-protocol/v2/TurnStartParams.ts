@@ -9,7 +9,9 @@ import type { ServiceTier } from "../ServiceTier";
 import type { JsonValue } from "../serde_json/JsonValue";
 import type { ApprovalsReviewer } from "./ApprovalsReviewer";
 import type { AskForApproval } from "./AskForApproval";
+import type { PermissionProfile } from "./PermissionProfile";
 import type { SandboxPolicy } from "./SandboxPolicy";
+import type { TurnEnvironmentParams } from "./TurnEnvironmentParams";
 import type { UserInput } from "./UserInput";
 
 export type TurnStartParams = { threadId: string, input: Array<UserInput>,
@@ -17,6 +19,14 @@ export type TurnStartParams = { threadId: string, input: Array<UserInput>,
  * Optional turn-scoped Responses API client metadata.
  */
 responsesapiClientMetadata?: { [key in string]?: string } | null,
+/**
+ * Optional turn-scoped environments.
+ *
+ * Omitted uses the thread sticky environments. Empty disables
+ * environment access for this turn. Non-empty selects the first
+ * environment as the current turn environment for this turn.
+ */
+environments?: Array<TurnEnvironmentParams> | null,
 /**
  * Override the working directory for this turn and subsequent turns.
  */
@@ -34,6 +44,11 @@ approvalsReviewer?: ApprovalsReviewer | null,
  * Override the sandbox policy for this turn and subsequent turns.
  */
 sandboxPolicy?: SandboxPolicy | null,
+/**
+ * Override the full permissions profile for this turn and subsequent
+ * turns. Cannot be combined with `sandboxPolicy`.
+ */
+permissionProfile?: PermissionProfile | null,
 /**
  * Override the model for this turn and subsequent turns.
  */
