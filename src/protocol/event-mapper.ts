@@ -17,7 +17,10 @@ import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
 import type { CodexDynamicToolCallItem } from "./types";
 
-const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "dynamicToolCall", "fileChange", "mcpToolCall", "webSearch"]);
+// dynamicToolCall is intentionally excluded: its tool-call part is emitted by
+// the cross-call handler in model.ts (without providerExecuted), so the mapper
+// must not emit a providerExecuted tool-call or a premature tool-result for it.
+const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "fileChange", "mcpToolCall", "webSearch"]);
 
 export interface CodexEventMapperInput
 {
@@ -94,6 +97,18 @@ export class CodexEventMapper
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string }>();
+    /**
+     * Item IDs for dynamicToolCall items seen in cross-call mode — tracked so
+     * item/tool/call dedup fires without adding them to openToolCalls (which
+     * would cause handleTurnCompleted to emit spurious error tool-results).
+     */
+    private readonly _sdkDynamicToolCallIds = new Set<string>();
+    /**
+     * Set to true by enableCrossCallMode() when PersistentTransport + SDK tools
+     * are active. In cross-call mode the mapper stays silent for dynamicToolCall
+     * items; the cross-call handler in model.ts owns emission.
+     */
+    private _crossCallMode = false;
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
@@ -145,6 +160,16 @@ export class CodexEventMapper
             "turn/diff/updated": NOOP,
             "codex/event/turn_diff": NOOP,
         };
+    }
+
+    /**
+     * Switches the mapper into cross-call mode. Call this when PersistentTransport
+     * and SDK tools are both active so the cross-call handler in model.ts owns
+     * dynamicToolCall emission instead of the mapper.
+     */
+    enableCrossCallMode(): void
+    {
+        this._crossCallMode = true;
     }
 
     setThreadId(threadId: string): void
@@ -257,7 +282,29 @@ export class CodexEventMapper
                 break;
             }
             case "dynamicToolCall": {
-                parts.push(...this.startDynamicToolCall(item));
+                if (this._crossCallMode)
+                {
+                    // Cross-call mode: suppress mapper emission. The cross-call handler
+                    // in model.ts emits the definitive (non-providerExecuted) tool-call
+                    // from the JSON-RPC request. Track the ID so item/tool/call dedup
+                    // fires without adding it to openToolCalls (which would cause
+                    // handleTurnCompleted to emit a spurious error tool-result).
+                    this.ensureStreamStarted(parts);
+                    if (item.id)
+                    {
+                        this._sdkDynamicToolCallIds.add(item.id);
+                    }
+                }
+                else
+                {
+                    // Non-cross-call mode: emit providerExecuted tool-call so telemetry
+                    // is preserved. item/completed will emit the tool-result.
+                    parts.push(...this.startDynamicToolCall({
+                        id: item.id,
+                        tool: (item).tool,
+                        arguments: (item).arguments ?? {},
+                    }));
+                }
                 break;
             }
             case "fileChange": {
@@ -375,7 +422,7 @@ export class CodexEventMapper
                 this.openTextParts.delete(item.id);
             }
         }
-        else if (NATIVE_TOOL_RESULT_TYPES.has(item.type) && this.openToolCalls.has(item.id))
+        else if ((NATIVE_TOOL_RESULT_TYPES.has(item.type) || (item.type === "dynamicToolCall" && !this._crossCallMode)) && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
 
@@ -537,6 +584,12 @@ export class CodexEventMapper
         {
             return [];
         }
+        // SDK dynamic tools (dynamicToolCall items) are handled by the cross-call
+        // handler in model.ts — suppress the mapper's duplicate emission.
+        if (this._sdkDynamicToolCallIds.has(p.callId))
+        {
+            return [];
+        }
         return this.startDynamicToolCall({
             id: p.callId,
             tool: p.tool,
@@ -625,6 +678,7 @@ export class CodexEventMapper
             }));
         }
         this.openToolCalls.clear();
+        this._sdkDynamicToolCallIds.clear();
 
         const completed = (params ?? {}) as TurnCompletedNotification;
         if (completed.turn?.id)

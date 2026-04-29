@@ -475,9 +475,96 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
-    it("maps dynamicToolCall lifecycle to provider-executed tool parts", () =>
+    it("emits providerExecuted tool parts for dynamicToolCall in non-cross-call mode", () =>
+    {
+        const mapper = new CodexEventMapper(); // enableCrossCallMode() NOT called
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_nc",
+                        tool: "myTool",
+                        arguments: { x: 1 },
+                        status: "inProgress",
+                        contentItems: null,
+                        success: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_nc",
+                        tool: "myTool",
+                        arguments: { x: 1 },
+                        status: "completed",
+                        contentItems: [{ type: "inputText", text: "result" }],
+                        success: true,
+                        durationMs: 10,
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "tool-call",
+                toolCallId: "call_nc",
+                toolName: "myTool",
+                input: JSON.stringify({ x: 1 }),
+                providerExecuted: true,
+                dynamic: true,
+            },
+            {
+                type: "tool-result",
+                toolCallId: "call_nc",
+                toolName: "myTool",
+                result: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: "call_nc",
+                        tool: "myTool",
+                        arguments: { x: 1 },
+                        status: "completed",
+                        contentItems: [{ type: "inputText", text: "result" }],
+                        success: true,
+                        durationMs: 10,
+                    },
+                },
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("mapper is silent for dynamicToolCall lifecycle in cross-call mode", () =>
     {
         const mapper = new CodexEventMapper();
+        mapper.enableCrossCallMode();
 
         const events = [
             { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
@@ -496,6 +583,17 @@ describe("CodexEventMapper", () =>
                     },
                     threadId: "thr",
                     turnId: "turn",
+                },
+            },
+            // item/tool/call fires for the same ID — mapper must stay silent (dedup via _sdkDynamicToolCallIds)
+            {
+                method: "item/tool/call",
+                params: {
+                    threadId: "thr",
+                    turnId: "turn",
+                    callId: "call_1",
+                    tool: "readGithubFile",
+                    arguments: { owner: "acme", repo: "widgets", path: "README.md" },
                 },
             },
             {
@@ -526,33 +624,11 @@ describe("CodexEventMapper", () =>
 
         const parts = events.flatMap((event) => mapper.map(event));
 
+        // In cross-call mode the mapper is fully silent for dynamicToolCall items
+        // (including the item/tool/call dedup). The cross-call handler in model.ts
+        // emits the definitive tool-call (no providerExecuted) + finish.
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
-            {
-                type: "tool-call",
-                toolCallId: "call_1",
-                toolName: "readGithubFile",
-                input: JSON.stringify({ owner: "acme", repo: "widgets", path: "README.md" }),
-                providerExecuted: true,
-                dynamic: true,
-            },
-            {
-                type: "tool-result",
-                toolCallId: "call_1",
-                toolName: "readGithubFile",
-                result: {
-                    item: {
-                        type: "dynamicToolCall",
-                        id: "call_1",
-                        tool: "readGithubFile",
-                        arguments: { owner: "acme", repo: "widgets", path: "README.md" },
-                        status: "completed",
-                        contentItems: [{ type: "inputText", text: "file content" }],
-                        success: true,
-                        durationMs: 123,
-                    },
-                },
-            },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
