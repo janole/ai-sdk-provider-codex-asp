@@ -97,8 +97,18 @@ export class CodexEventMapper
     private readonly textDeltaReceived = new Set<string>();
     private readonly openReasoningParts = new Set<string>();
     private readonly openToolCalls = new Map<string, { toolName: string }>();
-    /** Item IDs for dynamicToolCall items — tracked separately so handleTurnCompleted ignores them. */
+    /**
+     * Item IDs for dynamicToolCall items seen in cross-call mode — tracked so
+     * item/tool/call dedup fires without adding them to openToolCalls (which
+     * would cause handleTurnCompleted to emit spurious error tool-results).
+     */
     private readonly _sdkDynamicToolCallIds = new Set<string>();
+    /**
+     * Set to true by enableCrossCallMode() when PersistentTransport + SDK tools
+     * are active. In cross-call mode the mapper stays silent for dynamicToolCall
+     * items; the cross-call handler in model.ts owns emission.
+     */
+    private _crossCallMode = false;
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
@@ -150,6 +160,16 @@ export class CodexEventMapper
             "turn/diff/updated": NOOP,
             "codex/event/turn_diff": NOOP,
         };
+    }
+
+    /**
+     * Switches the mapper into cross-call mode. Call this when PersistentTransport
+     * and SDK tools are both active so the cross-call handler in model.ts owns
+     * dynamicToolCall emission instead of the mapper.
+     */
+    enableCrossCallMode(): void
+    {
+        this._crossCallMode = true;
     }
 
     setThreadId(threadId: string): void
@@ -262,14 +282,28 @@ export class CodexEventMapper
                 break;
             }
             case "dynamicToolCall": {
-                // Don't emit a tool-call here. The cross-call handler in model.ts
-                // emits the definitive (non-providerExecuted) part from the JSON-RPC
-                // request. Track the ID in a separate set so item/tool/call dedup fires
-                // and handleTurnCompleted skips it (avoids spurious error tool-results).
-                this.ensureStreamStarted(parts);
-                if (item.id)
+                if (this._crossCallMode)
                 {
-                    this._sdkDynamicToolCallIds.add(item.id);
+                    // Cross-call mode: suppress mapper emission. The cross-call handler
+                    // in model.ts emits the definitive (non-providerExecuted) tool-call
+                    // from the JSON-RPC request. Track the ID so item/tool/call dedup
+                    // fires without adding it to openToolCalls (which would cause
+                    // handleTurnCompleted to emit a spurious error tool-result).
+                    this.ensureStreamStarted(parts);
+                    if (item.id)
+                    {
+                        this._sdkDynamicToolCallIds.add(item.id);
+                    }
+                }
+                else
+                {
+                    // Non-cross-call mode: emit providerExecuted tool-call so telemetry
+                    // is preserved. item/completed will emit the tool-result.
+                    parts.push(...this.startDynamicToolCall({
+                        id: item.id,
+                        tool: (item).tool,
+                        arguments: (item).arguments ?? {},
+                    }));
                 }
                 break;
             }
@@ -388,7 +422,7 @@ export class CodexEventMapper
                 this.openTextParts.delete(item.id);
             }
         }
-        else if (NATIVE_TOOL_RESULT_TYPES.has(item.type) && this.openToolCalls.has(item.id))
+        else if ((NATIVE_TOOL_RESULT_TYPES.has(item.type) || (item.type === "dynamicToolCall" && !this._crossCallMode)) && this.openToolCalls.has(item.id))
         {
             const tracked = this.openToolCalls.get(item.id)!;
 
@@ -644,6 +678,7 @@ export class CodexEventMapper
             }));
         }
         this.openToolCalls.clear();
+        this._sdkDynamicToolCallIds.clear();
 
         const completed = (params ?? {}) as TurnCompletedNotification;
         if (completed.turn?.id)
