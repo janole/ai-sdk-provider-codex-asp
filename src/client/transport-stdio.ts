@@ -19,6 +19,7 @@ type ListenerStore = {
 
 const DEFAULT_COMMAND = "codex";
 const DEFAULT_ARGS = ["app-server", "--listen", "stdio://"];
+const MAX_STDERR_BUFFER_LENGTH = 64 * 1024;
 
 export class StdioTransport implements CodexTransport 
 {
@@ -30,6 +31,7 @@ export class StdioTransport implements CodexTransport
         close: new Set(),
     };
     private stdoutBuffer = "";
+    private stderrBuffer = "";
 
     constructor(settings: StdioTransportSettings = {}) 
     {
@@ -66,7 +68,7 @@ export class StdioTransport implements CodexTransport
         child.stderr.setEncoding("utf8");
         child.stderr.on("data", (chunk: string | Buffer) => 
         {
-            this.emit("error", new Error(`codex stderr: ${typeof chunk === "string" ? chunk : chunk.toString("utf8")}`));
+            this.handleStderrChunk(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
         });
 
         child.on("error", (error) => 
@@ -77,6 +79,16 @@ export class StdioTransport implements CodexTransport
         child.on("close", (code, signal) =>
         {
             this.process = null;
+
+            if (code !== 0 && signal === null)
+            {
+                const stderr = this.stderrBuffer.trim();
+                this.emit("error", new Error(stderr
+                    ? `codex exited with code ${code}: ${stderr}`
+                    : `codex exited with code ${code}`));
+            }
+
+            this.stderrBuffer = "";
             this.emit("close", code, signal);
         });
 
@@ -186,6 +198,16 @@ export class StdioTransport implements CodexTransport
             }
 
             lineBreakIndex = this.stdoutBuffer.indexOf("\n");
+        }
+    }
+
+    private handleStderrChunk(chunk: string): void
+    {
+        this.stderrBuffer += chunk;
+
+        if (this.stderrBuffer.length > MAX_STDERR_BUFFER_LENGTH)
+        {
+            this.stderrBuffer = this.stderrBuffer.slice(-MAX_STDERR_BUFFER_LENGTH);
         }
     }
 
