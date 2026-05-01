@@ -112,6 +112,7 @@ export class CodexEventMapper
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
+    private threadPath: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
 
     private readonly handlers: Record<string, (params: unknown) => LanguageModelV3StreamPart[]>;
@@ -175,6 +176,11 @@ export class CodexEventMapper
     setThreadId(threadId: string): void
     {
         this.threadId = threadId;
+    }
+
+    setThreadPath(threadPath: string | null | undefined): void
+    {
+        this.threadPath = threadPath ?? undefined;
     }
 
     setTurnId(turnId: string): void
