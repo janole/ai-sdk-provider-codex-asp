@@ -25,6 +25,8 @@ export interface CodexThreadDefaults
     approvalsReviewer?: ApprovalsReviewer;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
+    /** Start threads without writing rollout/session files. */
+    ephemeral?: boolean;
 }
 
 /** Default settings applied to every turn. */
@@ -63,6 +65,8 @@ export interface CodexCallOptions
     approvalsReviewer?: ApprovalsReviewer;
     /** Sandbox mode — `"read-only"` | `"workspace-write"` | `"danger-full-access"`. See {@link SandboxMode}. */
     sandbox?: SandboxMode;
+    /** Start the thread without writing rollout/session files. Only applies to `thread/start`. */
+    ephemeral?: boolean;
 
     // — Turn-level —
 

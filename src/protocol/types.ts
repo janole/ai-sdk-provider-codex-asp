@@ -107,6 +107,7 @@ export interface CodexThreadStartParams
     approvalPolicy?: AskForApproval;
     approvalsReviewer?: ApprovalsReviewer;
     sandbox?: SandboxMode;
+    ephemeral?: boolean;
     config?: Record<string, JsonValue | undefined>;
     dynamicTools?: CodexDynamicToolDefinition[];
     developerInstructions?: string;

@@ -727,6 +727,38 @@ describe("CodexLanguageModel.doStream", () =>
         });
     });
 
+    it("passes per-call ephemeral through thread/start", async () =>
+    {
+        const transport = new ScriptedTransport();
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+
+        const model = provider.languageModel("gpt-5.3-codex");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+            providerOptions: {
+                [CODEX_PROVIDER_ID]: {
+                    ephemeral: true,
+                },
+            },
+        });
+
+        await readAll(stream);
+
+        const threadStartMessage = transport.sentMessages.find(
+            (message): message is { method: string; params?: unknown } =>
+                "method" in message && message.method === "thread/start",
+        );
+
+        expect(threadStartMessage?.params).toMatchObject({
+            ephemeral: true,
+        });
+    });
+
     it("passes per-call approvalsReviewer overrides through thread/resume and turn/start", async () =>
     {
         const transport = new ScriptedTransport();
