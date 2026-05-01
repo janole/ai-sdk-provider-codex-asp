@@ -7,7 +7,7 @@ import type { ServiceTier } from "../ServiceTier";
 import type { JsonValue } from "../serde_json/JsonValue";
 import type { ApprovalsReviewer } from "./ApprovalsReviewer";
 import type { AskForApproval } from "./AskForApproval";
-import type { PermissionProfile } from "./PermissionProfile";
+import type { PermissionProfileSelectionParams } from "./PermissionProfileSelectionParams";
 import type { SandboxMode } from "./SandboxMode";
 
 /**
@@ -43,10 +43,11 @@ model?: string | null, modelProvider?: string | null, serviceTier?: ServiceTier 
  */
 approvalsReviewer?: ApprovalsReviewer | null, sandbox?: SandboxMode | null,
 /**
- * Full permissions override for the resumed thread. Cannot be combined
- * with `sandbox`.
+ * Named profile selection for the resumed thread. Cannot be combined
+ * with `sandbox`. Use bounded `modifications` for supported thread
+ * adjustments instead of replacing the full permissions profile.
  */
-permissionProfile?: PermissionProfile | null, config?: { [key in string]?: JsonValue } | null, baseInstructions?: string | null, developerInstructions?: string | null, personality?: Personality | null,
+permissions?: PermissionProfileSelectionParams | null, config?: { [key in string]?: JsonValue } | null, baseInstructions?: string | null, developerInstructions?: string | null, personality?: Personality | null,
 /**
  * When true, return only thread metadata and live-resume state without
  * populating `thread.turns`. This is useful when the client plans to call

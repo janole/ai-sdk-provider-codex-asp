@@ -2,7 +2,7 @@
 
 `@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) v6 custom provider for the Codex App Server Protocol.
 
-Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.125.0) 0.125.0.
+Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.128.0) 0.128.0.
 
 - `LanguageModelV3` provider implementation
 - Streaming (`streamText`) and non-streaming (`generateText`)
@@ -113,7 +113,7 @@ const codex = createCodexAppServer({
   persistent?: { poolSize?, idleTimeoutMs?, scope?, key? },
   compaction?: { shouldCompactOnResume?, strict? }, // optional thread/compact/start before resumed turns
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
-  defaultThreadSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandbox? },
+  defaultThreadSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandbox?, ephemeral? },
   defaultTurnSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandboxPolicy?, model?, effort?, summary? },
   approvals?: { onCommandApproval?, onFileChangeApproval? },
   toolTimeoutMs?: number,                  // default: 30000

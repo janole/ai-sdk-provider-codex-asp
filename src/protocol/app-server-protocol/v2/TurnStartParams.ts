@@ -9,7 +9,7 @@ import type { ServiceTier } from "../ServiceTier";
 import type { JsonValue } from "../serde_json/JsonValue";
 import type { ApprovalsReviewer } from "./ApprovalsReviewer";
 import type { AskForApproval } from "./AskForApproval";
-import type { PermissionProfile } from "./PermissionProfile";
+import type { PermissionProfileSelectionParams } from "./PermissionProfileSelectionParams";
 import type { SandboxPolicy } from "./SandboxPolicy";
 import type { TurnEnvironmentParams } from "./TurnEnvironmentParams";
 import type { UserInput } from "./UserInput";
@@ -45,10 +45,12 @@ approvalsReviewer?: ApprovalsReviewer | null,
  */
 sandboxPolicy?: SandboxPolicy | null,
 /**
- * Override the full permissions profile for this turn and subsequent
- * turns. Cannot be combined with `sandboxPolicy`.
+ * Select a named permissions profile for this turn and subsequent turns.
+ * Cannot be combined with `sandboxPolicy`. Use bounded `modifications`
+ * for supported turn adjustments instead of replacing the full
+ * permissions profile.
  */
-permissionProfile?: PermissionProfile | null,
+permissions?: PermissionProfileSelectionParams | null,
 /**
  * Override the model for this turn and subsequent turns.
  */
