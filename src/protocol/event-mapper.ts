@@ -203,6 +203,11 @@ export class CodexEventMapper
 
     private withMeta<T extends LanguageModelV3StreamPart>(part: T): T
     {
+        if (part.type === "stream-start")
+        {
+            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath);
+        }
+
         return withProviderMetadata(part, this.threadId, this.turnId);
     }
 
