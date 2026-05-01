@@ -884,6 +884,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
                                 approvalsReviewer: callOptions?.approvalsReviewer ?? this.config.providerSettings.defaultThreadSettings?.approvalsReviewer,
                                 sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
+                                ephemeral: callOptions?.ephemeral ?? this.config.providerSettings.defaultThreadSettings?.ephemeral,
                             });
                             debugLog?.("outbound", "thread/start", threadStartParams);
                             const threadStartResult = await client.request<ThreadStartResultLike>(
