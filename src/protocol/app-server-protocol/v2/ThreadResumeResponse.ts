@@ -4,6 +4,7 @@
 import type { AbsolutePathBuf } from "../AbsolutePathBuf";
 import type { ReasoningEffort } from "../ReasoningEffort";
 import type { ServiceTier } from "../ServiceTier";
+import type { ActivePermissionProfile } from "./ActivePermissionProfile";
 import type { ApprovalsReviewer } from "./ApprovalsReviewer";
 import type { AskForApproval } from "./AskForApproval";
 import type { PermissionProfile } from "./PermissionProfile";
@@ -20,12 +21,18 @@ instructionSources: Array<AbsolutePathBuf>, approvalPolicy: AskForApproval,
  */
 approvalsReviewer: ApprovalsReviewer,
 /**
- * Legacy sandbox policy retained for compatibility. New clients should use
- * `permissionProfile` when present as the canonical active permissions
- * view.
+ * Legacy sandbox policy retained for compatibility. Experimental clients
+ * should prefer `permissionProfile` when they need exact runtime
+ * permissions.
  */
 sandbox: SandboxPolicy,
 /**
- * Canonical active permissions view for this thread.
+ * Full active permissions for this thread. `activePermissionProfile`
+ * carries display/provenance metadata for this runtime profile.
  */
-permissionProfile: PermissionProfile | null, reasoningEffort: ReasoningEffort | null, };
+permissionProfile: PermissionProfile | null,
+/**
+ * Named or implicit built-in profile that produced the active
+ * permissions, when known.
+ */
+activePermissionProfile: ActivePermissionProfile | null, reasoningEffort: ReasoningEffort | null, };
