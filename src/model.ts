@@ -59,6 +59,7 @@ interface ThreadStartResultLike extends CodexThreadStartResult
 {
     thread?: {
         id?: string;
+        path?: string | null;
     };
 }
 
