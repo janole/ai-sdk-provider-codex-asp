@@ -257,6 +257,9 @@ function resolveApprovalHandlers(
         onFileChangeApproval:
             callOptions?.approvals?.onFileChangeApproval
             ?? providerSettings.approvals?.onFileChangeApproval,
+        onToolUserInput:
+            callOptions?.approvals?.onToolUserInput
+            ?? providerSettings.approvals?.onToolUserInput,
     });
 }
 
