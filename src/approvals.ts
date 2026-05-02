@@ -7,6 +7,7 @@ import type {
     FileChangeApprovalDecision,
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,
+    McpServerElicitationRequestParams,
     McpServerElicitationRequestResponse,
     PermissionsRequestApprovalResponse,
     ToolRequestUserInputParams,
@@ -16,6 +17,7 @@ import type {
 export type CodexCommandApprovalRequest = CommandExecutionRequestApprovalParams;
 export type CodexFileChangeApprovalRequest = FileChangeRequestApprovalParams;
 export type CodexToolUserInputRequest = ToolRequestUserInputParams;
+export type CodexElicitationRequest = McpServerElicitationRequestParams;
 
 export type CommandApprovalHandler = (
     request: CodexCommandApprovalRequest,
@@ -29,10 +31,15 @@ export type ToolUserInputHandler = (
     request: CodexToolUserInputRequest,
 ) => ToolRequestUserInputResponse | Promise<ToolRequestUserInputResponse>;
 
+export type ElicitationHandler = (
+    request: CodexElicitationRequest,
+) => McpServerElicitationRequestResponse | Promise<McpServerElicitationRequestResponse>;
+
 export interface ApprovalsDispatcherSettings {
     onCommandApproval?: CommandApprovalHandler;
     onFileChangeApproval?: FileChangeApprovalHandler;
     onToolUserInput?: ToolUserInputHandler;
+    onElicitation?: ElicitationHandler;
 }
 
 function defaultToolUserInputHandler(params: ToolRequestUserInputParams): ToolRequestUserInputResponse
@@ -51,12 +58,15 @@ export class ApprovalsDispatcher
     private readonly onCommandApproval: CommandApprovalHandler;
     private readonly onFileChangeApproval: FileChangeApprovalHandler;
     private readonly onToolUserInput: ToolUserInputHandler;
+    private readonly onElicitation: ElicitationHandler;
 
     constructor(settings: ApprovalsDispatcherSettings = {})
     {
         this.onCommandApproval = settings.onCommandApproval ?? (() => "decline");
         this.onFileChangeApproval = settings.onFileChangeApproval ?? (() => "decline");
         this.onToolUserInput = settings.onToolUserInput ?? defaultToolUserInputHandler;
+        this.onElicitation = settings.onElicitation
+            ?? (() => ({ action: "accept", content: null, _meta: null } satisfies McpServerElicitationRequestResponse));
     }
 
     attach(client: AppServerClient): () => void
@@ -97,9 +107,9 @@ export class ApprovalsDispatcher
 
         const unsubElicitation = client.onRequest(
             "mcpServer/elicitation/request",
-            (_params: unknown, _request: JsonRpcRequest) =>
+            async (params: unknown, _request: JsonRpcRequest) =>
             {
-                return { action: "cancel", content: null, _meta: null } satisfies McpServerElicitationRequestResponse;
+                return await this.onElicitation(params as CodexElicitationRequest) satisfies McpServerElicitationRequestResponse;
             },
         );
 
