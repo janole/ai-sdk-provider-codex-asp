@@ -7,10 +7,10 @@ import { MockTransport } from "./helpers/mock-transport";
 
 class ScriptedTransport extends MockTransport
 {
-    private approvalScenario: "command" | "fileChange" | "none" = "none";
+    private approvalScenario: "command" | "fileChange" | "toolUserInput" | "none" = "none";
     private approvalRequestId = 100;
 
-    setApprovalScenario(scenario: "command" | "fileChange" | "none"): void
+    setApprovalScenario(scenario: "command" | "fileChange" | "toolUserInput" | "none"): void
     {
         this.approvalScenario = scenario;
     }
@@ -87,6 +87,39 @@ class ScriptedTransport extends MockTransport
                             turnId: "turn_1",
                             itemId: "item_fc_1",
                             reason: "Write to /etc/config",
+                        },
+                    });
+                });
+            }
+            else if (this.approvalScenario === "toolUserInput")
+            {
+                queueMicrotask(() =>
+                {
+                    this.emitMessage({
+                        method: "turn/started",
+                        params: { threadId: "thr_1", turn: { id: "turn_1" } },
+                    });
+
+                    this.emitMessage({
+                        id: this.approvalRequestId,
+                        method: "item/tool/requestUserInput",
+                        params: {
+                            threadId: "thr_1",
+                            turnId: "turn_1",
+                            itemId: "item_tool_1",
+                            questions: [
+                                {
+                                    id: "q1",
+                                    header: "Choose environment",
+                                    question: "Which environment?",
+                                    isOther: false,
+                                    isSecret: false,
+                                    options: [
+                                        { label: "production", description: "Prod env" },
+                                        { label: "staging", description: "Staging env" },
+                                    ],
+                                },
+                            ],
                         },
                     });
                 });
@@ -436,6 +469,71 @@ describe("ApprovalsDispatcher", () =>
         ) as { id: number; result: { decision: string } } | undefined;
 
         expect(approvalResponse?.result.decision).toBe("accept");
+    });
+
+    it("auto-answers tool user input with first option by default", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.setApprovalScenario("toolUserInput");
+
+        const originalSendMessage = transport.sendMessage.bind(transport);
+        transport.sendMessage = async (message: JsonRpcMessage) =>
+        {
+            await originalSendMessage(message);
+            transport.handleApprovalResponse(message);
+        };
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+
+        const { stream } = await provider.languageModel("gpt-5.3-codex").doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "deploy" }] }],
+        });
+
+        await readAll(stream);
+
+        const response = transport.sentMessages.find(
+            (msg) => "id" in msg && msg.id === 100 && "result" in msg,
+        ) as { id: number; result: { answers: Record<string, { answers: string[] }> } } | undefined;
+
+        expect(response?.result.answers).toEqual({ q1: { answers: ["production"] } });
+    });
+
+    it("calls onToolUserInput callback with the params", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.setApprovalScenario("toolUserInput");
+
+        const originalSendMessage = transport.sendMessage.bind(transport);
+        transport.sendMessage = async (message: JsonRpcMessage) =>
+        {
+            await originalSendMessage(message);
+            transport.handleApprovalResponse(message);
+        };
+
+        const onToolUserInput = vi.fn().mockResolvedValue({ answers: { q1: { answers: ["staging"] } } });
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            approvals: { onToolUserInput },
+        });
+
+        await readAll((await provider.languageModel("gpt-5.3-codex").doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "deploy" }] }],
+        })).stream);
+
+        expect(onToolUserInput).toHaveBeenCalledOnce();
+        const [callArg] = onToolUserInput.mock.lastCall as [{ questions: { id: string }[] }];
+        expect(callArg.questions[0]?.id).toBe("q1");
+
+        const response = transport.sentMessages.find(
+            (msg) => "id" in msg && msg.id === 100 && "result" in msg,
+        ) as { id: number; result: { answers: Record<string, { answers: string[] }> } } | undefined;
+
+        expect(response?.result.answers).toEqual({ q1: { answers: ["staging"] } });
     });
 
     it("declines file changes by default", async () =>

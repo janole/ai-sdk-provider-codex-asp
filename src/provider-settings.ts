@@ -1,6 +1,6 @@
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 
-import type { CommandApprovalHandler, FileChangeApprovalHandler } from "./approvals";
+import type { CommandApprovalHandler, ElicitationHandler, FileChangeApprovalHandler, ToolUserInputHandler } from "./approvals";
 import type { CodexTransport } from "./client/transport";
 import type { StdioTransportSettings } from "./client/transport-stdio";
 import type { WebSocketTransportSettings } from "./client/transport-websocket";
@@ -82,6 +82,8 @@ export interface CodexCallOptions
     approvals?: {
         onCommandApproval?: CommandApprovalHandler;
         onFileChangeApproval?: FileChangeApprovalHandler;
+        onToolUserInput?: ToolUserInputHandler;
+        onElicitation?: ElicitationHandler;
     };
 }
 
@@ -152,10 +154,14 @@ export interface CodexProviderSettings
     toolTimeoutMs?: number;
     /** Max time (ms) to wait for `turn/interrupt` response on abort. */
     interruptTimeoutMs?: number;
-    /** Callbacks invoked when Codex requests approval for commands or file changes. */
+    /** Callbacks invoked when Codex requests approval for commands, file changes, or MCP tool prompts. */
     approvals?: {
         onCommandApproval?: CommandApprovalHandler;
         onFileChangeApproval?: FileChangeApprovalHandler;
+        /** Called when a tool sends a `requestUserInput` prompt (legacy fallback path). Defaults to auto-selecting the first option per question. */
+        onToolUserInput?: ToolUserInputHandler;
+        /** Called when an MCP server sends an elicitation request (the primary MCP tool approval path). Defaults to `accept`. */
+        onElicitation?: ElicitationHandler;
     };
     /** Diagnostic logging options. */
     debug?: {

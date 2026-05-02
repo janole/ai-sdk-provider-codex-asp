@@ -115,7 +115,7 @@ const codex = createCodexAppServer({
   debug?: { logPackets?, logger? },         // packet-level JSON-RPC debug logging
   defaultThreadSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandbox?, ephemeral? },
   defaultTurnSettings?: { cwd?, approvalPolicy?, approvalsReviewer?, sandboxPolicy?, model?, effort?, summary? },
-  approvals?: { onCommandApproval?, onFileChangeApproval? },
+  approvals?: { onCommandApproval?, onFileChangeApproval?, onToolUserInput?, onElicitation? },
   toolTimeoutMs?: number,                  // default: 30000
   interruptTimeoutMs?: number,             // default: 10000
 });
@@ -128,8 +128,10 @@ codex.shutdown()              // clean up persistent workers
 
 Approval callback notes:
 
-- `approvals.onCommandApproval(request)` receives the raw generated Codex protocol payload: `CommandExecutionRequestApprovalParams`.
-- `approvals.onFileChangeApproval(request)` receives the raw generated Codex protocol payload: `FileChangeRequestApprovalParams`.
+- `approvals.onCommandApproval(request)` — shell command approval. Payload: `CommandExecutionRequestApprovalParams`. Default: `"decline"`.
+- `approvals.onFileChangeApproval(request)` — file write approval. Payload: `FileChangeRequestApprovalParams`. Default: `"decline"`.
+- `approvals.onElicitation(request)` — MCP tool approval (the "Allow / Allow for this session / Always allow / Cancel" prompt). Payload: `McpServerElicitationRequestParams`. Default: `accept`. Return `{ action, content, _meta }` — use `_meta: { persist: "session" }` or `_meta: { persist: "always" }` to remember the choice.
+- `approvals.onToolUserInput(request)` — legacy fallback for MCP tool approval when the elicitation feature flag is off. Payload: `ToolRequestUserInputParams`. Default: auto-selects the first option per question.
 
 Rich sandbox policy example (turn-level):
 
