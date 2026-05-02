@@ -17,6 +17,7 @@ import { DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
+import type { Thread } from "./protocol/app-server-protocol/v2/Thread";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
 import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
@@ -57,9 +58,7 @@ export interface CodexModelConfig
 
 interface ThreadStartResultLike extends CodexThreadStartResult
 {
-    thread?: {
-        id?: string;
-    };
+    thread?: Partial<Thread>;
 }
 
 interface TurnStartResultLike extends CodexTurnStartResult
@@ -804,6 +803,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 resumeParams,
                             );
                             threadId = resumeResult.thread.id;
+                            mapper.setThreadPath(resumeResult.thread.path);
 
                             const strictCompaction = this.config.providerSettings.compaction?.strict === true;
                             const shouldCompactOnResume = this.config.providerSettings.compaction?.shouldCompactOnResume;
@@ -892,6 +892,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 threadStartParams,
                             );
                             threadId = extractThreadId(threadStartResult);
+                            mapper.setThreadPath(threadStartResult.thread?.path);
                         }
 
                         activeThreadId = threadId;

@@ -212,7 +212,7 @@ describe("CodexLanguageModel.doStream", () =>
         const parts = await readAll(stream);
 
         expect(parts).toEqual([
-            { type: "stream-start", warnings: [] },
+            { type: "stream-start", warnings: [], providerMetadata: { [CODEX_PROVIDER_ID]: { threadId: "thr_1", turnId: "turn_1" } } },
             {
                 type: "text-start",
                 id: "item_1",

@@ -112,6 +112,7 @@ export class CodexEventMapper
     private readonly planSequenceByTurnId = new Map<string, number>();
     private threadId: string | undefined;
     private turnId: string | undefined;
+    private threadPath: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
 
     private readonly handlers: Record<string, (params: unknown) => LanguageModelV3StreamPart[]>;
@@ -177,6 +178,11 @@ export class CodexEventMapper
         this.threadId = threadId;
     }
 
+    setThreadPath(threadPath: string | null | undefined): void
+    {
+        this.threadPath = threadPath ?? undefined;
+    }
+
     setTurnId(turnId: string): void
     {
         this.turnId = turnId;
@@ -197,6 +203,11 @@ export class CodexEventMapper
 
     private withMeta<T extends LanguageModelV3StreamPart>(part: T): T
     {
+        if (part.type === "stream-start")
+        {
+            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath);
+        }
+
         return withProviderMetadata(part, this.threadId, this.turnId);
     }
 
@@ -204,7 +215,7 @@ export class CodexEventMapper
     {
         if (!this.streamStarted)
         {
-            parts.push({ type: "stream-start", warnings: [] });
+            parts.push(this.withMeta({ type: "stream-start", warnings: [] }));
             this.streamStarted = true;
         }
     }
