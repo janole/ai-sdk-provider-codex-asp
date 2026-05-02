@@ -215,7 +215,7 @@ export class CodexEventMapper
     {
         if (!this.streamStarted)
         {
-            parts.push({ type: "stream-start", warnings: [] });
+            parts.push(this.withMeta({ type: "stream-start", warnings: [] }));
             this.streamStarted = true;
         }
     }
