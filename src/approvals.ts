@@ -7,10 +7,15 @@ import type {
     FileChangeApprovalDecision,
     FileChangeRequestApprovalParams,
     FileChangeRequestApprovalResponse,
+    McpServerElicitationRequestResponse,
+    PermissionsRequestApprovalResponse,
+    ToolRequestUserInputParams,
+    ToolRequestUserInputResponse,
 } from "./protocol/types";
 
 export type CodexCommandApprovalRequest = CommandExecutionRequestApprovalParams;
 export type CodexFileChangeApprovalRequest = FileChangeRequestApprovalParams;
+export type CodexToolUserInputRequest = ToolRequestUserInputParams;
 
 export type CommandApprovalHandler = (
     request: CodexCommandApprovalRequest,
@@ -20,20 +25,38 @@ export type FileChangeApprovalHandler = (
     request: CodexFileChangeApprovalRequest,
 ) => FileChangeApprovalDecision | Promise<FileChangeApprovalDecision>;
 
+export type ToolUserInputHandler = (
+    request: CodexToolUserInputRequest,
+) => ToolRequestUserInputResponse | Promise<ToolRequestUserInputResponse>;
+
 export interface ApprovalsDispatcherSettings {
     onCommandApproval?: CommandApprovalHandler;
     onFileChangeApproval?: FileChangeApprovalHandler;
+    onToolUserInput?: ToolUserInputHandler;
+}
+
+function defaultToolUserInputHandler(params: ToolRequestUserInputParams): ToolRequestUserInputResponse
+{
+    const answers: ToolRequestUserInputResponse["answers"] = {};
+    for (const q of params.questions)
+    {
+        const first = q.options?.[0];
+        answers[q.id] = { answers: first ? [first.label] : [] };
+    }
+    return { answers };
 }
 
 export class ApprovalsDispatcher
 {
     private readonly onCommandApproval: CommandApprovalHandler;
     private readonly onFileChangeApproval: FileChangeApprovalHandler;
+    private readonly onToolUserInput: ToolUserInputHandler;
 
     constructor(settings: ApprovalsDispatcherSettings = {})
     {
         this.onCommandApproval = settings.onCommandApproval ?? (() => "decline");
         this.onFileChangeApproval = settings.onFileChangeApproval ?? (() => "decline");
+        this.onToolUserInput = settings.onToolUserInput ?? defaultToolUserInputHandler;
     }
 
     attach(client: AppServerClient): () => void
@@ -56,10 +79,37 @@ export class ApprovalsDispatcher
             },
         );
 
+        const unsubToolUserInput = client.onRequest(
+            "item/tool/requestUserInput",
+            async (params: unknown, _request: JsonRpcRequest) =>
+            {
+                return await this.onToolUserInput(params as CodexToolUserInputRequest) satisfies ToolRequestUserInputResponse;
+            },
+        );
+
+        const unsubPermissions = client.onRequest(
+            "item/permissions/requestApproval",
+            (_params: unknown, _request: JsonRpcRequest) =>
+            {
+                return { permissions: {}, scope: "turn" } satisfies PermissionsRequestApprovalResponse;
+            },
+        );
+
+        const unsubElicitation = client.onRequest(
+            "mcpServer/elicitation/request",
+            (_params: unknown, _request: JsonRpcRequest) =>
+            {
+                return { action: "cancel", content: null, _meta: null } satisfies McpServerElicitationRequestResponse;
+            },
+        );
+
         return () =>
         {
             unsubCommand();
             unsubFileChange();
+            unsubToolUserInput();
+            unsubPermissions();
+            unsubElicitation();
         };
     }
 }
