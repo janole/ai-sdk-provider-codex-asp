@@ -201,14 +201,14 @@ export class CodexEventMapper
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private withMeta<T extends LanguageModelV3StreamPart>(part: T): T
+    private withMeta<T extends LanguageModelV3StreamPart>(part: T, extra?: Record<string, string>): T
     {
         if (part.type === "stream-start")
         {
-            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath);
+            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath, extra);
         }
 
-        return withProviderMetadata(part, this.threadId, this.turnId);
+        return withProviderMetadata(part, this.threadId, this.turnId, undefined, extra);
     }
 
     private ensureStreamStarted(parts: LanguageModelV3StreamPart[]): void
@@ -450,6 +450,20 @@ export class CodexEventMapper
         {
             parts.push(this.withMeta({ type: "reasoning-end", id: item.id }));
             this.openReasoningParts.delete(item.id);
+        }
+        else if (item.type === "imageGeneration" && item.result)
+        {
+            this.ensureStreamStarted(parts);
+
+            const extra = {
+                ...(item.revisedPrompt && { revisedPrompt: item.revisedPrompt }),
+                ...(item.savedPath && { savedPath: item.savedPath }),
+            };
+
+            parts.push(this.withMeta(
+                { type: "file" as const, mediaType: "image/png", data: item.result },
+                Object.keys(extra).length > 0 ? extra : undefined,
+            ));
         }
 
         return parts;
