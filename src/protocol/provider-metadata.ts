@@ -25,8 +25,14 @@ export function withProviderMetadata<T extends LanguageModelV3StreamPart>(
     threadId: string | undefined,
     turnId?: string,
     threadPath?: string,
+    extra?: Record<string, string>,
 ): T
 {
-    const meta = codexProviderMetadata(threadId, turnId, threadPath);
-    return meta ? { ...part, providerMetadata: meta } : part;
+    const hasExtra = extra !== null && extra !== undefined && Object.keys(extra).length > 0;
+    if (!threadId && !hasExtra)
+    {
+        return part;
+    }
+    const entry = { ...stripUndefined({ threadId, turnId, threadPath }), ...(extra ?? {}) };
+    return { ...part, providerMetadata: { [CODEX_PROVIDER_ID]: entry } };
 }

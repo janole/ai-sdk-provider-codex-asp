@@ -1241,4 +1241,116 @@ describe("CodexEventMapper", () =>
             },
         ]);
     });
+
+    it("emits file stream part for imageGeneration item", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "imageGeneration",
+                        id: "img_1",
+                        status: "inProgress",
+                        revisedPrompt: null,
+                        result: "",
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "imageGeneration",
+                        id: "img_1",
+                        status: "completed",
+                        revisedPrompt: "a beautiful mountain landscape at sunrise",
+                        result: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "file",
+                mediaType: "image/png",
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                providerMetadata: {
+                    "@janole/ai-sdk-provider-codex-asp": {
+                        turnId: "turn",
+                        revisedPrompt: "a beautiful mountain landscape at sunrise",
+                    },
+                },
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("emits file stream part without providerMetadata when revisedPrompt is null", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "imageGeneration",
+                        id: "img_2",
+                        status: "completed",
+                        revisedPrompt: null,
+                        result: "abc123",
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "file",
+                mediaType: "image/png",
+                data: "abc123",
+            },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
 });

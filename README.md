@@ -8,6 +8,7 @@ Status: POC feature-complete for language model usage. Currently tested with [co
 - Streaming (`streamText`) and non-streaming (`generateText`)
 - Standard AI SDK `tool()` support via Codex dynamic tools injection
 - Provider-executed tool protocol for Codex command executions
+- Generated images surfaced as AI SDK `file` parts (`image/png`)
 - `stdio` and `websocket` transports
 - Persistent worker pool with thread management
 
