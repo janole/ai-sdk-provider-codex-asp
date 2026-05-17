@@ -11,7 +11,6 @@ import type {
     JsonRpcMessage,
     JsonRpcRequest,
     JsonRpcResponse,
-    JsonRpcSuccessResponse,
 } from "./transport";
 
 export class JsonRpcError extends CodexProviderError 
@@ -221,7 +220,7 @@ export class AppServerClient
     onToolCallRequest(handler: ToolCallRequestHandler): () => void 
     {
         return this.onRequest("item/tool/call", async (params, request) =>
-            handler((params ?? {}) as CodexToolCallRequestParams, request),
+            handler((params ?? {}), request),
         );
     }
 
@@ -312,7 +311,7 @@ export class AppServerClient
             const response = {
                 id: request.id,
                 result,
-            } as JsonRpcSuccessResponse;
+            };
             this.onPacket?.({ direction: "outbound", message: response });
             await this.transport.sendMessage(response);
         }

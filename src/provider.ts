@@ -214,7 +214,7 @@ export function createCodexAppServer(
         poolHandleCleanup.register(provider, persistentPoolHandle, provider);
     }
 
-    return provider as CodexProvider;
+    return provider;
 }
 
 export const codexAppServer = createCodexAppServer();

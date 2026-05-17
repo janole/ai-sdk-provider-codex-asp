@@ -4,13 +4,13 @@ import type {
     CodexTransport,
     CodexTransportEventMap,
     JsonRpcMessage,
-    JsonRpcSuccessResponse,
 } from "./transport";
 import type { PendingToolCall } from "./worker";
 import type { CodexWorker } from "./worker";
 import type { CodexWorkerPool } from "./worker-pool";
 
-export interface PersistentTransportSettings {
+export interface PersistentTransportSettings
+{
     pool: CodexWorkerPool;
     signal?: AbortSignal;
     threadId?: string;
@@ -194,7 +194,7 @@ export class PersistentTransport implements CodexTransport
         await this.worker.sendMessage({
             id: requestId,
             result,
-        } as JsonRpcSuccessResponse);
+        });
     }
 
     parkToolCall(pending: PendingToolCall): void

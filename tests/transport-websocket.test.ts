@@ -64,7 +64,7 @@ describe("WebSocketTransport", () =>
 {
     it("connects, sends JSON-RPC message, and receives message frames", async () => 
     {
-        (globalThis as { WebSocket?: unknown }).WebSocket = FakeWebSocket as unknown;
+        (globalThis as { WebSocket?: unknown }).WebSocket = FakeWebSocket;
 
         const transport = new WebSocketTransport({ url: "ws://localhost:1234" });
 

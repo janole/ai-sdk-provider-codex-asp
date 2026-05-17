@@ -131,7 +131,7 @@ function extractResumeThreadId(prompt: LanguageModelV3CallOptions["prompt"]): st
         {
             // Check message-level providerOptions
             const messageThreadId = extractThreadIdFromProviderOptions(
-                message.providerOptions as Record<string, unknown> | undefined,
+                message.providerOptions,
             );
             if (messageThreadId)
             {
