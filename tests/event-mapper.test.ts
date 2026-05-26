@@ -349,12 +349,27 @@ describe("CodexEventMapper", () =>
     {
         const mapper = new CodexEventMapper();
 
+        // Real codex flow: item/started carries an empty placeholder (query: "",
+        // action: {type:"other"}); the real query + action only arrive at
+        // item/completed. The placeholder is suppressed at start and the full
+        // provider-executed call + result are emitted from item/completed.
+        const completedItem = {
+            type: "webSearch",
+            id: "ws_1",
+            query: "di.gg API documentation",
+            action: {
+                type: "search",
+                query: "di.gg API documentation",
+                queries: ["di.gg API documentation", "site:di.gg api", "di.gg developer docs"],
+            },
+        };
+
         const events = [
             { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
             {
                 method: "item/started",
                 params: {
-                    item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    item: { type: "webSearch", id: "ws_1", query: "", action: { type: "other" } },
                     threadId: "thr",
                     turnId: "turn",
                 },
@@ -379,7 +394,7 @@ describe("CodexEventMapper", () =>
             {
                 method: "item/completed",
                 params: {
-                    item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null },
+                    item: completedItem,
                     threadId: "thr",
                     turnId: "turn",
                 },
@@ -412,24 +427,64 @@ describe("CodexEventMapper", () =>
 
         const parts = events.flatMap((event) => mapper.map(event));
 
+        // The empty placeholder at item/started is suppressed; the tool-call carries
+        // the real query/action from item/completed, paired with its result.
         expect(parts).toEqual([
             { type: "stream-start", warnings: [] },
+            { type: "reasoning-start", id: "collab_1" },
             {
                 type: "tool-call",
                 toolCallId: "ws_1",
                 toolName: "codex_web_search",
-                input: JSON.stringify({ query: "vitest docs" }),
+                input: JSON.stringify({ query: completedItem.query, action: completedItem.action }),
                 providerExecuted: true,
                 dynamic: true,
             },
-            { type: "reasoning-start", id: "collab_1" },
             {
                 type: "tool-result",
                 toolCallId: "ws_1",
                 toolName: "codex_web_search",
-                result: { item: { type: "webSearch", id: "ws_1", query: "vitest docs", action: null } },
+                result: { item: completedItem },
             },
             { type: "reasoning-end", id: "collab_1" },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("drops an abandoned webSearch placeholder that never completes", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/started",
+                params: {
+                    item: { type: "webSearch", id: "ws_ghost", query: "", action: { type: "other" } },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        // The placeholder is suppressed at item/started and never completes, so it
+        // produces no tool-call and — crucially — no synthesized "did not complete"
+        // error on turn/completed.
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },

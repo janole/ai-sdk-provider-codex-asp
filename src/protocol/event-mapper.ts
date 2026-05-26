@@ -22,6 +22,26 @@ import type { CodexDynamicToolCallItem } from "./types";
 // must not emit a providerExecuted tool-call or a premature tool-result for it.
 const NATIVE_TOOL_RESULT_TYPES: Set<ThreadItem["type"]> = new Set(["commandExecution", "fileChange", "mcpToolCall", "webSearch"]);
 
+/**
+ * True when a webSearch item carries something worth surfacing — a non-empty
+ * query or a concrete action (search/openPage/findInPage). Codex always emits
+ * webSearch item/started as a contentless placeholder (empty query +
+ * `{type:"other"}`) and only fills the query/action at item/completed, so this
+ * gates emission to the completion event and drops abandoned placeholders.
+ */
+function webSearchHasContent(query: string | null | undefined, action: { type: string } | null | undefined): boolean
+{
+    if (typeof query === "string" && query.trim().length > 0)
+    {
+        return true;
+    }
+    if (!action)
+    {
+        return false;
+    }
+    return action.type !== "other";
+}
+
 export interface CodexEventMapperInput
 {
     method: string;
@@ -334,6 +354,17 @@ export class CodexEventMapper
             }
             case "webSearch": {
                 this.ensureStreamStarted(parts);
+                // Codex always emits webSearch item/started as an empty placeholder
+                // (query "", action {type:"other"}); the real query/action only arrive
+                // at item/completed. Suppress the placeholder here so an abandoned
+                // search (item/started with no item/completed) never surfaces as a
+                // phantom tool-call. The full call + result are emitted from
+                // item/completed (see handleItemCompleted). A search that already has
+                // content at start (unexpected today) is still emitted live here.
+                if (!webSearchHasContent(item.query, item.action))
+                {
+                    break;
+                }
                 const toolName = "codex_web_search";
                 this.openToolCalls.set(item.id, { toolName });
                 parts.push(this.withMeta({
@@ -445,6 +476,28 @@ export class CodexEventMapper
             }));
 
             this.openToolCalls.delete(item.id);
+        }
+        else if (item.type === "webSearch" && webSearchHasContent(item.query, item.action))
+        {
+            // webSearch item/started was a contentless placeholder suppressed in
+            // handleItemStarted; the real query/action arrive here. Emit the full
+            // provider-executed call + result now (the search ran to completion).
+            this.ensureStreamStarted(parts);
+            const toolName = "codex_web_search";
+            parts.push(this.withMeta({
+                type: "tool-call",
+                toolCallId: item.id,
+                toolName,
+                input: JSON.stringify({ query: item.query, action: item.action ?? undefined }),
+                providerExecuted: true,
+                dynamic: true,
+            }));
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: item.id,
+                toolName,
+                result: { item },
+            }));
         }
         else if (this.openReasoningParts.has(item.id))
         {
