@@ -680,6 +680,8 @@ export class CodexLanguageModel implements LanguageModelV3
                                 }
                             });
 
+                            mapper.enableCrossCallMode();
+
                             // Register cross-call handler again for chained tool calls
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
