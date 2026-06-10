@@ -47,7 +47,7 @@ class ScriptedTransport extends MockTransport
                         gitInfo: null,
                         turns: [],
                     },
-                    model: "gpt-5.3-codex",
+                    model: "gpt-5.5",
                     modelProvider: "openai",
                     cwd: "/tmp",
                     approvalPolicy: "never",
@@ -203,7 +203,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -275,7 +275,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -322,7 +322,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -366,7 +366,7 @@ describe("CodexLanguageModel.doStream", () =>
             compaction: { shouldCompactOnResume: true },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -405,7 +405,7 @@ describe("CodexLanguageModel.doStream", () =>
             compaction: { shouldCompactOnResume: true },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -445,7 +445,7 @@ describe("CodexLanguageModel.doStream", () =>
             compaction: { shouldCompactOnResume },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const prompt: LanguageModelV3CallOptions["prompt"] = [
             { role: "user", content: [{ type: "text", text: "hi" }] },
@@ -499,7 +499,7 @@ describe("CodexLanguageModel.doStream", () =>
             compaction: { shouldCompactOnResume: () => false },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -537,7 +537,7 @@ describe("CodexLanguageModel.doStream", () =>
             compaction: { shouldCompactOnResume: () => { throw new Error("decision failed"); } },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -578,7 +578,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -621,7 +621,7 @@ describe("CodexLanguageModel.doStream", () =>
             experimentalApi: true,
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -665,7 +665,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -702,7 +702,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -736,7 +736,7 @@ describe("CodexLanguageModel.doStream", () =>
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -774,7 +774,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -821,7 +821,7 @@ describe("CodexLanguageModel.doStream", () =>
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const schema = {
             type: "object" as const,
@@ -871,7 +871,7 @@ describe("CodexLanguageModel.doStream", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -908,7 +908,7 @@ describe("CodexLanguageModel.doStream", () =>
             debug: { logPackets: true, logger: loggerSpy },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
@@ -971,7 +971,7 @@ describe("CodexLanguageModel.doStream", () =>
             debug: { logPackets: true, logger: loggerSpy },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [
@@ -1026,7 +1026,7 @@ describe("CodexLanguageModel.doStream", () =>
             transportFactory: () => transport,
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
         const abortController = new AbortController();
 
         const { stream } = await model.doStream({

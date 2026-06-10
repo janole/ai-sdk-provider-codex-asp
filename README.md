@@ -27,12 +27,12 @@ import { generateText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.3-codex',
+  defaultModel: 'gpt-5.5',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = await generateText({
-  model: codex.languageModel('gpt-5.3-codex'),
+  model: codex.languageModel('gpt-5.5'),
   prompt: 'Write a short release note title for websocket support.',
 });
 
@@ -46,12 +46,12 @@ import { streamText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.3-codex',
+  defaultModel: 'gpt-5.5',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = streamText({
-  model: codex('gpt-5.3-codex'),
+  model: codex('gpt-5.5'),
   prompt: 'Explain JSON-RPC in one paragraph.',
 });
 
@@ -76,7 +76,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-  model: codex('gpt-5.3-codex'),
+  model: codex('gpt-5.5'),
   prompt: 'Can you check ticket 15 and also the weather in Berlin?',
   tools: {
     lookup_ticket: tool({
@@ -163,7 +163,7 @@ const codex = createCodexAppServer({
 });
 
 await streamText({
-  model: codex("gpt-5.3-codex"),
+  model: codex("gpt-5.5"),
   prompt: "Delete the old generated protocol files under src/protocol/app-server-protocol if they are no longer referenced, then regenerate the current ones.",
   providerOptions: codexCallOptions({
     approvalsReviewer: "user",

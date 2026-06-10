@@ -12,7 +12,7 @@ import { codexCallOptions } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.5",
     defaultTurnSettings: {
         effort: "low",
     },
@@ -20,7 +20,7 @@ const codex = createCodexAppServer({
 
 // First call — uses provider defaults (effort: "low")
 const result1 = streamText({
-    model: codex("gpt-5.3-codex"),
+    model: codex("gpt-5.5"),
     prompt: "What directory am I in?",
 });
 
@@ -32,7 +32,7 @@ console.log("\n");
 
 // Second call — overrides cwd and effort for this call only
 const result2 = streamText({
-    model: codex("gpt-5.3-codex"),
+    model: codex("gpt-5.5"),
     prompt: "What directory am I in now? Summarize this project briefly.",
     providerOptions: codexCallOptions({
         cwd: "/tmp",

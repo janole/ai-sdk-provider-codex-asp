@@ -55,8 +55,8 @@ class ScriptedTransport extends MockTransport
                 result: {
                     data: [
                         {
-                            id: "gpt-5.3-codex",
-                            model: "gpt-5.3-codex",
+                            id: "gpt-5.5",
+                            model: "gpt-5.5",
                             upgrade: null,
                             displayName: "GPT-5.3 Codex",
                             description: "Test model",
@@ -155,19 +155,19 @@ describe("createCodexAppServer", () =>
 
         expect(provider.specificationVersion).toBe("v3");
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
         expect(model).toBeInstanceOf(CodexLanguageModel);
         expect(model.specificationVersion).toBe("v3");
         expect(model.provider).toBe(CODEX_PROVIDER_ID);
-        expect(model.modelId).toBe("gpt-5.3-codex");
+        expect(model.modelId).toBe("gpt-5.5");
     });
 
     it("supports callable provider and chat alias", () => 
     {
         const provider = createCodexAppServer();
 
-        const viaCall = provider("gpt-5.3-codex");
-        const viaChat = provider.chat("gpt-5.3-codex");
+        const viaCall = provider("gpt-5.5");
+        const viaChat = provider.chat("gpt-5.5");
 
         expect(viaCall).toBeInstanceOf(CodexLanguageModel);
         expect(viaChat).toBeInstanceOf(CodexLanguageModel);
@@ -212,8 +212,8 @@ describe("createCodexAppServer", () =>
 
         try
         {
-            const modelOne = providerOne.languageModel("gpt-5.3-codex");
-            const modelTwo = providerTwo.languageModel("gpt-5.3-codex");
+            const modelOne = providerOne.languageModel("gpt-5.5");
+            const modelTwo = providerTwo.languageModel("gpt-5.5");
 
             const { stream: streamOne } = await modelOne.doStream({
                 prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],
@@ -267,8 +267,8 @@ describe("createCodexAppServer", () =>
 
         try
         {
-            const modelOne = providerOne.languageModel("gpt-5.3-codex");
-            const modelTwo = providerTwo.languageModel("gpt-5.3-codex");
+            const modelOne = providerOne.languageModel("gpt-5.5");
+            const modelTwo = providerTwo.languageModel("gpt-5.5");
 
             const { stream: streamOne } = await modelOne.doStream({
                 prompt: [{ role: "user", content: [{ type: "text", text: "first" }] }],
@@ -307,7 +307,7 @@ describe("createCodexAppServer", () =>
 
         expect(models).toHaveLength(1);
         expect(models[0]).toMatchObject({
-            id: "gpt-5.3-codex",
+            id: "gpt-5.5",
             displayName: "GPT-5.3 Codex",
             isDefault: true,
             inputModalities: ["text", "image"],
@@ -330,7 +330,7 @@ describe("createCodexAppServer", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
         });
@@ -357,7 +357,7 @@ describe("createCodexAppServer", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
         });
@@ -401,7 +401,7 @@ describe("createCodexAppServer", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
         });

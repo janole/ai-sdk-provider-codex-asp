@@ -261,7 +261,7 @@ describe("ApprovalsDispatcher", () =>
             // No approvals callbacks → defaults to decline
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
@@ -307,7 +307,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
@@ -361,7 +361,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         await readAll((await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "push it" }] }],
@@ -404,7 +404,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],
@@ -450,7 +450,7 @@ describe("ApprovalsDispatcher", () =>
             },
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         await readAll((await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],
@@ -488,7 +488,7 @@ describe("ApprovalsDispatcher", () =>
             clientInfo: { name: "test-client", version: "1.0.0" },
         });
 
-        const { stream } = await provider.languageModel("gpt-5.3-codex").doStream({
+        const { stream } = await provider.languageModel("gpt-5.5").doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "deploy" }] }],
         });
 
@@ -521,7 +521,7 @@ describe("ApprovalsDispatcher", () =>
             approvals: { onToolUserInput },
         });
 
-        await readAll((await provider.languageModel("gpt-5.3-codex").doStream({
+        await readAll((await provider.languageModel("gpt-5.5").doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "deploy" }] }],
         })).stream);
 
@@ -554,7 +554,7 @@ describe("ApprovalsDispatcher", () =>
             // No approvals callbacks → defaults to decline
         });
 
-        const model = provider.languageModel("gpt-5.3-codex");
+        const model = provider.languageModel("gpt-5.5");
 
         const { stream } = await model.doStream({
             prompt: [{ role: "user", content: [{ type: "text", text: "write config" }] }],

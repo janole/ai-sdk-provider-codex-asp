@@ -13,7 +13,7 @@ import { streamText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.5",
     onSessionCreated: (session) =>
     {
         console.log(`\n[session] created — thread=${session.threadId} turn=${String(session.turnId)}\n`);
@@ -25,7 +25,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-    model: codex("gpt-5.3-codex"),
+    model: codex("gpt-5.5"),
     prompt: "Write a short TypeScript function that adds two numbers.",
 });
 

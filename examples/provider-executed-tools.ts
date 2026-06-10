@@ -15,13 +15,13 @@ import { streamText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.5",
 });
 
 // Intentionally NO tools registered — provider-executed tool calls
 // (commandExecution) should pass through without "unavailable tool" errors.
 const result = streamText({
-    model: codex("gpt-5.3-codex"),
+    model: codex("gpt-5.5"),
     prompt: "Run `echo hello` in the terminal and tell me the output.",
 });
 

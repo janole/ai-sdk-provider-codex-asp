@@ -41,7 +41,7 @@ const codex = createCodexAppServer({
     },
 });
 
-const model = codex("gpt-5.3-codex");
+const model = codex("gpt-5.5");
 
 // ── Multi-step call: tool use + follow-up in one generateText call ──────────
 

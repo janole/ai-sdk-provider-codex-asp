@@ -26,7 +26,7 @@ class MockGenerateModel extends CodexLanguageModel
 {
     constructor(private readonly result: LanguageModelV3StreamResult) 
     {
-        super("gpt-5.3-codex", {}, { provider: CODEX_PROVIDER_ID, providerSettings: {} });
+        super("gpt-5.5", {}, { provider: CODEX_PROVIDER_ID, providerSettings: {} });
     }
 
     override doStream(_options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult>
