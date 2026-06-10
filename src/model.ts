@@ -801,7 +801,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
                                 approvalsReviewer: callOptions?.approvalsReviewer ?? this.config.providerSettings.defaultThreadSettings?.approvalsReviewer,
                                 sandbox: callOptions?.sandbox ?? this.config.providerSettings.defaultThreadSettings?.sandbox,
-                                model: callOptions?.model ?? this.config.providerSettings.defaultModel,
+                                model: callOptions?.model || this.modelId || this.config.providerSettings.defaultModel,
                             });
                             debugLog?.("outbound", "thread/resume", resumeParams);
                             const resumeResult = await client.request<ThreadResumeResponse>(
@@ -882,7 +882,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 : undefined;
 
                             const threadStartParams: CodexThreadStartParams = stripUndefined({
-                                model: this.config.providerSettings.defaultModel ?? this.modelId,
+                                model: this.modelId || this.config.providerSettings.defaultModel,
                                 dynamicTools,
                                 developerInstructions,
                                 config,
