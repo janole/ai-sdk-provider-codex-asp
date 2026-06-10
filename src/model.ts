@@ -566,8 +566,12 @@ export class CodexLanguageModel implements LanguageModelV3
                         detachDynamicTools = undefined;
                         detachApprovals?.();
                         detachApprovals = undefined;
-                        await fileResolver.cleanup();
+                        // Disconnect before any await: the client detaches its transport
+                        // listener synchronously, so a completion arriving after
+                        // controller.close() lands in the worker buffer instead of being
+                        // enqueued into the closed controller and lost.
                         await client.disconnect();
+                        await fileResolver.cleanup();
                     }
                 };
 
@@ -591,8 +595,12 @@ export class CodexLanguageModel implements LanguageModelV3
                         detachDynamicTools = undefined;
                         detachApprovals?.();
                         detachApprovals = undefined;
-                        await fileResolver.cleanup();
+                        // Disconnect before any await: the client detaches its transport
+                        // listener synchronously, so a completion arriving after
+                        // controller.close() lands in the worker buffer instead of being
+                        // enqueued into the closed controller and lost.
                         await client.disconnect();
+                        await fileResolver.cleanup();
                     }
                 };
 
