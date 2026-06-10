@@ -16,6 +16,8 @@ export interface PendingToolCall {
     toolName: string;
     args: unknown;
     threadId: string;
+    /** Provider-executed tool calls (e.g. parallel exec commands) still awaiting item/completed when the step closed. */
+    openProviderToolCalls?: Array<{ itemId: string; toolName: string }>;
 }
 
 type SessionListenerEntry<K extends keyof CodexTransportEventMap> = {
@@ -36,6 +38,7 @@ export class CodexWorker
     private idleTimer: ReturnType<typeof setTimeout> | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private sessionListeners: SessionListenerEntry<any>[] = [];
+    private bufferedMessages: JsonRpcMessage[] = [];
 
     constructor(settings: CodexWorkerSettings)
     {
@@ -51,12 +54,25 @@ export class CodexWorker
 
         this.inner = this.settings.transportFactory();
 
+        // While a tool call is parked and no session is attached (the gap
+        // between two doStream() steps), inbound messages would otherwise be
+        // dropped — e.g. item/completed of exec commands that were still
+        // running when the step closed. Buffer them for replay on resume.
+        this.inner.on("message", (message) =>
+        {
+            if (this.pendingToolCall && this.sessionListeners.length === 0)
+            {
+                this.bufferedMessages.push(message);
+            }
+        });
+
         this.inner.on("close", () =>
         {
             this.initialized = false;
             this.initializeResult = undefined;
             this.inner = null;
             this.state = "disconnected";
+            this.bufferedMessages = [];
         });
 
         this.inner.on("error", () =>
@@ -65,6 +81,7 @@ export class CodexWorker
             this.initializeResult = undefined;
             this.inner = null;
             this.state = "disconnected";
+            this.bufferedMessages = [];
         });
 
         await this.inner.connect();
@@ -86,6 +103,11 @@ export class CodexWorker
         this.clearSessionListeners();
         this.state = "idle";
 
+        if (!this.pendingToolCall)
+        {
+            this.bufferedMessages = [];
+        }
+
         if (this.settings.idleTimeoutMs > 0)
         {
             this.idleTimer = setTimeout(() =>
@@ -93,6 +115,12 @@ export class CodexWorker
                 void this.shutdown();
             }, this.settings.idleTimeoutMs);
         }
+    }
+
+    /** Returns and clears messages buffered while a tool call was parked with no session attached. */
+    drainBufferedMessages(): JsonRpcMessage[]
+    {
+        return this.bufferedMessages.splice(0);
     }
 
     markInitialized(result: unknown): void
@@ -152,6 +180,7 @@ export class CodexWorker
         }
 
         this.clearSessionListeners();
+        this.bufferedMessages = [];
 
         if (this.inner)
         {

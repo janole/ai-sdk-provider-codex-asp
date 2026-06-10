@@ -735,3 +735,203 @@ describe("Cross-call tool support", () =>
         }
     });
 });
+
+// ── Cross-call boundary with in-flight provider-executed calls ───────────────
+
+/**
+ * A MockTransport where Codex starts a provider-executed exec command and then
+ * requests a client tool. Depending on `completeCommandAt`, the command's
+ * item/completed arrives before the tool request ("step1"), in the gap between
+ * the two doStream() steps ("between"), or never ("never").
+ */
+class ParallelCommandTransport extends MockTransport
+{
+    private readonly completeCommandAt: "step1" | "between" | "never";
+
+    constructor(completeCommandAt: "step1" | "between" | "never")
+    {
+        super();
+        this.completeCommandAt = completeCommandAt;
+    }
+
+    private emitCommandCompleted(): void
+    {
+        this.emitMessage({
+            method: "item/completed",
+            params: { item: { type: "commandExecution", id: "call_cmd1", command: "ls", aggregatedOutput: "file.txt", exitCode: 0, status: "completed" }, threadId: "thr_1", turnId: "turn_1" },
+        });
+    }
+
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        await super.sendMessage(message);
+
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            // Tool-call response from the resumed step — Codex produces the final answer.
+            if ("id" in message && "result" in message && message.id === 200)
+            {
+                queueMicrotask(() =>
+                {
+                    this.emitMessage({
+                        method: "item/started",
+                        params: { item: { type: "agentMessage", id: "item_msg", text: "" }, threadId: "thr_1", turnId: "turn_1" },
+                    });
+                    this.emitMessage({
+                        method: "item/agentMessage/delta",
+                        params: { threadId: "thr_1", turnId: "turn_1", itemId: "item_msg", delta: "Done." },
+                    });
+                    this.emitMessage({
+                        method: "item/completed",
+                        params: { item: { type: "agentMessage", id: "item_msg", text: "Done." }, threadId: "thr_1", turnId: "turn_1" },
+                    });
+                    this.emitMessage({
+                        method: "turn/completed",
+                        params: { threadId: "thr_1", turn: { id: "turn_1", items: [], status: "completed", error: null } },
+                    });
+                });
+            }
+            return;
+        }
+
+        if (message.method === "initialize")
+        {
+            this.emitMessage({ id: message.id, result: { serverInfo: { name: "codex", version: "test" } } });
+            return;
+        }
+
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
+            return;
+        }
+
+        if (message.method === "turn/start")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
+
+            queueMicrotask(() =>
+            {
+                this.emitMessage({ method: "turn/started", params: { threadId: "thr_1", turn: { id: "turn_1" } } });
+
+                // Codex starts a provider-executed command ...
+                this.emitMessage({
+                    method: "item/started",
+                    params: { item: { type: "commandExecution", id: "call_cmd1", command: "ls", cwd: "/tmp" }, threadId: "thr_1", turnId: "turn_1" },
+                });
+
+                if (this.completeCommandAt === "step1")
+                {
+                    this.emitCommandCompleted();
+                }
+
+                // ... then requests a client tool.
+                this.emitMessage({
+                    id: 200,
+                    method: "item/tool/call",
+                    params: { threadId: "thr_1", turnId: "turn_1", callId: "call_ticket", tool: "lookup_ticket", arguments: { id: "TICK-42" } },
+                });
+
+                if (this.completeCommandAt === "between")
+                {
+                    // The command's result lands after the step has closed.
+                    setTimeout(() => this.emitCommandCompleted(), 10);
+                }
+            });
+        }
+    }
+}
+
+describe("Cross-call boundary with in-flight provider-executed calls", () =>
+{
+    const STEP1_PROMPT = [{ role: "user" as const, content: [{ type: "text" as const, text: "Check ticket TICK-42" }] }];
+
+    const STEP2_PROMPT = [
+        ...STEP1_PROMPT,
+        {
+            role: "assistant" as const,
+            content: [
+                { type: "tool-call" as const, toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
+            ],
+            providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+        },
+        {
+            role: "tool" as const,
+            content: [{
+                type: "tool-result" as const,
+                toolCallId: "call_ticket",
+                toolName: "lookup_ticket",
+                output: { type: "text" as const, value: "TICK-42: open" },
+            }],
+        },
+    ];
+
+    async function runBothSteps(transport: ParallelCommandTransport)
+    {
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream: s1 } = await model.doStream({ prompt: STEP1_PROMPT, tools: SDK_TOOLS });
+            const step1 = (await readAll(s1)) as StreamPart[];
+
+            // Let any post-close command completion land in the worker buffer.
+            await new Promise((resolve) => setTimeout(resolve, 30));
+
+            const { stream: s2 } = await model.doStream({ prompt: STEP2_PROMPT, tools: SDK_TOOLS });
+            const step2 = (await readAll(s2)) as StreamPart[];
+
+            return { step1, step2 };
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    }
+
+    it("closes the step immediately and replays the buffered command result into the next step", async () =>
+    {
+        const { step1, step2 } = await runBothSteps(new ParallelCommandTransport("between"));
+
+        // Step 1: the command's tool-call goes out, the step closes without its result.
+        expect(step1.some((p) => p.type === "tool-call" && p.toolCallId === "call_cmd1")).toBe(true);
+        expect(step1.some((p) => p.type === "tool-result" && p.toolCallId === "call_cmd1")).toBe(false);
+        expect(step1.some((p) => p.type === "tool-call" && p.toolCallId === "call_ticket")).toBe(true);
+
+        // Step 2: the real result arrives via replay, before the final answer.
+        const resultIndex = step2.findIndex((p) => p.type === "tool-result" && p.toolCallId === "call_cmd1");
+        expect(resultIndex).toBeGreaterThan(-1);
+        expect(step2[resultIndex]?.isError).toBeUndefined();
+        expect((step2[resultIndex]?.result as { item?: { aggregatedOutput?: string } })?.item?.aggregatedOutput).toBe("file.txt");
+
+        const textIndex = step2.findIndex((p) => p.type === "text-delta");
+        expect(textIndex).toBeGreaterThan(resultIndex);
+
+        expect((step2.find((p) => p.type === "finish")?.finishReason as { unified: string })?.unified).toBe("stop");
+    });
+
+    it("emits a result completing before the tool request within the same step", async () =>
+    {
+        const { step1 } = await runBothSteps(new ParallelCommandTransport("step1"));
+
+        const resultIndex = step1.findIndex((p) => p.type === "tool-result" && p.toolCallId === "call_cmd1");
+        expect(resultIndex).toBeGreaterThan(-1);
+
+        const clientCallIndex = step1.findIndex((p) => p.type === "tool-call" && p.toolCallId === "call_ticket");
+        expect(clientCallIndex).toBeGreaterThan(resultIndex);
+    });
+
+    it("closes an adopted call that never completes via the turn-completed safety net", async () =>
+    {
+        const { step1, step2 } = await runBothSteps(new ParallelCommandTransport("never"));
+
+        expect(step1.some((p) => p.type === "tool-result" && p.toolCallId === "call_cmd1")).toBe(false);
+
+        // turn/completed in step 2 closes the adopted call with a synthetic error result.
+        const resultPart = step2.find((p) => p.type === "tool-result" && p.toolCallId === "call_cmd1");
+        expect(resultPart?.isError).toBe(true);
+        expect((step2.find((p) => p.type === "finish")?.finishReason as { unified: string })?.unified).toBe("stop");
+    });
+});

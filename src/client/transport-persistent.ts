@@ -181,6 +181,12 @@ export class PersistentTransport implements CodexTransport
         return this.worker?.pendingToolCall ?? null;
     }
 
+    /** Returns and clears messages buffered on the worker while the tool call was parked between steps. */
+    drainBufferedMessages(): JsonRpcMessage[]
+    {
+        return this.worker?.drainBufferedMessages() ?? [];
+    }
+
     async respondToToolCall(result: CodexToolCallResult): Promise<void>
     {
         if (!this.worker?.pendingToolCall)
