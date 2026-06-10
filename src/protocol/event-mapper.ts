@@ -468,6 +468,10 @@ export class CodexEventMapper
         {
             const tracked = this.openToolCalls.get(item.id)!;
 
+            // A replayed completion (adopted from a previous step) can be the
+            // first part of this stream — make sure stream-start precedes it.
+            this.ensureStreamStarted(parts);
+
             parts.push(this.withMeta({
                 type: "tool-result",
                 toolCallId: item.id,
@@ -727,6 +731,41 @@ export class CodexEventMapper
         return [];
     }
 
+    /** Snapshots provider-executed tool calls still awaiting item/completed, for parking across a cross-call step boundary. */
+    takeOpenToolCalls(): Array<{ itemId: string; toolName: string }>
+    {
+        return [...this.openToolCalls].map(([itemId, tracked]) => ({ itemId, toolName: tracked.toolName }));
+    }
+
+    /** Adopts parked open tool calls from a previous step so their late item/completed emits the real tool-result here. */
+    adoptOpenToolCalls(calls: Array<{ itemId: string; toolName: string }>): void
+    {
+        for (const call of calls)
+        {
+            this.openToolCalls.set(call.itemId, { toolName: call.toolName });
+        }
+    }
+
+    /** Emits synthetic error tool-results for all still-open provider-executed calls and clears them. */
+    closeOpenToolCalls(reason: string): LanguageModelV3StreamPart[]
+    {
+        const parts: LanguageModelV3StreamPart[] = [];
+
+        for (const [itemId, tracked] of this.openToolCalls)
+        {
+            parts.push(this.withMeta({
+                type: "tool-result",
+                toolCallId: itemId,
+                toolName: tracked.toolName,
+                result: { error: reason },
+                isError: true,
+            }));
+        }
+        this.openToolCalls.clear();
+
+        return parts;
+    }
+
     // turn/completed
     private handleTurnCompleted(params: unknown): LanguageModelV3StreamPart[]
     {
@@ -745,17 +784,7 @@ export class CodexEventMapper
         }
         this.openReasoningParts.clear();
 
-        for (const [itemId, tracked] of this.openToolCalls)
-        {
-            parts.push(this.withMeta({
-                type: "tool-result",
-                toolCallId: itemId,
-                toolName: tracked.toolName,
-                result: { error: "Tool call did not complete before turn ended" },
-                isError: true,
-            }));
-        }
-        this.openToolCalls.clear();
+        parts.push(...this.closeOpenToolCalls("Tool call did not complete before turn ended"));
         this._sdkDynamicToolCallIds.clear();
 
         const completed = (params ?? {}) as TurnCompletedNotification;
