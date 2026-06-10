@@ -224,7 +224,13 @@ export class AppServerClient
         );
     }
 
-    private async handleMessage(message: JsonRpcMessage): Promise<void> 
+    /** Feeds an externally buffered message through the normal dispatch path (e.g. replay after a cross-call gap). */
+    dispatchMessage(message: JsonRpcMessage): Promise<void>
+    {
+        return this.handleMessage(message);
+    }
+
+    private async handleMessage(message: JsonRpcMessage): Promise<void>
     {
         this.onPacket?.({ direction: "inbound", message });
 
