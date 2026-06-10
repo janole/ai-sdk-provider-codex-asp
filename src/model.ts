@@ -421,6 +421,7 @@ export class CodexLanguageModel implements LanguageModelV3
         persistentTransport: PersistentTransport,
         threadId: string,
         closeSuccessfully: () => Promise<void>,
+        mapper: CodexEventMapper,
     ): void
     {
         client.onToolCallRequest((params: CodexToolCallRequestParams, request) =>
@@ -432,6 +433,11 @@ export class CodexLanguageModel implements LanguageModelV3
             const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T => withProviderMetadata(part, threadId);
 
             // Park the tool call on the worker for cross-call resumption.
+            // Provider-executed calls still awaiting item/completed (e.g. parallel
+            // exec commands) are parked along with it: their completions arrive
+            // after this step closes, get buffered on the worker, and are replayed
+            // into the next step — which adopts the open calls and emits the real
+            // tool-results there.
             // Return a never-resolving promise so AppServerClient does NOT
             // auto-send a JSON-RPC response — we respond manually on the
             // next doStream() via persistentTransport.respondToToolCall().
@@ -441,6 +447,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 toolName,
                 args,
                 threadId,
+                openProviderToolCalls: mapper.takeOpenToolCalls(),
             });
 
             controller.enqueue(withMeta({
@@ -668,13 +675,23 @@ export class CodexLanguageModel implements LanguageModelV3
                             // Register cross-call handler again for chained tool calls
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
-                                pendingToolCall.threadId, closeSuccessfully,
+                                pendingToolCall.threadId, closeSuccessfully, mapper,
                             );
 
                             const approvalsDispatcher = new ApprovalsDispatcher(
                                 resolveApprovalHandlers(this.config.providerSettings, callOptions),
                             );
                             detachApprovals = approvalsDispatcher.attach(client);
+
+                            // Adopt provider-executed calls that were still in flight when
+                            // the previous step closed, then replay messages buffered while
+                            // no step was attached — their item/completed events emit the
+                            // real tool-results into this step.
+                            mapper.adoptOpenToolCalls(pendingToolCall.openProviderToolCalls ?? []);
+                            for (const bufferedMessage of persistentTransport.drainBufferedMessages())
+                            {
+                                await client.dispatchMessage(bufferedMessage);
+                            }
 
                             const result = toolResult ?? {
                                 success: false,
@@ -910,7 +927,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             mapper.enableCrossCallMode();
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
-                                threadId, closeSuccessfully,
+                                threadId, closeSuccessfully, mapper,
                             );
                         }
 
