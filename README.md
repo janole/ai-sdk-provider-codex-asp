@@ -205,7 +205,7 @@ npx tsx examples/stream-text.ts
 - `No such file or command: codex`:
   - Install Codex CLI and ensure `codex` is in `PATH`.
 - `WebSocket is not available in this runtime`:
-  - Use Node.js 18+ with global WebSocket support, or use `stdio` transport.
+  - Use Node.js 20+ with global WebSocket support, or use `stdio` transport.
 - Request timeouts:
   - Increase `toolTimeoutMs` for long-running dynamic tools.
   - Increase `interruptTimeoutMs` if `turn/interrupt` acks are slow under heavy load.
