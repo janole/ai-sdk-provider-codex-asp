@@ -31,15 +31,17 @@ class ToolCallTransport extends MockTransport
 {
     private readonly toolCalls: ScriptedToolCall[];
     private readonly finalMessage: string;
+    private readonly emitDynamicLifecycle: boolean;
     private currentToolIndex = 0;
     private nextRequestId = 200;
     private currentRequestId = 200;
 
-    constructor(toolCalls: ScriptedToolCall[], finalMessage: string)
+    constructor(toolCalls: ScriptedToolCall[], finalMessage: string, emitDynamicLifecycle = false)
     {
         super();
         this.toolCalls = toolCalls;
         this.finalMessage = finalMessage;
+        this.emitDynamicLifecycle = emitDynamicLifecycle;
     }
 
     override async sendMessage(message: JsonRpcMessage): Promise<void>
@@ -100,6 +102,27 @@ class ToolCallTransport extends MockTransport
 
         this.currentRequestId = this.nextRequestId++;
 
+        if (this.emitDynamicLifecycle)
+        {
+            this.emitMessage({
+                method: "item/started",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: tc.callId,
+                        tool: tc.tool,
+                        arguments: tc.args,
+                        status: "inProgress",
+                        contentItems: null,
+                        success: null,
+                        durationMs: null,
+                    },
+                    threadId: "thr_1",
+                    turnId: "turn_1",
+                },
+            });
+        }
+
         this.emitMessage({
             method: "item/tool/callStarted",
             params: { callId: tc.callId, tool: tc.tool },
@@ -127,6 +150,28 @@ class ToolCallTransport extends MockTransport
 
     private handleToolCallResponse(): void
     {
+        const completedToolCall = this.toolCalls[this.currentToolIndex];
+        if (this.emitDynamicLifecycle && completedToolCall)
+        {
+            this.emitMessage({
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "dynamicToolCall",
+                        id: completedToolCall.callId,
+                        tool: completedToolCall.tool,
+                        arguments: completedToolCall.args,
+                        status: "completed",
+                        contentItems: [{ type: "inputText", text: "tool result" }],
+                        success: true,
+                        durationMs: 1,
+                    },
+                    threadId: "thr_1",
+                    turnId: "turn_1",
+                },
+            });
+        }
+
         this.currentToolIndex++;
 
         if (this.currentToolIndex < this.toolCalls.length)
@@ -436,6 +481,70 @@ describe("Cross-call tool support", () =>
             expect(textDeltas[0]?.delta).toBe("TICK-42 is open (team Alpha). Weather in Berlin: 22°C, sunny.");
 
             expect((p3.find((p) => p.type === "finish")?.finishReason as { unified: string })?.unified).toBe("stop");
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
+
+    it("does not duplicate dynamic tool lifecycle parts on resumed steps", async () =>
+    {
+        const transport = new ToolCallTransport(
+            [TICKET_TOOL, WEATHER_TOOL],
+            "Done.",
+            true,
+        );
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream: s1 } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "Check ticket and weather" }] }],
+                tools: SDK_TOOLS,
+            });
+            const step1 = (await readAll(s1)) as StreamPart[];
+
+            expect(step1.filter((part) => part.type === "tool-call")).toEqual([
+                expect.objectContaining({
+                    toolCallId: "call_ticket",
+                    toolName: "lookup_ticket",
+                }),
+            ]);
+
+            const { stream: s2 } = await model.doStream({
+                prompt: [
+                    { role: "user", content: [{ type: "text", text: "Check ticket and weather" }] },
+                    {
+                        role: "assistant",
+                        content: [
+                            { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
+                        ],
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                    },
+                    {
+                        role: "tool",
+                        content: [{
+                            type: "tool-result",
+                            toolCallId: "call_ticket",
+                            toolName: "lookup_ticket",
+                            output: { type: "text", value: "TICK-42: open" },
+                        }],
+                    },
+                ],
+                tools: SDK_TOOLS,
+            });
+            const step2 = (await readAll(s2)) as StreamPart[];
+
+            expect(step2.filter((part) => part.type === "tool-call")).toEqual([
+                expect.objectContaining({
+                    toolCallId: "call_weather",
+                    toolName: "check_weather",
+                }),
+            ]);
+            expect(step2.some((part) => part.type === "tool-result")).toBe(false);
         }
         finally
         {
