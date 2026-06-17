@@ -302,6 +302,7 @@ describe("CodexLanguageModel.doStream", () =>
                 "method" in message && message.method === "thread/resume",
         );
         expect(resumeMessage?.params).toMatchObject({ threadId: "thr_existing" });
+        expect(resumeMessage?.params).not.toHaveProperty("persistExtendedHistory");
 
         const turnStartMessage = transport.sentMessages.find(
             (message): message is { method: string; params?: unknown } =>

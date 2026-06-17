@@ -822,7 +822,6 @@ export class CodexLanguageModel implements LanguageModelV3
                         {
                             const resumeParams: CodexThreadResumeParams = stripUndefined({
                                 threadId: resumeThreadId,
-                                persistExtendedHistory: false,
                                 developerInstructions,
                                 cwd: callOptions?.cwd ?? this.config.providerSettings.defaultThreadSettings?.cwd,
                                 approvalPolicy: callOptions?.approvalPolicy ?? this.config.providerSettings.defaultThreadSettings?.approvalPolicy,
