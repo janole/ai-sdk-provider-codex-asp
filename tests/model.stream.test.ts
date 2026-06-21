@@ -1040,6 +1040,9 @@ describe("CodexLanguageModel.doStream", () =>
 
         await readAll(stream);
 
+        // turn/interrupt now fires in the background AFTER the stream closes; let it run.
+        await new Promise(resolve => setTimeout(resolve, 0));
+
         const interruptMessage = transport.sentMessages.find(
             (message): message is { method: string; params?: unknown } =>
                 "method" in message && message.method === "turn/interrupt",
@@ -1049,5 +1052,67 @@ describe("CodexLanguageModel.doStream", () =>
             threadId: "thr_abort",
             turnId: "turn_abort",
         });
+    });
+
+    it("closes the stream immediately on abort, without waiting for turn/interrupt to settle", async () =>
+    {
+        let interruptResolved = false;
+
+        // Acks everything immediately EXCEPT turn/interrupt, whose response is delayed — so a
+        // stream that closed before the interrupt settled proves the close no longer blocks on it.
+        class DelayedInterruptTransport extends InterruptAwareTransport
+        {
+            override async sendMessage(message: JsonRpcMessage): Promise<void>
+            {
+                if ("method" in message && message.method === "turn/interrupt")
+                {
+                    await MockTransport.prototype.sendMessage.call(this, message);
+                    setTimeout(() =>
+                    {
+                        interruptResolved = true;
+                        this.emitMessage({ id: (message as { id: string | number }).id, result: {} });
+                    }, 200);
+                    return;
+                }
+
+                await super.sendMessage(message);
+            }
+        }
+
+        const transport = new DelayedInterruptTransport();
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+        const model = provider.languageModel("gpt-5.5");
+        const abortController = new AbortController();
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "interrupt me" }] }],
+            abortSignal: abortController.signal,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        abortController.abort();
+
+        const parts = await readAll(stream) as Array<{ type?: string; error?: unknown }>;
+
+        // The stream closed before the (delayed) interrupt resolved — the whole point of the fix.
+        expect(interruptResolved).toBe(false);
+
+        // …and it ended with an AbortError part rather than hanging.
+        const errorPart = parts.find(part => part.type === "error");
+        expect(errorPart).toBeDefined();
+        expect((errorPart?.error as Error)?.name).toBe("AbortError");
+
+        // The interrupt is still attempted in the background; let it settle so no timer leaks.
+        await new Promise(resolve => setTimeout(resolve, 250));
+        expect(interruptResolved).toBe(true);
+
+        const interruptMessage = transport.sentMessages.find(
+            (message): message is { method: string } =>
+                "method" in message && message.method === "turn/interrupt",
+        );
+        expect(interruptMessage).toBeDefined();
     });
 });

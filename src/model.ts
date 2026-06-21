@@ -540,11 +540,42 @@ export class CodexLanguageModel implements LanguageModelV3
 
         const fileResolver = new PromptFileResolver();
 
+        let closed = false;
+        let teardownStarted = false;
+
+        // Stops the codex turn and releases the pooled worker — always AFTER the interrupt
+        // settles, so a worker is never recycled mid-turn. Runs off the consumer's critical
+        // path; the interrupt timeout is swallowed (never the `turn/interrupt` crash).
+        const teardownAfterStop = async () =>
+        {
+            if (teardownStarted)
+            {
+                return;
+            }
+            teardownStarted = true;
+
+            try
+            {
+                await interruptTurnIfPossible();
+            }
+            catch
+            {
+                // Best-effort only: always release the worker even if interrupt fails/times out.
+            }
+
+            try
+            {
+                await client.disconnect();
+            }
+            finally
+            {
+                await fileResolver.cleanup();
+            }
+        };
+
         const stream = new ReadableStream<LanguageModelV3StreamPart>({
             start: (controller) =>
             {
-                let closed = false;
-
                 const closeWithError = async (error: unknown) =>
                 {
                     if (closed)
@@ -604,21 +635,39 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
                 };
 
-                const abortHandler = () => 
+                // Closes the consumer-facing stream WITHOUT tearing down codex, so the AI-SDK
+                // `for await` unblocks immediately on abort. The worker stays held until
+                // teardownAfterStop() releases it once the interrupt settles.
+                const closeControllerWithError = (error: unknown) =>
                 {
-                    void (async () =>
+                    if (closed)
                     {
-                        try
-                        {
-                            await interruptTurnIfPossible();
-                        }
-                        catch
-                        {
-                            // Best-effort only: always close/disconnect even if interrupt fails.
-                        }
+                        return;
+                    }
 
-                        await closeWithError(new DOMException("Aborted", "AbortError"));
-                    })();
+                    session?.markInactive();
+                    controller.enqueue({ type: "error", error });
+                    closed = true;
+
+                    try
+                    {
+                        controller.close();
+                    }
+                    finally
+                    {
+                        detachDynamicTools?.();
+                        detachDynamicTools = undefined;
+                        detachApprovals?.();
+                        detachApprovals = undefined;
+                    }
+                };
+
+                const abortHandler = () =>
+                {
+                    // 1. Unblock the consumer's `for await` NOW — never wait on the interrupt.
+                    closeControllerWithError(new DOMException("Aborted", "AbortError"));
+                    // 2. Interrupt the turn + release the worker in the background, safely ordered.
+                    void teardownAfterStop();
                 };
 
                 if (options.abortSignal) 
@@ -747,6 +796,13 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         client.onAnyNotification((method, params) =>
                         {
+                            // The abort path defers the transport detach to a background teardown,
+                            // so a late notification can still arrive after the controller closed.
+                            if (closed)
+                            {
+                                return;
+                            }
+
                             const parts = mapper.map({ method, params });
 
                             // Sync turnId from mapper after it processes turn/started
@@ -978,18 +1034,11 @@ export class CodexLanguageModel implements LanguageModelV3
             },
             cancel: async () =>
             {
+                // Consumer dropped the stream: suppress any late pump enqueue, then stop the
+                // turn + release the worker via the shared, interrupt-first-safe teardown.
                 session?.markInactive();
-
-                try
-                {
-                    await interruptTurnIfPossible();
-                }
-                catch
-                {
-                    // Best-effort only: always disconnect to release resources.
-                }
-                await fileResolver.cleanup();
-                await client.disconnect();
+                closed = true;
+                await teardownAfterStop();
             },
         });
 
