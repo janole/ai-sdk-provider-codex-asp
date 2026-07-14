@@ -19,7 +19,7 @@ export interface CodexThreadDefaults
 {
     /** Working directory for the thread. */
     cwd?: string;
-    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
+    /** Tool-use approval policy — `"never"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
     /** Routes approval requests for the thread to `"user"` or `"guardian_subagent"`. */
     approvalsReviewer?: ApprovalsReviewer;
@@ -59,7 +59,7 @@ export interface CodexCallOptions
 
     /** Working directory for this call. Also sent as turn-level `cwd`. */
     cwd?: string;
-    /** Tool-use approval policy — `"never"` | `"on-failure"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
+    /** Tool-use approval policy — `"never"` | `"on-request"` | `"untrusted"` | `{ granular: … }`. See {@link AskForApproval}. */
     approvalPolicy?: AskForApproval;
     /** Routes approval requests to `"user"` or `"guardian_subagent"`. */
     approvalsReviewer?: ApprovalsReviewer;
