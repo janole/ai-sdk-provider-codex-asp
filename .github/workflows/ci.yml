@@ -23,6 +23,16 @@ jobs:
     strategy:
       matrix:
         node-version: [20, 22]
+        # The package supports both AI SDK majors from one build, so both must be
+        # exercised — a green run on only one proves nothing about the other.
+        ai-version: [6, 7]
+        exclude:
+          # ai@7 requires Node >= 22. Our own floor stays at 20, which governs the
+          # v6 path only, so this combination is unsupported rather than broken.
+          - node-version: 20
+            ai-version: 7
+
+    name: quality-gate (node ${{ matrix.node-version }}, ai@${{ matrix.ai-version }})
 
     steps:
       - name: Checkout
@@ -36,6 +46,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # `ai` is a peer dependency, so npm's auto-install picks a version on its own.
+      # Pin it explicitly instead, or the matrix silently tests the same major twice.
+      - name: Install AI SDK v${{ matrix.ai-version }}
+        run: npm install --no-save "ai@^${{ matrix.ai-version }}"
+
+      - name: Report resolved versions
+        run: node -p "['ai','@ai-sdk/provider'].map(p => p + '@' + require(p + '/package.json').version).join('  ')"
 
       - name: Run quality gate & check if we can build everything ...
         run: npm run qa && npm run build
