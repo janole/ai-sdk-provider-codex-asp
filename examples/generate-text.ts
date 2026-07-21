@@ -10,11 +10,11 @@ import { generateText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
 });
 
 const result = await generateText({
-    model: codex.languageModel("gpt-5.5"),
+    model: codex.languageModel("gpt-5.6-sol"),
     prompt: "Hello, who are you?",
 });
 

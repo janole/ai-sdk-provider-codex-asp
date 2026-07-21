@@ -43,11 +43,11 @@ if (!mediaType)
 const imageData = readFileSync(imagePath);
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
 });
 
 const result = await generateText({
-    model: codex.languageModel("gpt-5.5"),
+    model: codex.languageModel("gpt-5.6-sol"),
     messages: [
         {
             role: "user",

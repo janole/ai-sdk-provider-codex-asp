@@ -14,7 +14,7 @@ import { streamText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
     approvals: {
         onCommandApproval: (req) =>
         {
@@ -37,7 +37,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-    model: codex("gpt-5.5"),
+    model: codex("gpt-5.6-sol"),
     prompt: "Create a file called /tmp/codex-approval-test.txt with the content 'hello from codex', then delete it again. Confirm both actions were successful.",
 });
 

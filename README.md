@@ -2,7 +2,7 @@
 
 `@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) custom provider for the Codex App Server Protocol, supporting **both AI SDK v6 and v7** from one package.
 
-Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.128.0) 0.128.0.
+Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.144.4) 0.144.4.
 
 - `LanguageModelV3` provider implementation — used natively by `ai@6`, and accepted by `ai@7` through its built-in v3→v4 model proxy
 - Streaming (`streamText`) and non-streaming (`generateText`)
@@ -41,12 +41,12 @@ import { generateText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.5',
+  defaultModel: 'gpt-5.6-sol',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = await generateText({
-  model: codex.languageModel('gpt-5.5'),
+  model: codex.languageModel('gpt-5.6-sol'),
   prompt: 'Write a short release note title for websocket support.',
 });
 
@@ -60,12 +60,12 @@ import { streamText } from 'ai';
 import { createCodexAppServer } from '@janole/ai-sdk-provider-codex-asp';
 
 const codex = createCodexAppServer({
-  defaultModel: 'gpt-5.5',
+  defaultModel: 'gpt-5.6-sol',
   clientInfo: { name: 'my-app', version: '0.1.0' },
 });
 
 const result = streamText({
-  model: codex('gpt-5.5'),
+  model: codex('gpt-5.6-sol'),
   prompt: 'Explain JSON-RPC in one paragraph.',
 });
 
@@ -90,7 +90,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-  model: codex('gpt-5.5'),
+  model: codex('gpt-5.6-sol'),
   prompt: 'Can you check ticket 15 and also the weather in Berlin?',
   tools: {
     lookup_ticket: tool({
@@ -177,7 +177,7 @@ const codex = createCodexAppServer({
 });
 
 await streamText({
-  model: codex("gpt-5.5"),
+  model: codex("gpt-5.6-sol"),
   prompt: "Delete the old generated protocol files under src/protocol/app-server-protocol if they are no longer referenced, then regenerate the current ones.",
   providerOptions: codexCallOptions({
     approvalsReviewer: "user",

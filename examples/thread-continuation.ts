@@ -18,10 +18,10 @@ import { CODEX_PROVIDER_ID } from "../src";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
 });
 
-const model = codex.languageModel("gpt-5.5");
+const model = codex.languageModel("gpt-5.6-sol");
 const messages: ModelMessage[] = [];
 
 // ── Turn 1 ──────────────────────────────────────────────────────────────────
@@ -48,9 +48,9 @@ console.log("\nShutting down provider…");
 await codex.shutdown();
 
 const codex2 = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
 });
-const model2 = codex2.languageModel("gpt-5.5");
+const model2 = codex2.languageModel("gpt-5.6-sol");
 console.log("Provider restarted.\n");
 
 // ── Turn 2 ──────────────────────────────────────────────────────────────────

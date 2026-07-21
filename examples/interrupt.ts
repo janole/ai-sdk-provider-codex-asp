@@ -14,7 +14,7 @@ import { streamText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
     onSessionCreated: (session) =>
     {
         console.log(`[session] created — thread=${session.threadId} turn=${String(session.turnId)}\n`);
@@ -29,7 +29,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-    model: codex("gpt-5.5"),
+    model: codex("gpt-5.6-sol"),
     prompt: "Write a very detailed, step-by-step guide to building a REST API in Node.js with Express. Cover routing, middleware, error handling, authentication, database integration, testing, and deployment.",
 });
 
