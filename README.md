@@ -1,10 +1,10 @@
 # @janole/ai-sdk-provider-codex-asp
 
-`@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) v6 custom provider for the Codex App Server Protocol.
+`@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) custom provider for the Codex App Server Protocol, supporting **both AI SDK v6 and v7** from one package.
 
 Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.128.0) 0.128.0.
 
-- `LanguageModelV3` provider implementation
+- `LanguageModelV3` provider implementation — used natively by `ai@6`, and accepted by `ai@7` through its built-in v3→v4 model proxy
 - Streaming (`streamText`) and non-streaming (`generateText`)
 - Standard AI SDK `tool()` support via Codex dynamic tools injection
 - Provider-executed tool protocol for Codex command executions
@@ -17,6 +17,20 @@ Status: POC feature-complete for language model usage. Currently tested with [co
 ```bash
 npm install @janole/ai-sdk-provider-codex-asp ai
 ```
+
+### AI SDK version support
+
+| AI SDK | Supported | Node.js |
+| --- | --- | --- |
+| `ai@6` | yes, natively | 20+ |
+| `ai@7` | yes, via the SDK's v3→v4 proxy | **22+** |
+
+One package covers both: the provider implements `LanguageModelV3`, which `ai@7`
+accepts at runtime and proxies forward to `LanguageModelV4`. Nothing needs to be
+configured differently.
+
+The Node.js 22 floor on the `ai@7` row is the AI SDK's own requirement, not ours —
+this package still supports Node 20 for `ai@6` consumers.
 
 ## Quick Start
 

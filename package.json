@@ -1,7 +1,7 @@
 {
   "name": "@janole/ai-sdk-provider-codex-asp",
-  "version": "0.4.16",
-  "description": "Vercel AI SDK v6 custom provider for the Codex App Server Protocol.",
+  "version": "0.5.0",
+  "description": "Vercel AI SDK custom provider for the Codex App Server Protocol. Works with AI SDK v6 and v7.",
   "license": "MIT",
   "author": "Jan Ole Suhr",
   "type": "module",
@@ -55,7 +55,7 @@
   },
   "homepage": "https://github.com/janole/ai-sdk-provider-codex-asp#readme",
   "peerDependencies": {
-    "ai": "^6.0.0"
+    "ai": "^6.0.0 || ^7.0.0"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.9.0",
@@ -71,7 +71,6 @@
     "vitest": "^3.0.7"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^3.0.8",
-    "@ai-sdk/provider-utils": "^4.0.15"
+    "@ai-sdk/provider": "^3.0.0 || ^4.0.0"
   }
 }
