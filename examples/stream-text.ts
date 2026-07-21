@@ -10,11 +10,11 @@ import { streamText } from "ai";
 import { createCodexAppServer } from "../src/provider";
 
 const codex = createCodexAppServer({
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-sol",
 });
 
 const result = streamText({
-    model: codex("gpt-5.5"),
+    model: codex("gpt-5.6-sol"),
     prompt: "Check the local repository just quickly. What it is about?",
 });
 

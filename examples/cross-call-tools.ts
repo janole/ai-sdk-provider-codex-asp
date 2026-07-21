@@ -19,7 +19,7 @@ const codex = createCodexAppServer({
 });
 
 const result = streamText({
-    model: codex("gpt-5.5"),
+    model: codex("gpt-5.6-sol"),
     prompt: "Can you check ticket 15 and also the weather in Berlin?",
     tools: {
         lookup_ticket: tool({

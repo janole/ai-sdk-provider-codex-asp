@@ -76,7 +76,7 @@ const codex = createCodexAppServer({
 
 // Codex can now call these tools during generation
 const result = streamText({
-    model: codex("gpt-5.5"),
+    model: codex("gpt-5.6-sol"),
     prompt: "Can you check ticket 15 and also the weather in Berlin?",
 });
 
