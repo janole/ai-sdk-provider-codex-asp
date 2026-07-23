@@ -845,6 +845,137 @@ describe("Cross-call tool support", () =>
     });
 });
 
+// ── Codex abandons a parked cross-call tool ──────────────────────────────────
+
+/**
+ * A MockTransport where Codex requests a client tool and then — instead of ever
+ * consuming its result — ends the turn on its own. This is the parked-approval
+ * case: the human decision does not land in time, Codex gives up on the call and
+ * completes the turn. The turn/completed lands in the worker buffer while the
+ * call is parked, and is replayed into the resumed step.
+ */
+class AbandonedToolTransport extends MockTransport
+{
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        await super.sendMessage(message);
+
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            return;
+        }
+
+        if (message.method === "initialize")
+        {
+            this.emitMessage({ id: message.id, result: { serverInfo: { name: "codex", version: "test" } } });
+            return;
+        }
+
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_1" } });
+            return;
+        }
+
+        if (message.method === "turn/start")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_1" } });
+
+            queueMicrotask(() =>
+            {
+                this.emitMessage({ method: "turn/started", params: { threadId: "thr_1", turn: { id: "turn_1" } } });
+
+                // Codex requests the client tool — this parks and closes step 1.
+                this.emitMessage({
+                    id: 200,
+                    method: "item/tool/call",
+                    params: { threadId: "thr_1", turnId: "turn_1", callId: "call_ticket", tool: "lookup_ticket", arguments: { id: "TICK-42" } },
+                });
+            });
+
+            // ... then gives up and ends the turn while the call is still parked. The
+            // delay lets step 1 close first, so this lands in the worker buffer.
+            setTimeout(() =>
+            {
+                this.emitMessage({
+                    method: "turn/completed",
+                    params: { threadId: "thr_1", turn: { id: "turn_1", items: [], status: "completed", error: null } },
+                });
+            }, 10);
+        }
+    }
+}
+
+describe("Codex abandons a parked cross-call tool", () =>
+{
+    it("emits an interrupted tool-result and does not respond into the dead turn", async () =>
+    {
+        const transport = new AbandonedToolTransport();
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            // Step 1: Codex requests the tool; the step closes with finish=tool-calls.
+            const { stream: s1 } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "Check ticket TICK-42" }] }],
+                tools: SDK_TOOLS,
+            });
+            const step1 = (await readAll(s1)) as StreamPart[];
+            expect(step1.find((p) => p.type === "tool-call")?.toolCallId).toBe("call_ticket");
+
+            // Let the abandoning turn/completed land in the worker buffer.
+            await new Promise((resolve) => setTimeout(resolve, 30));
+
+            // Step 2: the SDK provides the (now moot) tool result. The buffered turn/completed
+            // is replayed before we respond, so the pending call is surfaced as interrupted.
+            const { stream: s2 } = await model.doStream({
+                prompt: [
+                    { role: "user", content: [{ type: "text", text: "Check ticket TICK-42" }] },
+                    {
+                        role: "assistant",
+                        content: [
+                            { type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: { id: "TICK-42" } },
+                        ],
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                    },
+                    {
+                        role: "tool",
+                        content: [{
+                            type: "tool-result",
+                            toolCallId: "call_ticket",
+                            toolName: "lookup_ticket",
+                            output: { type: "text", value: "TICK-42: open" },
+                        }],
+                    },
+                ],
+            });
+            const step2 = (await readAll(s2)) as StreamPart[];
+
+            // The parked call is answered with an interrupted error result, before the finish.
+            const resultIndex = step2.findIndex((p) => p.type === "tool-result" && p.toolCallId === "call_ticket");
+            expect(resultIndex).toBeGreaterThan(-1);
+            expect(step2[resultIndex]?.isError).toBe(true);
+            expect((step2[resultIndex]?.result as { error?: string })?.error).toContain("Approval interrupted");
+
+            const finishIndex = step2.findIndex((p) => p.type === "finish");
+            expect(finishIndex).toBeGreaterThan(resultIndex);
+            expect((step2[finishIndex]?.finishReason as { unified: string })?.unified).toBe("stop");
+
+            // Crucially: no tool response was sent into the dead turn (that is what hangs).
+            const toolResponse = transport.sentMessages.find(
+                (msg) => "id" in msg && msg.id === 200 && "result" in msg,
+            );
+            expect(toolResponse).toBeUndefined();
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
+});
+
 // ── Cross-call boundary with in-flight provider-executed calls ───────────────
 
 /**

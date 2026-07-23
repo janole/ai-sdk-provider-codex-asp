@@ -211,6 +211,15 @@ export class PersistentTransport implements CodexTransport
         }
         this.worker.pendingToolCall = pending;
     }
+
+    /** Drops the parked tool call without answering it — used when Codex has already ended the turn, so the request can no longer be responded to. */
+    discardPendingToolCall(): void
+    {
+        if (this.worker)
+        {
+            this.worker.pendingToolCall = null;
+        }
+    }
 }
 
 function isInitializeRequest(
