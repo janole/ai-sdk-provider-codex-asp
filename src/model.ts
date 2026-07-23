@@ -73,7 +73,14 @@ type PassThroughStreamContentPart = Extract<
     { type: "tool-call" | "tool-result" | "file" | "source" | "tool-approval-request" }
 >;
 
-function createEmptyUsage(): LanguageModelV3Usage 
+/**
+ * Reported as the tool-result when Codex ends a turn while a cross-call tool is still parked
+ * — it gave up waiting (e.g. a human approval that never landed in time) and moved on. Emitting
+ * this instead of responding into a turn that no longer exists is what stops the stream hanging.
+ */
+const CROSS_CALL_ABANDONED_REASON = "Approval interrupted: Codex ended the turn before the tool result was provided.";
+
+function createEmptyUsage(): LanguageModelV3Usage
 {
     return {
         inputTokens: {
@@ -716,11 +723,34 @@ export class CodexLanguageModel implements LanguageModelV3
                             });
                             mapper.setThreadId(pendingToolCall.threadId);
 
+                            // Codex can give up on a parked cross-call tool: when a tool stays
+                            // unanswered too long (e.g. a human approval that never lands in time)
+                            // it terminates the call and ends the turn on its own. If that turn-end
+                            // reaches us before we send the result — replayed here from the worker
+                            // buffer — responding would target a turn that no longer exists and the
+                            // stream would hang. A finish before we have responded means exactly
+                            // that: surface an interrupted tool-result for the parked call, the same
+                            // safety net handleTurnCompleted gives provider-executed calls.
+                            let crossCallResponded = false;
+                            let turnEndedBeforeResponse = false;
+
                             client.onAnyNotification((method, params) =>
                             {
                                 const parts = mapper.map({ method, params });
                                 for (const part of parts)
                                 {
+                                    if (part.type === "finish" && !crossCallResponded && !turnEndedBeforeResponse)
+                                    {
+                                        turnEndedBeforeResponse = true;
+                                        controller.enqueue(withProviderMetadata({
+                                            type: "tool-result",
+                                            toolCallId: pendingToolCall.callId,
+                                            toolName: pendingToolCall.toolName,
+                                            result: { error: CROSS_CALL_ABANDONED_REASON },
+                                            isError: true,
+                                        }, pendingToolCall.threadId));
+                                    }
+
                                     controller.enqueue(part);
                                     if (part.type === "finish")
                                     {
@@ -752,6 +782,19 @@ export class CodexLanguageModel implements LanguageModelV3
                                 await client.dispatchMessage(bufferedMessage);
                             }
 
+                            // Codex already ended the turn while the call was parked: the request
+                            // is gone, so drop it rather than responding into a dead turn (which
+                            // hangs). The interrupted tool-result was already emitted above.
+                            if (turnEndedBeforeResponse)
+                            {
+                                persistentTransport.discardPendingToolCall();
+                                toolLogger?.({
+                                    event: "cross-call-abandoned",
+                                    data: { callId: pendingToolCall.callId, toolName: pendingToolCall.toolName },
+                                });
+                                return;
+                            }
+
                             const result = toolResult ?? {
                                 success: false,
                                 contentItems: [{
@@ -760,6 +803,7 @@ export class CodexLanguageModel implements LanguageModelV3
                                 }],
                             };
 
+                            crossCallResponded = true;
                             await persistentTransport.respondToToolCall(result);
 
                             toolLogger?.({
