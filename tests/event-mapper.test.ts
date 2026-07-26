@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { TokenUsageBreakdown } from "../src/protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import { CodexEventMapper } from "../src/protocol/event-mapper";
 
 const EMPTY_USAGE = {
@@ -794,9 +795,8 @@ describe("CodexEventMapper", () =>
         });
     });
 
-    // Codex emits one tokenUsage notification per model request, and a single turn
-    // routinely spans dozens of them. Reporting only the final `last` under-counted
-    // real sessions by ~14x, so the mapper baselines off the thread total instead.
+    // One notification per model request, dozens per turn: reporting only the final
+    // `last` under-counted real sessions by ~14x.
     it("accumulates usage across the model requests of a multi-step turn", () =>
     {
         const mapper = new CodexEventMapper();
@@ -840,8 +840,7 @@ describe("CodexEventMapper", () =>
         expect(finish?.usage.outputTokens).toEqual({ total: 600, text: 500, reasoning: 100 });
     });
 
-    // Observed in a real session: Codex re-emitted a byte-identical token_count.
-    // Plain accumulation double-counted it; baselining off the total does not.
+    // Payload taken from a real session, where Codex re-emitted it byte-identically.
     it("is idempotent when Codex re-emits an identical usage notification", () =>
     {
         const mapper = new CodexEventMapper();
@@ -875,6 +874,37 @@ describe("CodexEventMapper", () =>
         const finish = parts.find((p) => p.type === "finish");
         expect(finish?.usage.inputTokens.total).toBe(101852);
         expect(finish?.usage.inputTokens.cacheRead).toBe(101120);
+    });
+
+    // Same duplicate, but split across a step boundary: without a carried-over
+    // baseline the new step would self-baseline and report the request twice.
+    it("reports zero when a step opens with the notification that closed the previous one", () =>
+    {
+        const notification = {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: {
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, outputTokens: 223, reasoningOutputTokens: 82 },
+                    modelContextWindow: 258400,
+                },
+            },
+        };
+
+        let carried: TokenUsageBreakdown | undefined;
+
+        const stepOne = new CodexEventMapper();
+        stepOne.setUsageTotalListener((_id, total) => { carried = total; });
+        stepOne.map(notification);
+        expect(stepOne.getUsage()?.inputTokens.total).toBe(101852);
+
+        const stepTwo = new CodexEventMapper();
+        stepTwo.setUsageBaseline(carried);
+        stepTwo.map(notification);
+        expect(stepTwo.getUsage()?.inputTokens.total).toBe(0);
+        expect(stepTwo.getUsage()?.inputTokens.cacheRead).toBe(0);
     });
 
     it("maps mcpToolCall item/started and item/completed with nested shape", () =>

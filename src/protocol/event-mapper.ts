@@ -146,6 +146,7 @@ export class CodexEventMapper
      * mapper's first observed model request. See handleTokenUsageUpdated.
      */
     private usageBaseline: TokenUsageBreakdown | undefined;
+    private usageTotalListener: ((threadId: string, total: TokenUsageBreakdown) => void) | undefined;
 
     private readonly handlers: Record<string, (params: unknown) => LanguageModelV3StreamPart[]>;
 
@@ -721,16 +722,9 @@ export class CodexEventMapper
 
     // thread/tokenUsage/updated
     //
-    // Codex reports `last` per *model request* and `total` cumulatively for the
-    // thread. One turn routinely spans dozens of model requests (tool loops run
-    // inside Codex), and one cross-call step can span several, so reporting
-    // `last` alone under-reports a step by an order of magnitude.
-    //
-    // Instead we baseline off the thread total as it stood before this mapper's
-    // first observed request (`total - last`) and report the delta since. That
-    // is naturally correct across any number of requests, and it is idempotent:
-    // Codex does re-emit byte-identical notifications, which plain accumulation
-    // would double-count.
+    // `last` is one model request and a turn spans dozens of them, so we report
+    // the delta against a baseline total instead. Deltas are also idempotent —
+    // Codex re-emits identical notifications, which accumulation would double-count.
     private handleTokenUsageUpdated(params: unknown): LanguageModelV3StreamPart[]
     {
         const p = (params ?? {}) as ThreadTokenUsageUpdatedNotification;
@@ -742,6 +736,7 @@ export class CodexEventMapper
             return [];
         }
 
+        // Self-baseline when no previous step carried one over.
         this.usageBaseline ??= {
             totalTokens: total.totalTokens - last.totalTokens,
             inputTokens: total.inputTokens - last.inputTokens,
@@ -749,6 +744,11 @@ export class CodexEventMapper
             outputTokens: total.outputTokens - last.outputTokens,
             reasoningOutputTokens: total.reasoningOutputTokens - last.reasoningOutputTokens,
         };
+
+        if (p.threadId)
+        {
+            this.usageTotalListener?.(p.threadId, total);
+        }
 
         const baseline = this.usageBaseline;
         const inputTotal = nonNegative(total.inputTokens - baseline.inputTokens);
@@ -783,6 +783,17 @@ export class CodexEventMapper
     getUsage(): LanguageModelV3Usage | undefined
     {
         return this.latestUsage;
+    }
+
+    /** Seeds the baseline from a previous step, so a re-emitted notification reports zero rather than its request again. */
+    setUsageBaseline(total: TokenUsageBreakdown | null | undefined): void
+    {
+        this.usageBaseline = total ?? undefined;
+    }
+
+    setUsageTotalListener(listener: (threadId: string, total: TokenUsageBreakdown) => void): void
+    {
+        this.usageTotalListener = listener;
     }
 
     /** Snapshots provider-executed tool calls still awaiting item/completed, for parking across a cross-call step boundary. */

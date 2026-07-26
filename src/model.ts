@@ -464,10 +464,8 @@ export class CodexLanguageModel implements LanguageModelV3
                 input: typeof args === "string" ? args : JSON.stringify(args),
             }));
 
-            // A cross-call step ends here, before turn/completed, so the usage
-            // Codex has reported for this step must come from the mapper — using
-            // an empty usage would drop every model request made before the tool
-            // call, which is most of them in a tool-heavy turn.
+            // This step ends before turn/completed, so its usage comes from the
+            // mapper — an empty usage would drop every request before the tool call.
             controller.enqueue(withMeta({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
@@ -704,6 +702,13 @@ export class CodexLanguageModel implements LanguageModelV3
                             ? transport
                             : null;
                         const pendingToolCall = persistentTransport?.getPendingToolCall() ?? null;
+
+                        if (persistentTransport)
+                        {
+                            const usageThreadId = pendingToolCall?.threadId ?? resumeThreadId;
+                            mapper.setUsageBaseline(persistentTransport.getLastUsageTotal(usageThreadId));
+                            mapper.setUsageTotalListener((id, total) => persistentTransport.setLastUsageTotal(id, total));
+                        }
 
                         if (pendingToolCall && persistentTransport)
                         {
