@@ -776,17 +776,105 @@ describe("CodexEventMapper", () =>
             usage: {
                 inputTokens: {
                     total: 600,
-                    noCache: undefined,
+                    noCache: 400,
                     cacheRead: 200,
                     cacheWrite: undefined,
                 },
                 outputTokens: {
                     total: 200,
-                    text: undefined,
+                    text: 150,
                     reasoning: 50,
+                },
+                raw: {
+                    total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, outputTokens: 500, reasoningOutputTokens: 100 },
+                    last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, outputTokens: 200, reasoningOutputTokens: 50 },
+                    modelContextWindow: 128000,
                 },
             },
         });
+    });
+
+    // Codex emits one tokenUsage notification per model request, and a single turn
+    // routinely spans dozens of them. Reporting only the final `last` under-counted
+    // real sessions by ~14x, so the mapper baselines off the thread total instead.
+    it("accumulates usage across the model requests of a multi-step turn", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const usageEvent = (total: number[], last: number[]) => ({
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: {
+                    total: { totalTokens: total[0], inputTokens: total[1], cachedInputTokens: total[2], outputTokens: total[3], reasoningOutputTokens: total[4] },
+                    last: { totalTokens: last[0], inputTokens: last[1], cachedInputTokens: last[2], outputTokens: last[3], reasoningOutputTokens: last[4] },
+                    modelContextWindow: 128000,
+                },
+            },
+        });
+
+        const parts = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            // Thread already carried 10000 input / 4000 cached before this step.
+            usageEvent([11100, 11000, 5000, 100, 20], [1100, 1000, 1000, 100, 20]),
+            usageEvent([13300, 13000, 6500, 300, 60], [2200, 2000, 1500, 200, 40]),
+            usageEvent([16600, 16000, 9000, 600, 100], [3300, 3000, 2500, 300, 40]),
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const finish = parts.find((p) => p.type === "finish");
+        // Baseline is 16000-3000 = 13000 minus the 3000 of the first request => 10000.
+        expect(finish?.usage.inputTokens).toEqual({
+            total: 6000,
+            noCache: 1000,
+            cacheRead: 5000,
+            cacheWrite: undefined,
+        });
+        expect(finish?.usage.outputTokens).toEqual({ total: 600, text: 500, reasoning: 100 });
+    });
+
+    // Observed in a real session: Codex re-emitted a byte-identical token_count.
+    // Plain accumulation double-counted it; baselining off the total does not.
+    it("is idempotent when Codex re-emits an identical usage notification", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const duplicate = {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: {
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, outputTokens: 223, reasoningOutputTokens: 82 },
+                    modelContextWindow: 258400,
+                },
+            },
+        };
+
+        const parts = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            duplicate,
+            duplicate,
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const finish = parts.find((p) => p.type === "finish");
+        expect(finish?.usage.inputTokens.total).toBe(101852);
+        expect(finish?.usage.inputTokens.cacheRead).toBe(101120);
     });
 
     it("maps mcpToolCall item/started and item/completed with nested shape", () =>

@@ -464,10 +464,14 @@ export class CodexLanguageModel implements LanguageModelV3
                 input: typeof args === "string" ? args : JSON.stringify(args),
             }));
 
+            // A cross-call step ends here, before turn/completed, so the usage
+            // Codex has reported for this step must come from the mapper — using
+            // an empty usage would drop every model request made before the tool
+            // call, which is most of them in a tool-heavy turn.
             controller.enqueue(withMeta({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
-                usage: createEmptyUsage(),
+                usage: mapper.getUsage() ?? createEmptyUsage(),
             }));
 
             void closeSuccessfully();

@@ -92,7 +92,7 @@ class ToolCallTransport extends MockTransport
         }
     }
 
-    private emitNextToolCall(): void
+    protected emitNextToolCall(): void
     {
         const tc = this.toolCalls[this.currentToolIndex];
         if (!tc)
@@ -205,6 +205,30 @@ class ToolCallTransport extends MockTransport
                 });
             });
         }
+    }
+}
+
+/**
+ * Reports token usage before each tool call, the way Codex does once the model
+ * request that produced the call has completed.
+ */
+class UsageReportingToolCallTransport extends ToolCallTransport
+{
+    protected override emitNextToolCall(): void
+    {
+        this.emitMessage({
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr_1",
+                turnId: "turn_1",
+                tokenUsage: {
+                    total: { totalTokens: 5500, inputTokens: 5000, cachedInputTokens: 3000, outputTokens: 500, reasoningOutputTokens: 120 },
+                    last: { totalTokens: 1100, inputTokens: 1000, cachedInputTokens: 600, outputTokens: 100, reasoningOutputTokens: 20 },
+                    modelContextWindow: 128000,
+                },
+            },
+        });
+        super.emitNextToolCall();
     }
 }
 
@@ -325,6 +349,41 @@ describe("Cross-call tool support", () =>
             // threadId in providerMetadata
             const meta = finish?.providerMetadata as Record<string, Record<string, unknown>> | undefined;
             expect(meta?.[CODEX_PROVIDER_ID]?.threadId).toBe("thr_1");
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
+
+    // A cross-call step closes at the tool boundary, before turn/completed. It must
+    // still report what Codex already spent: in real sessions the majority of steps
+    // end this way, and reporting empty usage lost ~93% of the token count.
+    it("reports usage on a step that closes at the tool boundary", async () =>
+    {
+        const transport = new UsageReportingToolCallTransport(
+            [TICKET_TOOL],
+            "Ticket TICK-42 is open.",
+        );
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "Check ticket TICK-42" }] }],
+                tools: SDK_TOOLS,
+            });
+
+            const parts = (await readAll(stream)) as StreamPart[];
+            const finish = parts.find((p) => p.type === "finish");
+            expect((finish?.finishReason as { unified: string })?.unified).toBe("tool-calls");
+
+            const usage = finish?.usage as { inputTokens: Record<string, number | undefined> };
+            expect(usage.inputTokens.total).toBe(1000);
+            expect(usage.inputTokens.cacheRead).toBe(600);
+            expect(usage.inputTokens.noCache).toBe(400);
         }
         finally
         {
