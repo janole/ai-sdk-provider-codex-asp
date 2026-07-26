@@ -745,8 +745,8 @@ describe("CodexEventMapper", () =>
                     threadId: "thr",
                     turnId: "turn",
                     tokenUsage: {
-                        total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, outputTokens: 500, reasoningOutputTokens: 100 },
-                        last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, outputTokens: 200, reasoningOutputTokens: 50 },
+                        total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, cacheWriteInputTokens: 40, outputTokens: 500, reasoningOutputTokens: 100 },
+                        last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, cacheWriteInputTokens: 15, outputTokens: 200, reasoningOutputTokens: 50 },
                         modelContextWindow: 128000,
                     },
                 },
@@ -779,7 +779,7 @@ describe("CodexEventMapper", () =>
                     total: 600,
                     noCache: 400,
                     cacheRead: 200,
-                    cacheWrite: undefined,
+                    cacheWrite: 15,
                 },
                 outputTokens: {
                     total: 200,
@@ -787,8 +787,8 @@ describe("CodexEventMapper", () =>
                     reasoning: 50,
                 },
                 raw: {
-                    total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, outputTokens: 500, reasoningOutputTokens: 100 },
-                    last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, outputTokens: 200, reasoningOutputTokens: 50 },
+                    total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, cacheWriteInputTokens: 40, outputTokens: 500, reasoningOutputTokens: 100 },
+                    last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, cacheWriteInputTokens: 15, outputTokens: 200, reasoningOutputTokens: 50 },
                     modelContextWindow: 128000,
                 },
             },
@@ -801,16 +801,15 @@ describe("CodexEventMapper", () =>
     {
         const mapper = new CodexEventMapper();
 
+        const breakdown = (v: number[]) => ({
+            totalTokens: v[0], inputTokens: v[1], cachedInputTokens: v[2], cacheWriteInputTokens: 0, outputTokens: v[3], reasoningOutputTokens: v[4],
+        });
         const usageEvent = (total: number[], last: number[]) => ({
             method: "thread/tokenUsage/updated",
             params: {
                 threadId: "thr",
                 turnId: "turn",
-                tokenUsage: {
-                    total: { totalTokens: total[0], inputTokens: total[1], cachedInputTokens: total[2], outputTokens: total[3], reasoningOutputTokens: total[4] },
-                    last: { totalTokens: last[0], inputTokens: last[1], cachedInputTokens: last[2], outputTokens: last[3], reasoningOutputTokens: last[4] },
-                    modelContextWindow: 128000,
-                },
+                tokenUsage: { total: breakdown(total), last: breakdown(last), modelContextWindow: 128000 },
             },
         });
 
@@ -835,7 +834,7 @@ describe("CodexEventMapper", () =>
             total: 6000,
             noCache: 1000,
             cacheRead: 5000,
-            cacheWrite: undefined,
+            cacheWrite: 0,
         });
         expect(finish?.usage.outputTokens).toEqual({ total: 600, text: 500, reasoning: 100 });
     });
@@ -851,8 +850,8 @@ describe("CodexEventMapper", () =>
                 threadId: "thr",
                 turnId: "turn",
                 tokenUsage: {
-                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, outputTokens: 10552, reasoningOutputTokens: 6263 },
-                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, outputTokens: 223, reasoningOutputTokens: 82 },
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, cacheWriteInputTokens: 0, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, cacheWriteInputTokens: 0, outputTokens: 223, reasoningOutputTokens: 82 },
                     modelContextWindow: 258400,
                 },
             },
@@ -886,8 +885,8 @@ describe("CodexEventMapper", () =>
                 threadId: "thr",
                 turnId: "turn",
                 tokenUsage: {
-                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, outputTokens: 10552, reasoningOutputTokens: 6263 },
-                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, outputTokens: 223, reasoningOutputTokens: 82 },
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, cacheWriteInputTokens: 0, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, cacheWriteInputTokens: 0, outputTokens: 223, reasoningOutputTokens: 82 },
                     modelContextWindow: 258400,
                 },
             },

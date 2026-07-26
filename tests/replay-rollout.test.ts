@@ -9,6 +9,7 @@ interface RolloutUsage
     total_tokens: number;
     input_tokens: number;
     cached_input_tokens: number;
+    cache_write_input_tokens: number;
     output_tokens: number;
     reasoning_output_tokens: number;
 }
@@ -32,6 +33,7 @@ function toBreakdown(u: RolloutUsage)
         totalTokens: u.total_tokens,
         inputTokens: u.input_tokens,
         cachedInputTokens: u.cached_input_tokens,
+        cacheWriteInputTokens: u.cache_write_input_tokens,
         outputTokens: u.output_tokens,
         reasoningOutputTokens: u.reasoning_output_tokens,
     };

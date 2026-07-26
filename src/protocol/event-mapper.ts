@@ -72,10 +72,10 @@ const EMPTY_USAGE: LanguageModelV3Usage = {
     },
 };
 
-/** Guards against negative deltas if Codex ever reports a non-monotonic total. */
+/** Clamps negative deltas, and NaN from fields an older Codex does not send. */
 function nonNegative(value: number): number
 {
-    return value < 0 ? 0 : value;
+    return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishReason
@@ -741,6 +741,7 @@ export class CodexEventMapper
             totalTokens: total.totalTokens - last.totalTokens,
             inputTokens: total.inputTokens - last.inputTokens,
             cachedInputTokens: total.cachedInputTokens - last.cachedInputTokens,
+            cacheWriteInputTokens: total.cacheWriteInputTokens - last.cacheWriteInputTokens,
             outputTokens: total.outputTokens - last.outputTokens,
             reasoningOutputTokens: total.reasoningOutputTokens - last.reasoningOutputTokens,
         };
@@ -753,6 +754,7 @@ export class CodexEventMapper
         const baseline = this.usageBaseline;
         const inputTotal = nonNegative(total.inputTokens - baseline.inputTokens);
         const cacheRead = nonNegative(total.cachedInputTokens - baseline.cachedInputTokens);
+        const cacheWrite = nonNegative(total.cacheWriteInputTokens - baseline.cacheWriteInputTokens);
         const outputTotal = nonNegative(total.outputTokens - baseline.outputTokens);
         const reasoning = nonNegative(total.reasoningOutputTokens - baseline.reasoningOutputTokens);
 
@@ -761,9 +763,7 @@ export class CodexEventMapper
                 total: inputTotal,
                 noCache: nonNegative(inputTotal - cacheRead),
                 cacheRead,
-                // Codex core tracks cache writes, but the app-server protocol's
-                // TokenUsageBreakdown does not expose them.
-                cacheWrite: undefined,
+                cacheWrite,
             },
             outputTokens: {
                 total: outputTotal,

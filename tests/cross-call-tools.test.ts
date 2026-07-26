@@ -237,8 +237,8 @@ class UsageReportingToolCallTransport extends ToolCallTransport
                 threadId: "thr_1",
                 turnId: "turn_1",
                 tokenUsage: {
-                    total: { totalTokens: this.totalInput + 500, inputTokens: this.totalInput, cachedInputTokens: this.totalCached, outputTokens: 500, reasoningOutputTokens: 120 },
-                    last: { totalTokens: 1100, inputTokens: 1000, cachedInputTokens: 600, outputTokens: 100, reasoningOutputTokens: 20 },
+                    total: { totalTokens: this.totalInput + 500, inputTokens: this.totalInput, cachedInputTokens: this.totalCached, cacheWriteInputTokens: 0, outputTokens: 500, reasoningOutputTokens: 120 },
+                    last: { totalTokens: 1100, inputTokens: 1000, cachedInputTokens: 600, cacheWriteInputTokens: 0, outputTokens: 100, reasoningOutputTokens: 20 },
                     modelContextWindow: 128000,
                 },
             },
