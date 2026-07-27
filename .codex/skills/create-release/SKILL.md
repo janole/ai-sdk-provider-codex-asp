@@ -19,6 +19,8 @@ description: Create a release for this repo on github.com
 
 - Get the previous release tag: `gh release list --limit 1 --json tagName -q '.[0].tagName'`.
 - Store both `TAG` (new) and `PREV` (previous) for use in later steps.
+- `PREV` is the last *released* version, which is not always the previous *version tag* — releases can lag. If versions between `PREV` and `TAG` were never released, the notes must cover them too; say so in the summary line so the gap is not confusing later.
+- Confirm the release will tag the intended commit: the work must be merged, `HEAD` should equal `origin/main`, and the tree should be clean.
 
 ## Step 3 — Gather changelog content
 
@@ -26,10 +28,11 @@ description: Create a release for this repo on github.com
   ```
   gh pr list --state merged --search "merged:>=$(gh release view $PREV --json publishedAt -q .publishedAt | cut -dT -f1)" --json number,title,labels
   ```
-- Also review the commit log for any direct-push changes not covered by PRs:
+- Always cross-check against the commit log, which is authoritative for what is actually in the range:
   ```
   git log $PREV..$TAG --oneline --no-merges
   ```
+  The date search is only an approximation. A PR merged *after* `PREV` was published can still be an ancestor of `PREV` and therefore already released — if it does not appear in `git log $PREV..$TAG`, leave it out.
 - Categorise each change into: **Breaking Changes**, **New Features**, **Bug Fixes**, **Under the Hood**, or **Documentation**. Use PR labels and titles as hints. Omit empty sections.
 
 ## Step 4 — Build release notes
@@ -41,8 +44,16 @@ description: Create a release for this repo on github.com
 
 ## Step 5 — Create the release
 
-- Create the release:
+- Write the notes to a scratch file and pass `--notes-file`; long notes do not survive being inlined into `--notes`.
+- Pass `--target` as a **full** SHA. A short SHA fails with `HTTP 422: Release.target_commitish is invalid`.
   ```
-  gh release create <tag> --title "v<VERSION>" --notes "<filled-in notes>"
+  gh release create <tag> --title "v<VERSION>" --target "$(git rev-parse HEAD)" --notes-file <scratch>/release-notes.md
   ```
 - Show the user the release URL from the output.
+- Verify: `gh release view <tag> --json tagName,isDraft,targetCommitish`.
+
+## Step 6 — CHANGELOG
+
+- `CHANGELOG.md` must carry an entry for the released version. Reuse the categorised content from Step 3 — condensed, no template scaffolding.
+- Entries from `0.5.0` onwards are per release; older versions are grouped by minor series. Keep that shape.
+- This skill must not push, and this repo's `main` is not to be committed to directly — so if the entry is missing, write it on a branch and tell the user it needs a PR. Do not treat the release as blocked on it.
