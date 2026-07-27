@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { TokenUsageBreakdown } from "../src/protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import { CodexEventMapper } from "../src/protocol/event-mapper";
 
 const EMPTY_USAGE = {
@@ -744,8 +745,8 @@ describe("CodexEventMapper", () =>
                     threadId: "thr",
                     turnId: "turn",
                     tokenUsage: {
-                        total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, outputTokens: 500, reasoningOutputTokens: 100 },
-                        last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, outputTokens: 200, reasoningOutputTokens: 50 },
+                        total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, cacheWriteInputTokens: 40, outputTokens: 500, reasoningOutputTokens: 100 },
+                        last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, cacheWriteInputTokens: 15, outputTokens: 200, reasoningOutputTokens: 50 },
                         modelContextWindow: 128000,
                     },
                 },
@@ -776,17 +777,133 @@ describe("CodexEventMapper", () =>
             usage: {
                 inputTokens: {
                     total: 600,
-                    noCache: undefined,
+                    noCache: 400,
                     cacheRead: 200,
-                    cacheWrite: undefined,
+                    cacheWrite: 15,
                 },
                 outputTokens: {
                     total: 200,
-                    text: undefined,
+                    text: 150,
                     reasoning: 50,
+                },
+                raw: {
+                    total: { totalTokens: 2000, inputTokens: 1500, cachedInputTokens: 500, cacheWriteInputTokens: 40, outputTokens: 500, reasoningOutputTokens: 100 },
+                    last: { totalTokens: 800, inputTokens: 600, cachedInputTokens: 200, cacheWriteInputTokens: 15, outputTokens: 200, reasoningOutputTokens: 50 },
+                    modelContextWindow: 128000,
                 },
             },
         });
+    });
+
+    // One notification per model request, dozens per turn: reporting only the final
+    // `last` under-counted real sessions by ~14x.
+    it("accumulates usage across the model requests of a multi-step turn", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const breakdown = (v: number[]) => ({
+            totalTokens: v[0], inputTokens: v[1], cachedInputTokens: v[2], cacheWriteInputTokens: 0, outputTokens: v[3], reasoningOutputTokens: v[4],
+        });
+        const usageEvent = (total: number[], last: number[]) => ({
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: { total: breakdown(total), last: breakdown(last), modelContextWindow: 128000 },
+            },
+        });
+
+        const parts = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            // Thread already carried 10000 input / 4000 cached before this step.
+            usageEvent([11100, 11000, 5000, 100, 20], [1100, 1000, 1000, 100, 20]),
+            usageEvent([13300, 13000, 6500, 300, 60], [2200, 2000, 1500, 200, 40]),
+            usageEvent([16600, 16000, 9000, 600, 100], [3300, 3000, 2500, 300, 40]),
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const finish = parts.find((p) => p.type === "finish");
+        // Baseline is 16000-3000 = 13000 minus the 3000 of the first request => 10000.
+        expect(finish?.usage.inputTokens).toEqual({
+            total: 6000,
+            noCache: 1000,
+            cacheRead: 5000,
+            cacheWrite: 0,
+        });
+        expect(finish?.usage.outputTokens).toEqual({ total: 600, text: 500, reasoning: 100 });
+    });
+
+    // Payload taken from a real session, where Codex re-emitted it byte-identically.
+    it("is idempotent when Codex re-emits an identical usage notification", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const duplicate = {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: {
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, cacheWriteInputTokens: 0, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, cacheWriteInputTokens: 0, outputTokens: 223, reasoningOutputTokens: 82 },
+                    modelContextWindow: 258400,
+                },
+            },
+        };
+
+        const parts = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            duplicate,
+            duplicate,
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ].flatMap((event) => mapper.map(event));
+
+        const finish = parts.find((p) => p.type === "finish");
+        expect(finish?.usage.inputTokens.total).toBe(101852);
+        expect(finish?.usage.inputTokens.cacheRead).toBe(101120);
+    });
+
+    // Same duplicate, but split across a step boundary: without a carried-over
+    // baseline the new step would self-baseline and report the request twice.
+    it("reports zero when a step opens with the notification that closed the previous one", () =>
+    {
+        const notification = {
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr",
+                turnId: "turn",
+                tokenUsage: {
+                    total: { totalTokens: 1349904, inputTokens: 1339352, cachedInputTokens: 1229568, cacheWriteInputTokens: 0, outputTokens: 10552, reasoningOutputTokens: 6263 },
+                    last: { totalTokens: 102075, inputTokens: 101852, cachedInputTokens: 101120, cacheWriteInputTokens: 0, outputTokens: 223, reasoningOutputTokens: 82 },
+                    modelContextWindow: 258400,
+                },
+            },
+        };
+
+        let carried: TokenUsageBreakdown | undefined;
+
+        const stepOne = new CodexEventMapper();
+        stepOne.setUsageTotalListener((_id, total) => { carried = total; });
+        stepOne.map(notification);
+        expect(stepOne.getUsage()?.inputTokens.total).toBe(101852);
+
+        const stepTwo = new CodexEventMapper();
+        stepTwo.setUsageBaseline(carried);
+        stepTwo.map(notification);
+        expect(stepTwo.getUsage()?.inputTokens.total).toBe(0);
+        expect(stepTwo.getUsage()?.inputTokens.cacheRead).toBe(0);
     });
 
     it("maps mcpToolCall item/started and item/completed with nested shape", () =>

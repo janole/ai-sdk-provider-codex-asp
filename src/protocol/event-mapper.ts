@@ -11,6 +11,7 @@ import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/M
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
+import type { TokenUsageBreakdown } from "./app-server-protocol/v2/TokenUsageBreakdown";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
@@ -70,6 +71,12 @@ const EMPTY_USAGE: LanguageModelV3Usage = {
         reasoning: undefined,
     },
 };
+
+/** Clamps negative deltas, and NaN from fields an older Codex does not send. */
+function nonNegative(value: number): number
+{
+    return Number.isFinite(value) && value > 0 ? value : 0;
+}
 
 function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishReason
 {
@@ -134,6 +141,12 @@ export class CodexEventMapper
     private turnId: string | undefined;
     private threadPath: string | undefined;
     private latestUsage: LanguageModelV3Usage | undefined;
+    /**
+     * Thread-cumulative token counts as they stood immediately before this
+     * mapper's first observed model request. See handleTokenUsageUpdated.
+     */
+    private usageBaseline: TokenUsageBreakdown | undefined;
+    private usageTotalListener: ((threadId: string, total: TokenUsageBreakdown) => void) | undefined;
 
     private readonly handlers: Record<string, (params: unknown) => LanguageModelV3StreamPart[]>;
 
@@ -708,27 +721,79 @@ export class CodexEventMapper
     }
 
     // thread/tokenUsage/updated
+    //
+    // `last` is one model request and a turn spans dozens of them, so we report
+    // the delta against a baseline total instead. Deltas are also idempotent —
+    // Codex re-emits identical notifications, which accumulation would double-count.
     private handleTokenUsageUpdated(params: unknown): LanguageModelV3StreamPart[]
     {
         const p = (params ?? {}) as ThreadTokenUsageUpdatedNotification;
-        const last = p.tokenUsage?.last;
-        if (last)
+        const tokenUsage = p.tokenUsage;
+        const total = tokenUsage?.total;
+        const last = tokenUsage?.last;
+        if (!total || !last)
         {
-            this.latestUsage = {
-                inputTokens: {
-                    total: last.inputTokens,
-                    noCache: undefined,
-                    cacheRead: last.cachedInputTokens,
-                    cacheWrite: undefined,
-                },
-                outputTokens: {
-                    total: last.outputTokens,
-                    text: undefined,
-                    reasoning: last.reasoningOutputTokens,
-                },
-            };
+            return [];
         }
+
+        // Self-baseline when no previous step carried one over.
+        this.usageBaseline ??= {
+            totalTokens: total.totalTokens - last.totalTokens,
+            inputTokens: total.inputTokens - last.inputTokens,
+            cachedInputTokens: total.cachedInputTokens - last.cachedInputTokens,
+            cacheWriteInputTokens: total.cacheWriteInputTokens - last.cacheWriteInputTokens,
+            outputTokens: total.outputTokens - last.outputTokens,
+            reasoningOutputTokens: total.reasoningOutputTokens - last.reasoningOutputTokens,
+        };
+
+        if (p.threadId)
+        {
+            this.usageTotalListener?.(p.threadId, total);
+        }
+
+        const baseline = this.usageBaseline;
+        const inputTotal = nonNegative(total.inputTokens - baseline.inputTokens);
+        const cacheRead = nonNegative(total.cachedInputTokens - baseline.cachedInputTokens);
+        const cacheWrite = nonNegative(total.cacheWriteInputTokens - baseline.cacheWriteInputTokens);
+        const outputTotal = nonNegative(total.outputTokens - baseline.outputTokens);
+        const reasoning = nonNegative(total.reasoningOutputTokens - baseline.reasoningOutputTokens);
+
+        this.latestUsage = {
+            inputTokens: {
+                total: inputTotal,
+                noCache: nonNegative(inputTotal - cacheRead),
+                cacheRead,
+                cacheWrite,
+            },
+            outputTokens: {
+                total: outputTotal,
+                text: nonNegative(outputTotal - reasoning),
+                reasoning,
+            },
+            raw: {
+                total: { ...total },
+                last: { ...last },
+                modelContextWindow: tokenUsage.modelContextWindow,
+            },
+        };
         return [];
+    }
+
+    /** Token usage accumulated for this step so far, if Codex has reported any. */
+    getUsage(): LanguageModelV3Usage | undefined
+    {
+        return this.latestUsage;
+    }
+
+    /** Seeds the baseline from a previous step, so a re-emitted notification reports zero rather than its request again. */
+    setUsageBaseline(total: TokenUsageBreakdown | null | undefined): void
+    {
+        this.usageBaseline = total ?? undefined;
+    }
+
+    setUsageTotalListener(listener: (threadId: string, total: TokenUsageBreakdown) => void): void
+    {
+        this.usageTotalListener = listener;
     }
 
     /** Snapshots provider-executed tool calls still awaiting item/completed, for parking across a cross-call step boundary. */

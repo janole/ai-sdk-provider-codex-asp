@@ -2,7 +2,7 @@
 
 `@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) custom provider for the Codex App Server Protocol, supporting **both AI SDK v6 and v7** from one package.
 
-Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.144.4) 0.144.4.
+Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.145.0) 0.145.0.
 
 - `LanguageModelV3` provider implementation — used natively by `ai@6`, and accepted by `ai@7` through its built-in v3→v4 model proxy
 - Streaming (`streamText`) and non-streaming (`generateText`)

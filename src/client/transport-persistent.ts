@@ -1,3 +1,4 @@
+import type { TokenUsageBreakdown } from "../protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import type { CodexToolCallResult } from "../protocol/types";
 import { stripUndefined } from "../utils/object";
 import type {
@@ -210,6 +211,21 @@ export class PersistentTransport implements CodexTransport
             throw new Error("PersistentTransport is not connected.");
         }
         this.worker.pendingToolCall = pending;
+    }
+
+    /** Thread-cumulative token usage last seen for `threadId`, or null if this worker has seen none for it. */
+    getLastUsageTotal(threadId: string | undefined): TokenUsageBreakdown | null
+    {
+        const last = this.worker?.lastUsageTotal;
+        return last && threadId !== undefined && last.threadId === threadId ? last.total : null;
+    }
+
+    setLastUsageTotal(threadId: string, total: TokenUsageBreakdown): void
+    {
+        if (this.worker)
+        {
+            this.worker.lastUsageTotal = { threadId, total };
+        }
     }
 
     /** Drops the parked tool call without answering it — used when Codex has already ended the turn, so the request can no longer be responded to. */

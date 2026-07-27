@@ -464,10 +464,12 @@ export class CodexLanguageModel implements LanguageModelV3
                 input: typeof args === "string" ? args : JSON.stringify(args),
             }));
 
+            // This step ends before turn/completed, so its usage comes from the
+            // mapper — an empty usage would drop every request before the tool call.
             controller.enqueue(withMeta({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
-                usage: createEmptyUsage(),
+                usage: mapper.getUsage() ?? createEmptyUsage(),
             }));
 
             void closeSuccessfully();
@@ -700,6 +702,13 @@ export class CodexLanguageModel implements LanguageModelV3
                             ? transport
                             : null;
                         const pendingToolCall = persistentTransport?.getPendingToolCall() ?? null;
+
+                        if (persistentTransport)
+                        {
+                            const usageThreadId = pendingToolCall?.threadId ?? resumeThreadId;
+                            mapper.setUsageBaseline(persistentTransport.getLastUsageTotal(usageThreadId));
+                            mapper.setUsageTotalListener((id, total) => persistentTransport.setLastUsageTotal(id, total));
+                        }
 
                         if (pendingToolCall && persistentTransport)
                         {

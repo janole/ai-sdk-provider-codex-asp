@@ -92,7 +92,7 @@ class ToolCallTransport extends MockTransport
         }
     }
 
-    private emitNextToolCall(): void
+    protected emitNextToolCall(): void
     {
         const tc = this.toolCalls[this.currentToolIndex];
         if (!tc)
@@ -205,6 +205,45 @@ class ToolCallTransport extends MockTransport
                 });
             });
         }
+    }
+}
+
+/**
+ * Reports token usage before each tool call, the way Codex does once the model
+ * request that produced the call has completed. `repeatLastUsage` replays the
+ * previous notification unchanged, as Codex sometimes does.
+ */
+class UsageReportingToolCallTransport extends ToolCallTransport
+{
+    private totalInput = 4000;
+    private totalCached = 2400;
+
+    constructor(toolCalls: ScriptedToolCall[], finalMessage: string, private readonly repeatLastUsage = false)
+    {
+        super(toolCalls, finalMessage);
+    }
+
+    protected override emitNextToolCall(): void
+    {
+        if (!this.repeatLastUsage)
+        {
+            this.totalInput += 1000;
+            this.totalCached += 600;
+        }
+
+        this.emitMessage({
+            method: "thread/tokenUsage/updated",
+            params: {
+                threadId: "thr_1",
+                turnId: "turn_1",
+                tokenUsage: {
+                    total: { totalTokens: this.totalInput + 500, inputTokens: this.totalInput, cachedInputTokens: this.totalCached, cacheWriteInputTokens: 0, outputTokens: 500, reasoningOutputTokens: 120 },
+                    last: { totalTokens: 1100, inputTokens: 1000, cachedInputTokens: 600, cacheWriteInputTokens: 0, outputTokens: 100, reasoningOutputTokens: 20 },
+                    modelContextWindow: 128000,
+                },
+            },
+        });
+        super.emitNextToolCall();
     }
 }
 
@@ -325,6 +364,94 @@ describe("Cross-call tool support", () =>
             // threadId in providerMetadata
             const meta = finish?.providerMetadata as Record<string, Record<string, unknown>> | undefined;
             expect(meta?.[CODEX_PROVIDER_ID]?.threadId).toBe("thr_1");
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
+
+    // A cross-call step closes at the tool boundary, before turn/completed. It must
+    // still report what Codex already spent: in real sessions the majority of steps
+    // end this way, and reporting empty usage lost ~93% of the token count.
+    it("reports usage on a step that closes at the tool boundary", async () =>
+    {
+        const transport = new UsageReportingToolCallTransport(
+            [TICKET_TOOL],
+            "Ticket TICK-42 is open.",
+        );
+        const { provider, pool } = createPersistentProvider(transport);
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "Check ticket TICK-42" }] }],
+                tools: SDK_TOOLS,
+            });
+
+            const parts = (await readAll(stream)) as StreamPart[];
+            const finish = parts.find((p) => p.type === "finish");
+            expect((finish?.finishReason as { unified: string })?.unified).toBe("tool-calls");
+
+            const usage = finish?.usage as { inputTokens: Record<string, number | undefined> };
+            expect(usage.inputTokens.total).toBe(1000);
+            expect(usage.inputTokens.cacheRead).toBe(600);
+            expect(usage.inputTokens.noCache).toBe(400);
+        }
+        finally
+        {
+            await pool.shutdown();
+        }
+    });
+
+    // The baseline is carried on the worker, so a step that opens with the
+    // notification that closed the previous one reports zero instead of its
+    // request a second time.
+    it("does not re-report usage when a repeated notification opens the next step", async () =>
+    {
+        const transport = new UsageReportingToolCallTransport([TICKET_TOOL, WEATHER_TOOL], "Done.", true);
+        const { provider, pool } = createPersistentProvider(transport);
+
+        const inputTokensOf = (parts: StreamPart[]) =>
+            (parts.find((p) => p.type === "finish")?.usage as { inputTokens: { total: number } }).inputTokens.total;
+
+        try
+        {
+            const model = provider.languageModel("codex-test");
+
+            const { stream: s1 } = await model.doStream({
+                prompt: [{ role: "user", content: [{ type: "text", text: "Check TICK-42 and Berlin weather" }] }],
+                tools: SDK_TOOLS,
+            });
+            const p1 = (await readAll(s1)) as StreamPart[];
+            expect(inputTokensOf(p1)).toBe(1000);
+
+            const { stream: s2 } = await model.doStream({
+                prompt: [
+                    { role: "user", content: [{ type: "text", text: "Check TICK-42 and Berlin weather" }] },
+                    {
+                        role: "assistant",
+                        content: [{ type: "tool-call", toolCallId: "call_ticket", toolName: "lookup_ticket", input: "{\"id\":\"TICK-42\"}" }],
+                        providerOptions: { [CODEX_PROVIDER_ID]: { threadId: "thr_1" } },
+                    },
+                    {
+                        role: "tool",
+                        content: [{
+                            type: "tool-result",
+                            toolCallId: "call_ticket",
+                            toolName: "lookup_ticket",
+                            output: { type: "text", value: "TICK-42: open" },
+                        }],
+                    },
+                ],
+                tools: SDK_TOOLS,
+            });
+            const p2 = (await readAll(s2)) as StreamPart[];
+
+            // The thread total did not advance, so this step spent nothing.
+            expect(inputTokensOf(p2)).toBe(0);
         }
         finally
         {
