@@ -190,6 +190,32 @@ await streamText({
 
 See [`src/provider.ts`](src/provider.ts) for full type definitions.
 
+### Provider metadata
+
+The provider attaches Codex state to AI SDK parts under `CODEX_PROVIDER_ID`, the
+same namespace used for thread continuation:
+
+```ts
+import { CODEX_PROVIDER_ID, type RateLimitSnapshot } from "@janole/ai-sdk-provider-codex-asp";
+
+for await (const part of result.fullStream)
+{
+    const codexMetadata = part.providerMetadata?.[CODEX_PROVIDER_ID];
+    const rateLimits = codexMetadata?.["rateLimits"] as RateLimitSnapshot | undefined;
+    const revision = codexMetadata?.["rateLimitsRevision"] as number | undefined;
+}
+```
+
+Each model call reads the current account rate limits on a best-effort basis,
+then merges sparse `account/rateLimits/updated` notifications into that snapshot.
+The latest `rateLimits` value and its monotonically increasing
+`rateLimitsRevision` are repeated on every metadata-capable part, alongside
+`threadId` and `turnId`. Consumers can use the revision to avoid processing the
+same snapshot repeatedly.
+
+Rate-limit metadata is absent when the Codex account or app-server version does
+not support `account/rateLimits/read`; that does not fail the model call.
+
 ## Examples
 
 See the [`examples/`](examples/) directory:

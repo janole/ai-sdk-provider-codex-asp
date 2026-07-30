@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import type { RateLimitSnapshot } from "../src/protocol/app-server-protocol/v2/RateLimitSnapshot";
 import type { TokenUsageBreakdown } from "../src/protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import { CodexEventMapper } from "../src/protocol/event-mapper";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 
 const EMPTY_USAGE = {
     inputTokens: {
@@ -19,6 +21,60 @@ const EMPTY_USAGE = {
 
 describe("CodexEventMapper", () =>
 {
+    it("adds the latest sparsely merged rate-limit snapshot to emitted provider metadata", () =>
+    {
+        const mapper = new CodexEventMapper();
+        const initial: RateLimitSnapshot = {
+            limitId: "codex",
+            limitName: "Codex",
+            primary: { usedPercent: 28, windowDurationMins: 300, resetsAt: 1_786_000_000 },
+            secondary: { usedPercent: 97, windowDurationMins: 10_080, resetsAt: 1_786_500_000 },
+            credits: { hasCredits: true, unlimited: false, balance: "12.50" },
+            individualLimit: null,
+            spendControlReached: false,
+            planType: "plus",
+            rateLimitReachedType: null,
+        };
+
+        mapper.setThreadId("thr");
+        mapper.setRateLimits(initial);
+        expect(mapper.map({
+            method: "account/rateLimits/updated",
+            params: {
+                rateLimits: {
+                    limitId: null,
+                    limitName: null,
+                    primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: 1_786_000_000 },
+                    secondary: null,
+                    credits: null,
+                    individualLimit: null,
+                    spendControlReached: null,
+                    planType: null,
+                    rateLimitReachedType: null,
+                },
+            },
+        })).toEqual([]);
+
+        const parts = mapper.map({
+            method: "item/started",
+            params: {
+                item: { type: "agentMessage", id: "item1", text: "" },
+                threadId: "thr",
+                turnId: "turn",
+            },
+        });
+
+        const textStart = parts[1] as { providerMetadata?: Record<string, Record<string, unknown>> } | undefined;
+        expect(textStart?.providerMetadata?.[CODEX_PROVIDER_ID]).toEqual({
+            threadId: "thr",
+            rateLimits: {
+                ...initial,
+                primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: 1_786_000_000 },
+            },
+            rateLimitsRevision: 2,
+        });
+    });
+
     it("maps agent message lifecycle to text stream parts", () =>
     {
         const mapper = new CodexEventMapper();

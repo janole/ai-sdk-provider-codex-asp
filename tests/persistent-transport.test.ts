@@ -183,13 +183,15 @@ describe("PersistentTransport", () =>
             .filter((msg): msg is { method: string } => "method" in msg)
             .map((msg) => msg.method);
 
-        // First call: initialize, initialized, thread/start, turn/start
-        // Second call: thread/start, turn/start (no initialize, no initialized)
+        // First call: initialize, initialized, rate limits, thread/start, turn/start
+        // Second call: rate limits, thread/start, turn/start (no initialize, no initialized)
         expect(allMethods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/start",
             "turn/start",
+            "account/rateLimits/read",
             "thread/start",
             "turn/start",
         ]);

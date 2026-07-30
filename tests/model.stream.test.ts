@@ -6,6 +6,34 @@ import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
+const RATE_LIMITS_RESPONSE = {
+    rateLimits: {
+        limitId: "legacy",
+        limitName: "Legacy",
+        primary: null,
+        secondary: null,
+        credits: null,
+        individualLimit: null,
+        spendControlReached: null,
+        planType: null,
+        rateLimitReachedType: null,
+    },
+    rateLimitsByLimitId: {
+        codex: {
+            limitId: "codex",
+            limitName: "Codex",
+            primary: { usedPercent: 28, windowDurationMins: 300, resetsAt: 1_786_000_000 },
+            secondary: { usedPercent: 97, windowDurationMins: 10_080, resetsAt: 1_786_500_000 },
+            credits: { hasCredits: true, unlimited: false, balance: "12.50" },
+            individualLimit: null,
+            spendControlReached: false,
+            planType: "plus",
+            rateLimitReachedType: null,
+        },
+    },
+    rateLimitResetCredits: null,
+};
+
 class ScriptedTransport extends MockTransport 
 {
     override async sendMessage(message: JsonRpcMessage): Promise<void> 
@@ -253,7 +281,7 @@ describe("CodexLanguageModel.doStream", () =>
             .filter((message): message is { method: string } => "method" in message)
             .map((message) => message.method);
 
-        expect(methods).toEqual(["initialize", "initialized", "thread/start", "turn/start"]);
+        expect(methods).toEqual(["initialize", "initialized", "account/rateLimits/read", "thread/start", "turn/start"]);
 
         const turnStartMessage = transport.sentMessages.find(
             (message): message is { method: string; params?: unknown } =>
@@ -263,6 +291,30 @@ describe("CodexLanguageModel.doStream", () =>
         expect(turnStartMessage?.params).toMatchObject({
             input: [{ type: "text", text: "hi", text_elements: [] }],
         });
+    });
+
+    it("pulls the Codex rate-limit bucket and adds it to every emitted part", async () =>
+    {
+        const transport = new ScriptedTransport(RATE_LIMITS_RESPONSE);
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            experimentalApi: true,
+        });
+
+        const parts = await readAll((await provider.languageModel("gpt-5.5").doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        })).stream);
+
+        for (const part of parts as Array<{ providerMetadata?: Record<string, Record<string, unknown>> }>)
+        {
+            expect(part.providerMetadata?.[CODEX_PROVIDER_ID]).toMatchObject({
+                threadId: "thr_1",
+                turnId: "turn_1",
+                rateLimits: RATE_LIMITS_RESPONSE.rateLimitsByLimitId.codex,
+                rateLimitsRevision: 1,
+            });
+        }
     });
 
     it("resumes an existing thread when providerMetadata carries a threadId", async () =>
@@ -295,7 +347,7 @@ describe("CodexLanguageModel.doStream", () =>
             .filter((message): message is { method: string } => "method" in message)
             .map((message) => message.method);
 
-        expect(methods).toEqual(["initialize", "initialized", "thread/resume", "turn/start"]);
+        expect(methods).toEqual(["initialize", "initialized", "account/rateLimits/read", "thread/resume", "turn/start"]);
 
         const resumeMessage = transport.sentMessages.find(
             (message): message is { method: string; params?: unknown } =>
@@ -348,7 +400,7 @@ describe("CodexLanguageModel.doStream", () =>
             .filter((message): message is { method: string } => "method" in message)
             .map((message) => message.method);
 
-        expect(methods).toEqual(["initialize", "initialized", "thread/resume", "turn/start"]);
+        expect(methods).toEqual(["initialize", "initialized", "account/rateLimits/read", "thread/resume", "turn/start"]);
 
         const resumeMessage = transport.sentMessages.find(
             (message): message is { method: string; params?: unknown } =>
@@ -390,6 +442,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
             "thread/compact/start",
             "turn/start",
@@ -429,6 +482,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
             "thread/compact/start",
             "turn/start",
@@ -484,6 +538,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
             "thread/compact/start",
             "turn/start",
@@ -523,6 +578,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
             "turn/start",
         ]);
@@ -561,6 +617,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
             "turn/start",
         ]);
@@ -608,6 +665,7 @@ describe("CodexLanguageModel.doStream", () =>
         expect(methods).toEqual([
             "initialize",
             "initialized",
+            "account/rateLimits/read",
             "thread/resume",
         ]);
     });
