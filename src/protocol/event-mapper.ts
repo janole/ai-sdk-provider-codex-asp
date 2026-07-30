@@ -1,13 +1,16 @@
 import type {
+    JSONValue,
     LanguageModelV3FinishReason,
     LanguageModelV3StreamPart,
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import type { AccountRateLimitsUpdatedNotification } from "./app-server-protocol/v2/AccountRateLimitsUpdatedNotification";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
 import type { ItemStartedNotification } from "./app-server-protocol/v2/ItemStartedNotification";
 import type { McpToolCallProgressNotification } from "./app-server-protocol/v2/McpToolCallProgressNotification";
+import type { RateLimitSnapshot } from "./app-server-protocol/v2/RateLimitSnapshot";
 import type { ReasoningSummaryPartAddedNotification } from "./app-server-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
@@ -16,6 +19,7 @@ import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCom
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
+import { mergeRateLimitSnapshots } from "./rate-limits";
 import type { CodexDynamicToolCallItem } from "./types";
 
 // dynamicToolCall is intentionally excluded: its tool-call part is emitted by
@@ -140,6 +144,8 @@ export class CodexEventMapper
     private threadId: string | undefined;
     private turnId: string | undefined;
     private threadPath: string | undefined;
+    private rateLimits: RateLimitSnapshot | undefined;
+    private rateLimitsRevision = 0;
     private latestUsage: LanguageModelV3Usage | undefined;
     /**
      * Thread-cumulative token counts as they stood immediately before this
@@ -171,6 +177,7 @@ export class CodexEventMapper
             "item/tool/callDelta": (p) => this.handleToolCallDelta(p),
             "item/tool/callFinished": (p) => this.handleToolCallFinished(p),
             "item/tool/call": (p) => this.handleToolCall(p),
+            "account/rateLimits/updated": (p) => this.handleRateLimitsUpdated(p),
             "thread/tokenUsage/updated": (p) => this.handleTokenUsageUpdated(p),
             "turn/completed": (p) => this.handleTurnCompleted(p),
 
@@ -226,6 +233,13 @@ export class CodexEventMapper
         return this.turnId;
     }
 
+    /** Seeds the full account snapshot obtained from `account/rateLimits/read`. */
+    setRateLimits(rateLimits: RateLimitSnapshot): void
+    {
+        this.rateLimits = rateLimits;
+        this.rateLimitsRevision++;
+    }
+
     map(event: CodexEventMapperInput): LanguageModelV3StreamPart[]
     {
         const handler = this.handlers[event.method];
@@ -234,21 +248,30 @@ export class CodexEventMapper
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private withMeta<T extends LanguageModelV3StreamPart>(part: T, extra?: Record<string, string>): T
+    /** Adds the current Codex identifiers and account rate limits to an emitted AI SDK part. */
+    withMetadata<T extends LanguageModelV3StreamPart>(part: T, extra?: Record<string, JSONValue>): T
     {
+        const metadata = this.rateLimits
+            ? {
+                rateLimits: this.rateLimits as unknown as JSONValue,
+                rateLimitsRevision: this.rateLimitsRevision,
+                ...(extra ?? {}),
+            }
+            : extra;
+
         if (part.type === "stream-start")
         {
-            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath, extra);
+            return withProviderMetadata(part, this.threadId, this.turnId, this.threadPath, metadata);
         }
 
-        return withProviderMetadata(part, this.threadId, this.turnId, undefined, extra);
+        return withProviderMetadata(part, this.threadId, this.turnId, undefined, metadata);
     }
 
     private ensureStreamStarted(parts: LanguageModelV3StreamPart[]): void
     {
         if (!this.streamStarted)
         {
-            parts.push(this.withMeta({ type: "stream-start", warnings: [] }));
+            parts.push(this.withMetadata({ type: "stream-start", warnings: [] }));
             this.streamStarted = true;
         }
     }
@@ -260,12 +283,12 @@ export class CodexEventMapper
         if (!this.openReasoningParts.has(id))
         {
             this.openReasoningParts.add(id);
-            parts.push(this.withMeta({ type: "reasoning-start", id }));
+            parts.push(this.withMetadata({ type: "reasoning-start", id }));
         }
 
         if (delta)
         {
-            parts.push(this.withMeta({ type: "reasoning-delta", id, delta }));
+            parts.push(this.withMetadata({ type: "reasoning-delta", id, delta }));
         }
     }
 
@@ -308,14 +331,14 @@ export class CodexEventMapper
             case "agentMessage": {
                 this.ensureStreamStarted(parts);
                 this.openTextParts.add(item.id);
-                parts.push(this.withMeta({ type: "text-start", id: item.id }));
+                parts.push(this.withMetadata({ type: "text-start", id: item.id }));
                 break;
             }
             case "commandExecution": {
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_command_execution";
                 this.openToolCalls.set(item.id, { toolName });
-                parts.push(this.withMeta({
+                parts.push(this.withMetadata({
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
@@ -355,7 +378,7 @@ export class CodexEventMapper
                 this.ensureStreamStarted(parts);
                 const toolName = "codex_file_change";
                 this.openToolCalls.set(item.id, { toolName });
-                parts.push(this.withMeta({
+                parts.push(this.withMetadata({
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
@@ -380,7 +403,7 @@ export class CodexEventMapper
                 }
                 const toolName = "codex_web_search";
                 this.openToolCalls.set(item.id, { toolName });
-                parts.push(this.withMeta({
+                parts.push(this.withMetadata({
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
@@ -394,7 +417,7 @@ export class CodexEventMapper
                 this.ensureStreamStarted(parts);
                 const toolName = `mcp:${item.server}/${item.tool}`;
                 this.openToolCalls.set(item.id, { toolName });
-                parts.push(this.withMeta({
+                parts.push(this.withMetadata({
                     type: "tool-call",
                     toolCallId: item.id,
                     toolName,
@@ -436,10 +459,10 @@ export class CodexEventMapper
         if (!this.openTextParts.has(delta.itemId))
         {
             this.openTextParts.add(delta.itemId);
-            parts.push(this.withMeta({ type: "text-start", id: delta.itemId }));
+            parts.push(this.withMetadata({ type: "text-start", id: delta.itemId }));
         }
 
-        parts.push(this.withMeta({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
+        parts.push(this.withMetadata({ type: "text-delta", id: delta.itemId, delta: delta.delta }));
         this.textDeltaReceived.add(delta.itemId);
         return parts;
     }
@@ -465,15 +488,15 @@ export class CodexEventMapper
                 if (!this.openTextParts.has(item.id))
                 {
                     this.openTextParts.add(item.id);
-                    parts.push(this.withMeta({ type: "text-start", id: item.id }));
+                    parts.push(this.withMetadata({ type: "text-start", id: item.id }));
                 }
 
-                parts.push(this.withMeta({ type: "text-delta", id: item.id, delta: item.text }));
+                parts.push(this.withMetadata({ type: "text-delta", id: item.id, delta: item.text }));
             }
 
             if (this.openTextParts.has(item.id))
             {
-                parts.push(this.withMeta({ type: "text-end", id: item.id }));
+                parts.push(this.withMetadata({ type: "text-end", id: item.id }));
                 this.openTextParts.delete(item.id);
             }
         }
@@ -485,7 +508,7 @@ export class CodexEventMapper
             // first part of this stream — make sure stream-start precedes it.
             this.ensureStreamStarted(parts);
 
-            parts.push(this.withMeta({
+            parts.push(this.withMetadata({
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName: tracked.toolName,
@@ -501,7 +524,7 @@ export class CodexEventMapper
             // provider-executed call + result now (the search ran to completion).
             this.ensureStreamStarted(parts);
             const toolName = "codex_web_search";
-            parts.push(this.withMeta({
+            parts.push(this.withMetadata({
                 type: "tool-call",
                 toolCallId: item.id,
                 toolName,
@@ -509,7 +532,7 @@ export class CodexEventMapper
                 providerExecuted: true,
                 dynamic: true,
             }));
-            parts.push(this.withMeta({
+            parts.push(this.withMetadata({
                 type: "tool-result",
                 toolCallId: item.id,
                 toolName,
@@ -518,7 +541,7 @@ export class CodexEventMapper
         }
         else if (this.openReasoningParts.has(item.id))
         {
-            parts.push(this.withMeta({ type: "reasoning-end", id: item.id }));
+            parts.push(this.withMetadata({ type: "reasoning-end", id: item.id }));
             this.openReasoningParts.delete(item.id);
         }
         else if (item.type === "imageGeneration" && item.result)
@@ -530,7 +553,7 @@ export class CodexEventMapper
                 ...(item.savedPath && { savedPath: item.savedPath }),
             };
 
-            parts.push(this.withMeta(
+            parts.push(this.withMetadata(
                 { type: "file" as const, mediaType: "image/png", data: item.result },
                 Object.keys(extra).length > 0 ? extra : undefined,
             ));
@@ -591,7 +614,7 @@ export class CodexEventMapper
         const toolCallId = `plan:${turnId}:${planSequence}`;
         const toolName = "codex_plan_update";
 
-        parts.push(this.withMeta({
+        parts.push(this.withMetadata({
             type: "tool-call",
             toolCallId,
             toolName,
@@ -600,7 +623,7 @@ export class CodexEventMapper
             dynamic: true,
         }));
 
-        parts.push(this.withMeta({
+        parts.push(this.withMetadata({
             type: "tool-result",
             toolCallId,
             toolName,
@@ -626,7 +649,7 @@ export class CodexEventMapper
         // preliminary: true causes the AI SDK to replace the previous tool-result
         // with this one, so each progress message overwrites the last rather than
         // accumulating. p.message is just the current status (e.g. "Searching...").
-        return [this.withMeta({
+        return [this.withMetadata({
             type: "tool-result",
             toolCallId: p.itemId,
             toolName: tracked.toolName,
@@ -645,7 +668,7 @@ export class CodexEventMapper
         }
         const parts: LanguageModelV3StreamPart[] = [];
         this.ensureStreamStarted(parts);
-        parts.push(this.withMeta({ type: "tool-input-start", id: p.callId, toolName: p.tool, dynamic: true }));
+        parts.push(this.withMetadata({ type: "tool-input-start", id: p.callId, toolName: p.tool, dynamic: true }));
         return parts;
     }
 
@@ -657,7 +680,7 @@ export class CodexEventMapper
         {
             return [];
         }
-        return [this.withMeta({ type: "tool-input-delta", id: p.callId, delta: p.delta })];
+        return [this.withMetadata({ type: "tool-input-delta", id: p.callId, delta: p.delta })];
     }
 
     // item/tool/callFinished
@@ -668,7 +691,7 @@ export class CodexEventMapper
         {
             return [];
         }
-        return [this.withMeta({ type: "tool-input-end", id: p.callId })];
+        return [this.withMetadata({ type: "tool-input-end", id: p.callId })];
     }
 
     // item/tool/call
@@ -708,7 +731,7 @@ export class CodexEventMapper
         this.ensureStreamStarted(parts);
 
         this.openToolCalls.set(item.id, { toolName: item.tool });
-        parts.push(this.withMeta({
+        parts.push(this.withMetadata({
             type: "tool-call",
             toolCallId: item.id,
             toolName: item.tool,
@@ -718,6 +741,18 @@ export class CodexEventMapper
         }));
 
         return parts;
+    }
+
+    // account/rateLimits/updated
+    private handleRateLimitsUpdated(params: unknown): LanguageModelV3StreamPart[]
+    {
+        const notification = params as AccountRateLimitsUpdatedNotification | undefined;
+        if (notification?.rateLimits)
+        {
+            this.rateLimits = mergeRateLimitSnapshots(this.rateLimits, notification.rateLimits);
+            this.rateLimitsRevision++;
+        }
+        return [];
     }
 
     // thread/tokenUsage/updated
@@ -818,7 +853,7 @@ export class CodexEventMapper
 
         for (const [itemId, tracked] of this.openToolCalls)
         {
-            parts.push(this.withMeta({
+            parts.push(this.withMetadata({
                 type: "tool-result",
                 toolCallId: itemId,
                 toolName: tracked.toolName,
@@ -839,13 +874,13 @@ export class CodexEventMapper
 
         for (const itemId of this.openTextParts)
         {
-            parts.push(this.withMeta({ type: "text-end", id: itemId }));
+            parts.push(this.withMetadata({ type: "text-end", id: itemId }));
         }
         this.openTextParts.clear();
 
         for (const itemId of this.openReasoningParts)
         {
-            parts.push(this.withMeta({ type: "reasoning-end", id: itemId }));
+            parts.push(this.withMetadata({ type: "reasoning-end", id: itemId }));
         }
         this.openReasoningParts.clear();
 
@@ -858,7 +893,7 @@ export class CodexEventMapper
             this.planSequenceByTurnId.delete(completed.turn.id);
         }
         const usage = this.latestUsage ?? EMPTY_USAGE;
-        parts.push(this.withMeta({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
+        parts.push(this.withMetadata({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
         return parts;
     }
 }

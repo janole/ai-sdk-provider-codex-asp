@@ -8,6 +8,7 @@ export class MockTransport implements CodexTransport
 {
     readonly sentMessages: JsonRpcMessage[] = [];
 
+    private readonly accountRateLimitsResult: unknown;
     private connected = false;
     private readonly listeners: {
         [K in keyof CodexTransportEventMap]: Set<CodexTransportEventMap[K]>;
@@ -16,6 +17,11 @@ export class MockTransport implements CodexTransport
         error: new Set(),
         close: new Set(),
     };
+
+    constructor(accountRateLimitsResult?: unknown)
+    {
+        this.accountRateLimitsResult = accountRateLimitsResult;
+    }
 
     connect(): Promise<void>
     {
@@ -40,6 +46,21 @@ export class MockTransport implements CodexTransport
         }
 
         this.sentMessages.push(message);
+
+        if ("id" in message && message.id !== undefined && "method" in message && message.method === "account/rateLimits/read")
+        {
+            if (this.accountRateLimitsResult === undefined)
+            {
+                this.emitMessage({
+                    id: message.id,
+                    error: { code: -32_601, message: "Method not found: account/rateLimits/read" },
+                });
+            }
+            else
+            {
+                this.emitMessage({ id: message.id, result: this.accountRateLimitsResult });
+            }
+        }
 
         return Promise.resolve();
     }

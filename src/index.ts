@@ -52,6 +52,16 @@ export type { CodexEventMapperInput, CodexEventMapperOptions } from "./protocol/
 export { CodexEventMapper } from "./protocol/event-mapper";
 export { CODEX_PROVIDER_ID, codexCallOptions, codexProviderMetadata, withProviderMetadata } from "./protocol/provider-metadata";
 export type {
+    AccountRateLimitsUpdatedNotification,
+    CreditsSnapshot,
+    GetAccountRateLimitsResponse,
+    RateLimitReachedType,
+    RateLimitSnapshot,
+    RateLimitWindow,
+    SpendControlLimitSnapshot,
+} from "./protocol/rate-limits";
+export { mergeRateLimitSnapshots, selectCodexRateLimits } from "./protocol/rate-limits";
+export type {
     AgentMessageDeltaNotification,
     ApprovalsReviewer,
     AskForApproval,

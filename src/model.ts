@@ -17,10 +17,12 @@ import { DynamicToolsDispatcher } from "./dynamic-tools";
 import { CodexProviderError } from "./errors";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package-info";
 import type { JsonValue } from "./protocol/app-server-protocol/serde_json/JsonValue";
+import type { GetAccountRateLimitsResponse } from "./protocol/app-server-protocol/v2/GetAccountRateLimitsResponse";
 import type { Thread } from "./protocol/app-server-protocol/v2/Thread";
 import type { ThreadResumeResponse } from "./protocol/app-server-protocol/v2/ThreadResumeResponse";
 import { CodexEventMapper } from "./protocol/event-mapper";
-import { CODEX_PROVIDER_ID, withProviderMetadata } from "./protocol/provider-metadata";
+import { CODEX_PROVIDER_ID } from "./protocol/provider-metadata";
+import { selectCodexRateLimits } from "./protocol/rate-limits";
 import type {
     CodexInitializeParams,
     CodexInitializeResult,
@@ -437,8 +439,6 @@ export class CodexLanguageModel implements LanguageModelV3
             const callId = params.callId ?? `call_${Date.now()}`;
             const args = params.arguments ?? params.input ?? {};
 
-            const withMeta = <T extends LanguageModelV3StreamPart>(part: T): T => withProviderMetadata(part, threadId);
-
             // Park the tool call on the worker for cross-call resumption.
             // Provider-executed calls still awaiting item/completed (e.g. parallel
             // exec commands) are parked along with it: their completions arrive
@@ -457,7 +457,7 @@ export class CodexLanguageModel implements LanguageModelV3
                 openProviderToolCalls: mapper.takeOpenToolCalls(),
             });
 
-            controller.enqueue(withMeta({
+            controller.enqueue(mapper.withMetadata({
                 type: "tool-call",
                 toolCallId: callId,
                 toolName,
@@ -466,7 +466,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
             // This step ends before turn/completed, so its usage comes from the
             // mapper — an empty usage would drop every request before the tool call.
-            controller.enqueue(withMeta({
+            controller.enqueue(mapper.withMetadata({
                 type: "finish",
                 finishReason: { unified: "tool-calls", raw: "tool-calls" },
                 usage: mapper.getUsage() ?? createEmptyUsage(),
@@ -523,6 +523,23 @@ export class CodexLanguageModel implements LanguageModelV3
         const mapper = new CodexEventMapper(stripUndefined({
             emitPlanUpdates: this.config.providerSettings.emitPlanUpdates,
         }));
+
+        const readRateLimits = async () =>
+        {
+            try
+            {
+                const response = await client.request<GetAccountRateLimitsResponse>("account/rateLimits/read");
+                mapper.setRateLimits(selectCodexRateLimits(response));
+            }
+            catch (error)
+            {
+                // Subscription status is best-effort: API-key auth and older app servers may not
+                // implement this endpoint, and that must not fail the model call.
+                debugLog?.("inbound", "account/rateLimits/read:error", {
+                    message: error instanceof Error ? error.message : String(error),
+                });
+            }
+        };
 
         let activeThreadId: string | undefined;
         let activeTurnId: string | undefined;
@@ -593,7 +610,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
 
                     session?.markInactive();
-                    controller.enqueue({ type: "error", error });
+                    controller.enqueue(mapper.withMetadata({ type: "error", error }));
                     closed = true;
 
                     try
@@ -655,7 +672,7 @@ export class CodexLanguageModel implements LanguageModelV3
                     }
 
                     session?.markInactive();
-                    controller.enqueue({ type: "error", error });
+                    controller.enqueue(mapper.withMetadata({ type: "error", error }));
                     closed = true;
 
                     try
@@ -751,13 +768,13 @@ export class CodexLanguageModel implements LanguageModelV3
                                     if (part.type === "finish" && !crossCallResponded && !turnEndedBeforeResponse)
                                     {
                                         turnEndedBeforeResponse = true;
-                                        controller.enqueue(withProviderMetadata({
+                                        controller.enqueue(mapper.withMetadata({
                                             type: "tool-result",
                                             toolCallId: pendingToolCall.callId,
                                             toolName: pendingToolCall.toolName,
                                             result: { error: CROSS_CALL_ABANDONED_REASON },
                                             isError: true,
-                                        }, pendingToolCall.threadId));
+                                        }));
                                     }
 
                                     controller.enqueue(part);
@@ -767,6 +784,8 @@ export class CodexLanguageModel implements LanguageModelV3
                                     }
                                 }
                             });
+
+                            await readRateLimits();
 
                             mapper.enableCrossCallMode();
 
@@ -918,6 +937,7 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         await client.request<CodexInitializeResult>("initialize", initializeParams);
                         await client.notification("initialized");
+                        await readRateLimits();
 
                         debugLog?.("inbound", "prompt", options.prompt);
 

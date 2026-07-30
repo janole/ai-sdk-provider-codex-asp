@@ -1,18 +1,24 @@
-import type { LanguageModelV3StreamPart, SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { JSONValue, LanguageModelV3StreamPart, SharedV3ProviderOptions } from "@ai-sdk/provider";
 
 import type { CodexCallOptions } from "../provider-settings";
 import { stripUndefined } from "../utils/object";
 
 export const CODEX_PROVIDER_ID = "@janole/ai-sdk-provider-codex-asp";
 
-export function codexProviderMetadata(threadId: string | undefined, turnId?: string, threadPath?: string)
+export function codexProviderMetadata(
+    threadId: string | undefined,
+    turnId?: string,
+    threadPath?: string,
+    extra?: Record<string, JSONValue>,
+)
 {
-    if (!threadId)
+    const hasExtra = extra !== null && extra !== undefined && Object.keys(extra).length > 0;
+    if (!threadId && !hasExtra)
     {
         return undefined;
     }
 
-    return { [CODEX_PROVIDER_ID]: stripUndefined({ threadId, turnId, threadPath }) };
+    return { [CODEX_PROVIDER_ID]: { ...stripUndefined({ threadId, turnId, threadPath }), ...(extra ?? {}) } };
 }
 
 export function codexCallOptions(options: CodexCallOptions): SharedV3ProviderOptions
@@ -25,14 +31,13 @@ export function withProviderMetadata<T extends LanguageModelV3StreamPart>(
     threadId: string | undefined,
     turnId?: string,
     threadPath?: string,
-    extra?: Record<string, string>,
+    extra?: Record<string, JSONValue>,
 ): T
 {
-    const hasExtra = extra !== null && extra !== undefined && Object.keys(extra).length > 0;
-    if (!threadId && !hasExtra)
+    const providerMetadata = codexProviderMetadata(threadId, turnId, threadPath, extra);
+    if (!providerMetadata)
     {
         return part;
     }
-    const entry = { ...stripUndefined({ threadId, turnId, threadPath }), ...(extra ?? {}) };
-    return { ...part, providerMetadata: { [CODEX_PROVIDER_ID]: entry } };
+    return { ...part, providerMetadata };
 }
