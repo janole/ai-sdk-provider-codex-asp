@@ -1,4 +1,3 @@
-import type { TokenUsageBreakdown } from "../protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import type {
     CodexTransport,
     CodexTransportEventMap,
@@ -33,8 +32,6 @@ export class CodexWorker
     initialized = false;
     initializeResult: unknown = undefined;
     pendingToolCall: PendingToolCall | null = null;
-    /** Last thread-cumulative usage seen; carries the usage baseline across cross-call steps. */
-    lastUsageTotal: { threadId: string; total: TokenUsageBreakdown } | null = null;
 
     private inner: CodexTransport | null = null;
     private readonly settings: CodexWorkerSettings;

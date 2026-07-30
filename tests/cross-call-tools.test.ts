@@ -406,7 +406,7 @@ describe("Cross-call tool support", () =>
         }
     });
 
-    // The baseline is carried on the worker, so a step that opens with the
+    // The baseline is carried by the pool, so a step that opens with the
     // notification that closed the previous one reports zero instead of its
     // request a second time.
     it("does not re-report usage when a repeated notification opens the next step", async () =>

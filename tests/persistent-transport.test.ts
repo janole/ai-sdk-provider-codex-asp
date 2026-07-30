@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { JsonRpcMessage } from "../src/client/transport";
 import { PersistentTransport } from "../src/client/transport-persistent";
 import { CodexWorkerPool } from "../src/client/worker-pool";
+import { CodexEventMapper } from "../src/protocol/event-mapper";
 import { createCodexAppServer } from "../src/provider";
 import { MockTransport } from "./helpers/mock-transport";
 
@@ -277,6 +278,90 @@ describe("PersistentTransport", () =>
 
         await t2.disconnect();
         await pool.shutdown();
+    });
+
+    it("carries a thread usage baseline across different workers", async () =>
+    {
+        const pool = new CodexWorkerPool({
+            poolSize: 2,
+            transportFactory: () => new ScriptedTransport(),
+        });
+        const previousTotal = {
+            totalTokens: 29_932_310,
+            inputTokens: 29_843_981,
+            cachedInputTokens: 29_164_288,
+            cacheWriteInputTokens: 0,
+            outputTokens: 88_329,
+            reasoningOutputTokens: 37_418,
+        };
+        const first = new PersistentTransport({ pool, threadId: "thread-A" });
+
+        await first.connect();
+        first.setLastUsageTotal("thread-A", previousTotal);
+        await first.disconnect();
+
+        // Occupy the original worker so the resumed thread must acquire the other one.
+        const occupiedWorker = await pool.acquire();
+        const resumed = new PersistentTransport({ pool, threadId: "thread-A" });
+
+        try
+        {
+            await resumed.connect();
+            const mapper = new CodexEventMapper();
+            mapper.setUsageBaseline(resumed.getLastUsageTotal("thread-A"));
+
+            const usageEvent = (total: typeof previousTotal, last: typeof previousTotal) => ({
+                method: "thread/tokenUsage/updated",
+                params: {
+                    threadId: "thread-A",
+                    turnId: "turn-B",
+                    tokenUsage: { total, last, modelContextWindow: 258_400 },
+                },
+            });
+
+            // Codex first repeats the notification that closed the previous turn.
+            mapper.map(usageEvent(previousTotal, {
+                totalTokens: 138_369,
+                inputTokens: 137_640,
+                cachedInputTokens: 135_936,
+                cacheWriteInputTokens: 0,
+                outputTokens: 729,
+                reasoningOutputTokens: 516,
+            }));
+            mapper.map(usageEvent({
+                totalTokens: 30_071_212,
+                inputTokens: 29_982_385,
+                cachedInputTokens: 29_301_248,
+                cacheWriteInputTokens: 0,
+                outputTokens: 88_827,
+                reasoningOutputTokens: 37_746,
+            }, {
+                totalTokens: 138_902,
+                inputTokens: 138_404,
+                cachedInputTokens: 136_960,
+                cacheWriteInputTokens: 0,
+                outputTokens: 498,
+                reasoningOutputTokens: 328,
+            }));
+
+            expect(mapper.getUsage()?.inputTokens).toEqual({
+                total: 138_404,
+                noCache: 1_444,
+                cacheRead: 136_960,
+                cacheWrite: 0,
+            });
+            expect(mapper.getUsage()?.outputTokens).toEqual({
+                total: 498,
+                text: 170,
+                reasoning: 328,
+            });
+        }
+        finally
+        {
+            await resumed.disconnect();
+            pool.release(occupiedWorker);
+            await pool.shutdown();
+        }
     });
 
     it("rejects queued acquires on shutdown", async () =>

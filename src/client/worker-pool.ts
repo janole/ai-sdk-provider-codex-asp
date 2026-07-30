@@ -1,4 +1,5 @@
 import { CodexProviderError } from "../errors";
+import type { TokenUsageBreakdown } from "../protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import type { CodexTransport } from "./transport";
 import { CodexWorker } from "./worker";
 
@@ -29,6 +30,7 @@ export class CodexWorkerPool
     private readonly workers: CodexWorker[];
     private shutdownCalled = false;
     private readonly waiters: AcquireWaiter[] = [];
+    private readonly lastUsageTotalByThreadId = new Map<string, TokenUsageBreakdown>();
 
     constructor(settings: CodexWorkerPoolSettings)
     {
@@ -144,6 +146,18 @@ export class CodexWorkerPool
         }
     }
 
+    /** Returns the last thread-cumulative usage regardless of which worker observed it. */
+    getLastUsageTotal(threadId: string | undefined): TokenUsageBreakdown | null
+    {
+        return threadId === undefined ? null : this.lastUsageTotalByThreadId.get(threadId) ?? null;
+    }
+
+    /** Stores thread-cumulative usage for the next step, even when another worker resumes it. */
+    setLastUsageTotal(threadId: string, total: TokenUsageBreakdown): void
+    {
+        this.lastUsageTotalByThreadId.set(threadId, total);
+    }
+
     async shutdown(): Promise<void>
     {
         this.shutdownCalled = true;
@@ -154,6 +168,7 @@ export class CodexWorkerPool
             waiter.reject(new CodexProviderError("Worker pool has been shut down."));
         }
         await Promise.all(this.workers.map((w) => w.shutdown()));
+        this.lastUsageTotalByThreadId.clear();
     }
 
     private removeWaiter(target: AcquireWaiter): void
