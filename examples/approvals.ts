@@ -18,7 +18,8 @@ const codex = createCodexAppServer({
     approvals: {
         onCommandApproval: (req) =>
         {
-            console.log(`\n[APPROVAL] Command: ${req.command}`);
+            // kind is "writeStdin" when the payload is stdin for a running terminal.
+            console.log(`\n[APPROVAL] ${req.kind === "writeStdin" ? "Stdin" : "Command"}: ${req.command}`);
             console.log(`[APPROVAL]     cwd: ${req.cwd}`);
             console.log("[APPROVAL] → auto-accepting\n");
             return "accept";
