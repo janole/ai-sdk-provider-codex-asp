@@ -2,7 +2,7 @@
 
 `@janole/ai-sdk-provider-codex-asp` is a [Vercel AI SDK](https://ai-sdk.dev/) custom provider for the Codex App Server Protocol, supporting **both AI SDK v6 and v7** from one package.
 
-Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.145.0) 0.145.0.
+Status: POC feature-complete for language model usage. Currently tested with [codex-cli](https://github.com/openai/codex/releases/tag/rust-v0.154.0) 0.154.0.
 
 - `LanguageModelV3` provider implementation — used natively by `ai@6`, and accepted by `ai@7` through its built-in v3→v4 model proxy
 - Streaming (`streamText`) and non-streaming (`generateText`)
@@ -143,7 +143,7 @@ codex.shutdown()              // clean up persistent workers
 
 Approval callback notes:
 
-- `approvals.onCommandApproval(request)` — shell command approval. Payload: `CommandExecutionRequestApprovalParams`. Default: `"decline"`.
+- `approvals.onCommandApproval(request)` — shell command approval. Payload: `CommandExecutionRequestApprovalParams`. Default: `"decline"`. Check `request.kind` before matching `request.command` against a policy: `"writeStdin"` means the payload is stdin for an already-running terminal, not a command to run.
 - `approvals.onFileChangeApproval(request)` — file write approval. Payload: `FileChangeRequestApprovalParams`. Default: `"decline"`.
 - `approvals.onElicitation(request)` — MCP tool approval (the "Allow / Allow for this session / Always allow / Cancel" prompt). Payload: `McpServerElicitationRequestParams`. Default: `accept`. Return `{ action, content, _meta }` — use `_meta: { persist: "session" }` or `_meta: { persist: "always" }` to remember the choice.
 - `approvals.onToolUserInput(request)` — legacy fallback for MCP tool approval when the elicitation feature flag is off. Payload: `ToolRequestUserInputParams`. Default: auto-selects the first option per question.

@@ -7,10 +7,10 @@ import { MockTransport } from "./helpers/mock-transport";
 
 class ScriptedTransport extends MockTransport
 {
-    private approvalScenario: "command" | "fileChange" | "toolUserInput" | "none" = "none";
+    private approvalScenario: "command" | "writeStdin" | "fileChange" | "toolUserInput" | "none" = "none";
     private approvalRequestId = 100;
 
-    setApprovalScenario(scenario: "command" | "fileChange" | "toolUserInput" | "none"): void
+    setApprovalScenario(scenario: "command" | "writeStdin" | "fileChange" | "toolUserInput" | "none"): void
     {
         this.approvalScenario = scenario;
     }
@@ -54,6 +54,7 @@ class ScriptedTransport extends MockTransport
                         id: this.approvalRequestId,
                         method: "item/commandExecution/requestApproval",
                         params: {
+                            kind: "command",
                             threadId: "thr_1",
                             turnId: "turn_1",
                             itemId: "item_cmd_1",
@@ -66,6 +67,32 @@ class ScriptedTransport extends MockTransport
                             additionalPermissions: { network: true, fileSystem: null },
                             proposedExecpolicyAmendment: ["git push *"],
                             proposedNetworkPolicyAmendments: [{ host: "github.com", action: "allow" }],
+                        },
+                    });
+                });
+            }
+            else if (this.approvalScenario === "writeStdin")
+            {
+                queueMicrotask(() =>
+                {
+                    this.emitMessage({
+                        method: "turn/started",
+                        params: { threadId: "thr_1", turn: { id: "turn_1" } },
+                    });
+
+                    // Stdin sent to an already-running terminal arrives on the same
+                    // request method as a command approval; only `kind` separates them.
+                    this.emitMessage({
+                        id: this.approvalRequestId,
+                        method: "item/commandExecution/requestApproval",
+                        params: {
+                            kind: "writeStdin",
+                            threadId: "thr_1",
+                            turnId: "turn_1",
+                            itemId: "item_cmd_1",
+                            approvalId: "approval_stdin_1",
+                            command: "yes\n",
+                            cwd: "/repo",
                         },
                     });
                 });
@@ -107,6 +134,7 @@ class ScriptedTransport extends MockTransport
                             threadId: "thr_1",
                             turnId: "turn_1",
                             itemId: "item_tool_1",
+                            isBlocking: true,
                             questions: [
                                 {
                                     id: "q1",
@@ -317,6 +345,7 @@ describe("ApprovalsDispatcher", () =>
 
         expect(onCommandApproval).toHaveBeenCalledOnce();
         expect(onCommandApproval).toHaveBeenCalledWith({
+            kind: "command",
             threadId: "thr_1",
             turnId: "turn_1",
             itemId: "item_cmd_1",
@@ -336,6 +365,48 @@ describe("ApprovalsDispatcher", () =>
         ) as { id: number; result: { decision: string } } | undefined;
 
         expect(approvalResponse?.result.decision).toBe("decline");
+    });
+
+    it("routes stdin writes to onCommandApproval and preserves the approval kind", async () =>
+    {
+        const transport = new ScriptedTransport();
+        transport.setApprovalScenario("writeStdin");
+
+        const originalSendMessage = transport.sendMessage.bind(transport);
+        transport.sendMessage = async (message: JsonRpcMessage) =>
+        {
+            await originalSendMessage(message);
+            transport.handleApprovalResponse(message);
+        };
+
+        const onCommandApproval = vi.fn().mockResolvedValue("accept");
+
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            approvals: { onCommandApproval },
+        });
+
+        await readAll((await provider.languageModel("gpt-5.5").doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "answer the prompt" }] }],
+        })).stream);
+
+        expect(onCommandApproval).toHaveBeenCalledOnce();
+        expect(onCommandApproval).toHaveBeenCalledWith({
+            kind: "writeStdin",
+            threadId: "thr_1",
+            turnId: "turn_1",
+            itemId: "item_cmd_1",
+            approvalId: "approval_stdin_1",
+            command: "yes\n",
+            cwd: "/repo",
+        });
+
+        const approvalResponse = transport.sentMessages.find(
+            (msg) => "id" in msg && msg.id === 100 && "result" in msg,
+        ) as { id: number; result: { decision: string } } | undefined;
+
+        expect(approvalResponse?.result.decision).toBe("accept");
     });
 
     it("prefers per-call command approval handler over provider-level approvals", async () =>

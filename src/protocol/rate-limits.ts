@@ -41,6 +41,7 @@ export function mergeRateLimitSnapshots(
     return {
         limitId: update.limitId ?? current.limitId,
         limitName: update.limitName ?? current.limitName,
+        normalModelSlug: update.normalModelSlug ?? current.normalModelSlug,
         primary: update.primary ?? current.primary,
         secondary: update.secondary ?? current.secondary,
         credits: update.credits ?? current.credits,

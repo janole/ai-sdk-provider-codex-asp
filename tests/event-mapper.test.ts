@@ -27,6 +27,7 @@ describe("CodexEventMapper", () =>
         const initial: RateLimitSnapshot = {
             limitId: "codex",
             limitName: "Codex",
+            normalModelSlug: "gpt-5.6-codex",
             primary: { usedPercent: 28, windowDurationMins: 300, resetsAt: 1_786_000_000 },
             secondary: { usedPercent: 97, windowDurationMins: 10_080, resetsAt: 1_786_500_000 },
             credits: { hasCredits: true, unlimited: false, balance: "12.50" },
@@ -44,6 +45,7 @@ describe("CodexEventMapper", () =>
                 rateLimits: {
                     limitId: null,
                     limitName: null,
+                    normalModelSlug: null,
                     primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: 1_786_000_000 },
                     secondary: null,
                     credits: null,
