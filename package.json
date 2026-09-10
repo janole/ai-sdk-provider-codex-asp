@@ -1,6 +1,6 @@
 {
   "name": "@janole/ai-sdk-provider-codex-asp",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Vercel AI SDK custom provider for the Codex App Server Protocol. Works with AI SDK v6 and v7.",
   "license": "MIT",
   "author": "Jan Ole Suhr",
