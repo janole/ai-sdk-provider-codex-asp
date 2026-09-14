@@ -1,5 +1,8 @@
+import { includeIgnoreFile } from '@eslint/compat';
 import js from '@eslint/js';
 import globals from 'globals';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import stylistic from '@stylistic/eslint-plugin';
@@ -7,12 +10,10 @@ import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 
 export default [
-    {
-        // Mirrors .gitignore. `local/` is untracked scratch and is deliberately absent
-        // from tsconfig's `include`, so the type-aware parser cannot parse it at all —
-        // linting it fails the whole run for anyone who keeps a spike there.
-        ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/protocol/app-server-protocol/**', 'local/**'],
-    },
+    // Derived from .gitignore rather than restated, because the two drifted: `local/`
+    // was gitignored but still linted, and the type-aware parser cannot parse a file
+    // tsconfig's `include` allowlist omits — so one untracked spike failed the whole run.
+    includeIgnoreFile(join(dirname(fileURLToPath(import.meta.url)), '.gitignore')),
     js.configs.recommended,
     {
         files: ['**/*.ts'],
