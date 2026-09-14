@@ -36,6 +36,7 @@ export interface AppServerClientSettings
     }) => void;
 }
 
+type TransportFailureHandler = (error: unknown) => void;
 type NotificationHandler = (params: unknown) => void | Promise<void>;
 type AnyNotificationHandler = (
     method: string,
@@ -49,6 +50,24 @@ type ToolCallRequestHandler = (
     params: CodexToolCallRequestParams,
     request: JsonRpcRequest,
 ) => CodexToolCallResult | Promise<CodexToolCallResult>;
+
+function describeTransportClose(
+    code: number | null,
+    signal: NodeJS.Signals | null,
+): string
+{
+    if (signal)
+    {
+        return `Codex app server terminated by signal ${signal}.`;
+    }
+
+    if (code !== null)
+    {
+        return `Codex app server exited with code ${code}.`;
+    }
+
+    return "Codex app server connection closed.";
+}
 
 function isResponse(message: JsonRpcMessage): message is JsonRpcResponse 
 {
@@ -86,9 +105,12 @@ export class AppServerClient
     private readonly notificationHandlers = new Map<string, Set<NotificationHandler>>();
     private readonly anyNotificationHandlers = new Set<AnyNotificationHandler>();
     private readonly requestHandlers = new Map<string, RequestHandler>();
+    private readonly transportFailureHandlers = new Set<TransportFailureHandler>();
+    private transportFailed = false;
 
     private removeMessageListener: (() => void) | null = null;
     private removeErrorListener: (() => void) | null = null;
+    private removeCloseListener: (() => void) | null = null;
 
     constructor(transport: CodexTransport, settings: AppServerClientSettings = {}) 
     {
@@ -111,12 +133,16 @@ export class AppServerClient
 
         this.removeErrorListener = this.transport.on("error", (error) => 
         {
-            for (const pending of this.pendingRequests.values()) 
-            {
-                clearTimeout(pending.timer);
-                pending.reject(error);
-            }
-            this.pendingRequests.clear();
+            this.failTransport(error);
+        });
+
+        // A long-lived turn is not a pending request — it is a stream fed by
+        // notifications — so failing `pendingRequests` alone leaves its consumer
+        // waiting on a peer that is already gone. A peer that dies on a signal
+        // (an operator `kill`) emits only `close`, never `error`.
+        this.removeCloseListener = this.transport.on("close", (code, signal) =>
+        {
+            this.failTransport(new CodexProviderError(describeTransportClose(code, signal)));
         });
     }
 
@@ -133,6 +159,16 @@ export class AppServerClient
             this.removeErrorListener();
             this.removeErrorListener = null;
         }
+
+        // Detached before `transport.disconnect()` below, so an intentional
+        // teardown does not reach the handlers as a transport failure.
+        if (this.removeCloseListener)
+        {
+            this.removeCloseListener();
+            this.removeCloseListener = null;
+        }
+
+        this.transportFailureHandlers.clear();
 
         for (const pending of this.pendingRequests.values()) 
         {
@@ -207,6 +243,17 @@ export class AppServerClient
         };
     }
 
+    /** Registers a handler for transport death (peer exit, socket close, protocol error) — the failure no pending request can surface. */
+    onTransportFailure(handler: TransportFailureHandler): () => void
+    {
+        this.transportFailureHandlers.add(handler);
+
+        return () =>
+        {
+            this.transportFailureHandlers.delete(handler);
+        };
+    }
+
     onRequest(method: string, handler: RequestHandler): () => void 
     {
         this.requestHandlers.set(method, handler);
@@ -228,6 +275,31 @@ export class AppServerClient
     dispatchMessage(message: JsonRpcMessage): Promise<void>
     {
         return this.handleMessage(message);
+    }
+
+    private failTransport(error: unknown): void
+    {
+        for (const pending of this.pendingRequests.values())
+        {
+            clearTimeout(pending.timer);
+            pending.reject(error);
+        }
+        this.pendingRequests.clear();
+
+        // A crashing child emits `error` and then `close`; the consumer is torn
+        // down once, on whichever arrives first (the first carries the reason).
+        if (this.transportFailed)
+        {
+            return;
+        }
+        this.transportFailed = true;
+
+        // Snapshot: a handler typically tears its stream down, which calls
+        // `disconnect()` and clears this set mid-iteration.
+        for (const handler of [...this.transportFailureHandlers])
+        {
+            handler(error);
+        }
     }
 
     private async handleMessage(message: JsonRpcMessage): Promise<void>

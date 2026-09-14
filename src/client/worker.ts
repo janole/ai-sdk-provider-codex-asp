@@ -52,13 +52,14 @@ export class CodexWorker
             return;
         }
 
-        this.inner = this.settings.transportFactory();
+        const transport = this.settings.transportFactory();
+        this.inner = transport;
 
         // While a tool call is parked and no session is attached (the gap
         // between two doStream() steps), inbound messages would otherwise be
         // dropped — e.g. item/completed of exec commands that were still
         // running when the step closed. Buffer them for replay on resume.
-        this.inner.on("message", (message) =>
+        transport.on("message", (message) =>
         {
             if (this.pendingToolCall && this.sessionListeners.length === 0)
             {
@@ -66,25 +67,31 @@ export class CodexWorker
             }
         });
 
-        this.inner.on("close", () =>
+        const handleTransportDeath = () =>
         {
+            // A dead transport's handlers outlive it, so a late close from the
+            // previous one must not tear down the replacement this worker has
+            // since connected.
+            if (this.inner !== transport)
+            {
+                return;
+            }
+
             this.initialized = false;
             this.initializeResult = undefined;
             this.inner = null;
             this.state = "disconnected";
             this.bufferedMessages = [];
-        });
+            // The parked request id died with the process, so the call can never be
+            // answered — and while it is set the pool reserves this worker for a
+            // thread that can never use it, permanently shrinking the pool.
+            this.pendingToolCall = null;
+        };
 
-        this.inner.on("error", () =>
-        {
-            this.initialized = false;
-            this.initializeResult = undefined;
-            this.inner = null;
-            this.state = "disconnected";
-            this.bufferedMessages = [];
-        });
+        transport.on("close", handleTransportDeath);
+        transport.on("error", handleTransportDeath);
 
-        await this.inner.connect();
+        await transport.connect();
     }
 
     acquire(): void

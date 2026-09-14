@@ -712,6 +712,15 @@ export class CodexLanguageModel implements LanguageModelV3
                     {
                         await client.connect();
 
+                        // A dead transport ends the turn: no further notification can
+                        // arrive, so nothing else would ever close this stream and the
+                        // consumer's `for await` parks forever. Registered before the
+                        // branch below so it covers the cross-call path too.
+                        client.onTransportFailure((error) =>
+                        {
+                            void closeWithError(error);
+                        });
+
                         // ── Tool-result continuation (cross-call) ──
                         // If the transport has a pending tool call from a previous
                         // doStream(), respond with the tool results and let Codex continue.

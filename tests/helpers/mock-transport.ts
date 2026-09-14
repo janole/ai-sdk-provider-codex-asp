@@ -88,9 +88,16 @@ export class MockTransport implements CodexTransport
         this.emit("message", message);
     }
 
-    emitError(error: unknown): void 
+    emitError(error: unknown): void
     {
         this.emit("error", error);
+    }
+
+    /** Simulates the peer dying underneath a live connection (e.g. an operator `kill`), as opposed to `disconnect()`. */
+    emitClose(code: number | null = null, signal: NodeJS.Signals | null = null): void
+    {
+        this.connected = false;
+        this.emit("close", code, signal);
     }
 
     private emit<K extends keyof CodexTransportEventMap>(
