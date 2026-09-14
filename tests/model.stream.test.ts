@@ -201,7 +201,66 @@ class InterruptAwareTransport extends MockTransport
     }
 }
 
-async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]> 
+/** Streams a turn that never completes, then dies underneath it — the shape of an operator `kill` on a runaway app server. */
+class DyingMidTurnTransport extends MockTransport
+{
+    override async sendMessage(message: JsonRpcMessage): Promise<void>
+    {
+        await super.sendMessage(message);
+
+        if (!("id" in message) || message.id === undefined || !("method" in message))
+        {
+            return;
+        }
+
+        if (message.method === "initialize")
+        {
+            this.emitMessage({ id: message.id, result: { serverInfo: { name: "codex", version: "test" } } });
+            return;
+        }
+
+        if (message.method === "thread/start")
+        {
+            this.emitMessage({ id: message.id, result: { threadId: "thr_dead" } });
+            return;
+        }
+
+        if (message.method === "turn/start")
+        {
+            this.emitMessage({ id: message.id, result: { turnId: "turn_dead" } });
+
+            queueMicrotask(() =>
+            {
+                this.emitMessage({
+                    method: "turn/started",
+                    params: { threadId: "thr_dead", turn: { id: "turn_dead" } },
+                });
+                this.emitMessage({
+                    method: "item/started",
+                    params: {
+                        item: { type: "agentMessage", id: "item_1", text: "" },
+                        threadId: "thr_dead",
+                        turnId: "turn_dead",
+                    },
+                });
+                this.emitMessage({
+                    method: "item/agentMessage/delta",
+                    params: {
+                        threadId: "thr_dead",
+                        turnId: "turn_dead",
+                        itemId: "item_1",
+                        delta: "still going",
+                    },
+                });
+
+                // No turn/completed ever arrives: the process is killed instead.
+                this.emitClose(null, "SIGTERM");
+            });
+        }
+    }
+}
+
+async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]>
 {
     const reader = stream.getReader();
     const parts: unknown[] = [];
@@ -1172,5 +1231,58 @@ describe("CodexLanguageModel.doStream", () =>
                 "method" in message && message.method === "turn/interrupt",
         );
         expect(interruptMessage).toBeDefined();
+    });
+
+    it("terminates the stream when the transport dies mid-turn", async () =>
+    {
+        const transport = new DyingMidTurnTransport();
+        const provider = createCodexAppServer({
+            transportFactory: () => transport,
+            clientInfo: { name: "test-client", version: "1.0.0" },
+        });
+        const model = provider.languageModel("gpt-5.5");
+
+        const { stream } = await model.doStream({
+            prompt: [{ role: "user", content: [{ type: "text", text: "run away" }] }],
+        });
+
+        // Without transport-close termination this never settles: no notification
+        // can arrive to close the controller, and the turn is not a pending request.
+        const parts = await readAll(stream) as Array<{ type?: string; error?: unknown }>;
+
+        expect(parts.some(part => part.type === "text-delta")).toBe(true);
+
+        const errorPart = parts.find(part => part.type === "error");
+        expect(errorPart).toBeDefined();
+        expect((errorPart?.error as Error)?.message).toContain("SIGTERM");
+    });
+
+    it("releases the pooled worker when the transport dies mid-turn", async () =>
+    {
+        const provider = createCodexAppServer({
+            transportFactory: () => new DyingMidTurnTransport(),
+            clientInfo: { name: "test-client", version: "1.0.0" },
+            persistent: { poolSize: 1, idleTimeoutMs: 0 },
+        });
+        const model = provider.languageModel("gpt-5.5");
+
+        try
+        {
+            for (let attempt = 0; attempt < 2; attempt++)
+            {
+                const { stream } = await model.doStream({
+                    prompt: [{ role: "user", content: [{ type: "text", text: "run away" }] }],
+                });
+
+                // The second turn can only acquire a worker if the first released
+                // the single pooled one instead of leaking it as permanently busy.
+                const parts = await readAll(stream) as Array<{ type?: string }>;
+                expect(parts.some(part => part.type === "error")).toBe(true);
+            }
+        }
+        finally
+        {
+            await provider.shutdown();
+        }
     });
 });

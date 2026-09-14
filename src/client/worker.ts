@@ -52,13 +52,14 @@ export class CodexWorker
             return;
         }
 
-        this.inner = this.settings.transportFactory();
+        const transport = this.settings.transportFactory();
+        this.inner = transport;
 
         // While a tool call is parked and no session is attached (the gap
         // between two doStream() steps), inbound messages would otherwise be
         // dropped — e.g. item/completed of exec commands that were still
         // running when the step closed. Buffer them for replay on resume.
-        this.inner.on("message", (message) =>
+        transport.on("message", (message) =>
         {
             if (this.pendingToolCall && this.sessionListeners.length === 0)
             {
@@ -66,25 +67,34 @@ export class CodexWorker
             }
         });
 
-        this.inner.on("close", () =>
+        const handleTransportDeath = () =>
         {
+            // A dead transport's handlers outlive it, so a late close from the
+            // previous one must not tear down the replacement this worker has
+            // since connected.
+            if (this.inner !== transport)
+            {
+                return;
+            }
+
             this.initialized = false;
             this.initializeResult = undefined;
             this.inner = null;
             this.state = "disconnected";
             this.bufferedMessages = [];
-        });
+            // `pendingToolCall` deliberately survives, even though its request id died
+            // with the process and the pool now reserves this worker for a thread that
+            // can never answer it. Clearing it is worse: the next step for that thread
+            // takes the normal resume path, and `resolveResumed` keeps only the last
+            // user message — so the tool result is dropped and the original prompt is
+            // silently re-asked. Reclaiming the slot needs an abandonment record the
+            // next step can refuse on, which is its own change.
+        };
 
-        this.inner.on("error", () =>
-        {
-            this.initialized = false;
-            this.initializeResult = undefined;
-            this.inner = null;
-            this.state = "disconnected";
-            this.bufferedMessages = [];
-        });
+        transport.on("close", handleTransportDeath);
+        transport.on("error", handleTransportDeath);
 
-        await this.inner.connect();
+        await transport.connect();
     }
 
     acquire(): void

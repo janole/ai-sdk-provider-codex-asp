@@ -5,6 +5,32 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
+## 0.5.6
+
+- A transport that dies mid-turn now terminates the in-flight stream (#83). `AppServerClient`
+  failed only `pendingRequests` on transport `error`, but a turn is a long-lived stream fed by
+  notifications, not a pending request — so a killed or crashed app server left the consumer's
+  `for await` parked forever, with no error and no finish. `close` is now handled alongside
+  `error` and both surface through a new `AppServerClient.onTransportFailure()`, which
+  `doStream()` uses to close the stream with an error part naming the exit code or signal.
+  A peer killed by a signal emitted only `close`, never `error`, so the previous handler never
+  ran at all.
+- A pooled worker whose transport died mid-turn is returned to the pool (#83), since the stream
+  now closes and disconnects instead of holding it forever. A worker parked on a *cross-call*
+  tool call when its process died is still reserved for a thread that can never answer it —
+  reclaiming that slot needs an abandonment record the next step can refuse on, and is left for
+  a follow-up.
+- A late `close` from a replaced transport no longer disconnects the worker's current one (#83).
+- A request whose *send* fails no longer orphans its pending entry (#83). Nothing awaits the
+  promise in that case — the caller got the send's throw instead — so the next `disconnect()`
+  rejected it with no handler attached, which Node reports as an unhandled rejection. Reached
+  whenever an abort raced the app server's death, and fatal in a host that exits the process on
+  `unhandledRejection`.
+- **Behaviour change:** a malformed line on the transport now fails the turn (#83). Both stdio
+  and websocket transports emit `"error"` for a line that does not parse as JSON, and that now
+  terminates the stream rather than only rejecting pending requests. A desynced protocol stream
+  fails loudly instead of continuing with messages silently dropped.
+
 ## 0.5.5
 
 Tracks the Codex app-server protocol up to codex-cli 0.154.0.

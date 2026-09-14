@@ -111,4 +111,82 @@ describe("AppServerClient", () =>
             && "result" in packet.message,
         )).toBe(true);
     });
+
+    it("reports transport close as a failure and names the signal", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+        const failures: unknown[] = [];
+
+        await client.connect();
+        client.onTransportFailure((error) => failures.push(error));
+
+        transport.emitClose(null, "SIGTERM");
+
+        expect(failures).toHaveLength(1);
+        expect((failures[0] as Error).message).toContain("SIGTERM");
+    });
+
+    it("rejects pending requests when the transport closes", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+
+        await client.connect();
+
+        const promise = client.request("thread/start", {});
+        transport.emitClose(1, null);
+
+        await expect(promise).rejects.toThrow(/exited with code 1/);
+    });
+
+    it("reports a transport failure once when error is followed by close", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+        const failures: unknown[] = [];
+
+        await client.connect();
+        client.onTransportFailure((error) => failures.push(error));
+
+        transport.emitError(new Error("codex exited with code 1: boom"));
+        transport.emitClose(1, null);
+
+        expect(failures).toHaveLength(1);
+        expect((failures[0] as Error).message).toContain("boom");
+    });
+
+    it("does not report a transport failure for an intentional disconnect", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+        const failures: unknown[] = [];
+
+        await client.connect();
+        client.onTransportFailure((error) => failures.push(error));
+
+        // MockTransport.disconnect() emits "close", exactly as a real child does
+        // when we kill it ourselves — the listener must already be detached.
+        await client.disconnect();
+
+        expect(failures).toEqual([]);
+    });
+
+    it("does not orphan a pending request when the send itself fails", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+
+        await client.connect();
+
+        // Sending against a dead peer throws — the shape `turn/interrupt` hits when
+        // an abort races the app server's death.
+        transport.emitClose(null, "SIGTERM");
+        await expect(client.request("turn/interrupt", {})).rejects.toThrow();
+
+        // The orphaned entry would be rejected here with nothing awaiting it. Vitest
+        // fails the run on the resulting unhandled rejection; the TUI exits the process.
+        await client.disconnect();
+        await new Promise(resolve => setTimeout(resolve, 10));
+    });
 });
