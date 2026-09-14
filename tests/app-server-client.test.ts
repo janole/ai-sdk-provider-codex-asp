@@ -171,4 +171,22 @@ describe("AppServerClient", () =>
 
         expect(failures).toEqual([]);
     });
+
+    it("does not orphan a pending request when the send itself fails", async () =>
+    {
+        const transport = new MockTransport();
+        const client = new AppServerClient(transport, { requestTimeoutMs: 1000 });
+
+        await client.connect();
+
+        // Sending against a dead peer throws — the shape `turn/interrupt` hits when
+        // an abort races the app server's death.
+        transport.emitClose(null, "SIGTERM");
+        await expect(client.request("turn/interrupt", {})).rejects.toThrow();
+
+        // The orphaned entry would be rejected here with nothing awaiting it. Vitest
+        // fails the run on the resulting unhandled rejection; the TUI exits the process.
+        await client.disconnect();
+        await new Promise(resolve => setTimeout(resolve, 10));
+    });
 });

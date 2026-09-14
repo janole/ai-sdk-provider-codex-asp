@@ -207,7 +207,27 @@ export class AppServerClient
         });
 
         this.onPacket?.({ direction: "outbound", message });
-        await this.transport.sendMessage(message);
+
+        try
+        {
+            await this.transport.sendMessage(message);
+        }
+        catch (error)
+        {
+            // A failed send throws from here, so the caller never receives `promise`
+            // and nothing is awaiting it — but it is still in the map, and the next
+            // `disconnect()` rejects it with no handler attached. Node reports that as
+            // an unhandled rejection, which the TUI turns into `process.exit(1)`.
+            const orphan = this.pendingRequests.get(id);
+            if (orphan)
+            {
+                clearTimeout(orphan.timer);
+                this.pendingRequests.delete(id);
+            }
+
+            throw error;
+        }
+
         return promise;
     }
 
