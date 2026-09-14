@@ -5,6 +5,56 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
+## 0.5.5
+
+Tracks the Codex app-server protocol up to codex-cli 0.154.0.
+
+- Protocol types regenerated for Codex 0.154.0 (#80). Three new required fields —
+  `RateLimitSnapshot.normalModelSlug`, `CommandExecutionRequestApprovalParams.kind`, and
+  `ToolRequestUserInputParams.isBlocking` (deprecating `autoResolutionMs`) — plus new union
+  variants (`ThreadItem.functionCallOutput`, `ResponseItem.configuration_update`,
+  `CodexErrorInfo.rateLimitExceeded` and `.misalignmentPolicyViolation`) and additive fields
+  across `Thread`, `TurnStartParams`, `TurnError`, `Model`, `GetAccountRateLimitsResponse` and
+  `ImageGenerationItem`. Backward compatible for the provider.
+- `normalModelSlug` survives rolling rate-limit updates (#80). The sparse merge rebuilds the
+  snapshot field by field, so a field it does not name is dropped at the first
+  `account/rateLimits/updated` — the slug would have appeared after the initial read and then
+  silently vanished.
+- Approval callers should branch on `CommandExecutionRequestApprovalParams.kind` (#80): stdin
+  written to a running terminal now reaches `onCommandApproval` on the same request method as a
+  command approval, with the stdin payload in `command`. An allowlist matched against `command`
+  will otherwise treat stdin as a command.
+- 13 newly referenced generated protocol files tracked, keeping the committed import closure
+  complete (#80)
+- README aligned with codex-cli 0.154.0; approval-callback notes cover `kind` (#80)
+- `vitest` bumped to 4.1.11, clearing GHSA-82fw-gwwq-j7x9 (moderate, path traversal via the
+  `@vitest/mocker` redirect mock) (#81). Test-runner only — `vitest` is a devDependency and is
+  not part of the published package.
+- Lockfile dependencies refreshed to newer patch versions
+
+## 0.5.4
+
+- Resumed threads no longer re-report the previous turn's token usage when the worker pool
+  assigns a different worker (#79). Thread-cumulative usage baselines moved to worker-pool scope
+  rather than living on an individual worker, so a repeated previous-turn notification can no
+  longer make the next turn report the sum of both. Delta-based accounting for turns spanning
+  multiple model requests is unchanged.
+
+## 0.5.3
+
+Surfaces Codex account rate limits through the provider's existing metadata channel.
+
+- Rate-limit state attached to provider metadata as `rateLimits` + `rateLimitsRevision`,
+  alongside `threadId` and `turnId` (#78). The provider reads `account/rateLimits/read` before
+  each model call and selects the `codex` bucket.
+- Sparse `account/rateLimits/updated` notifications merge without clearing fields the server
+  reports as unavailable (#78)
+- The rate-limit read is best-effort, so API-key authentication and older app servers continue
+  without the metadata (#78)
+- Generated Codex rate-limit types and snapshot helpers exported (#78)
+- CHANGELOG backfilled and the release procedure recorded (#77)
+- `brace-expansion` updated to 5.0.8 in the lockfile
+
 ## 0.5.2
 
 Fixes token usage reporting, which covered only the final model request of a turn.
