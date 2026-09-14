@@ -8,7 +8,10 @@ import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 
 export default [
     {
-        ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/protocol/app-server-protocol/**'],
+        // Mirrors .gitignore. `local/` is untracked scratch and is deliberately absent
+        // from tsconfig's `include`, so the type-aware parser cannot parse it at all —
+        // linting it fails the whole run for anyone who keeps a spike there.
+        ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/protocol/app-server-protocol/**', 'local/**'],
     },
     js.configs.recommended,
     {
