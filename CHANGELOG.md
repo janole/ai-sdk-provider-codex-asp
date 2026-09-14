@@ -15,11 +15,16 @@ and the git history.
   `doStream()` uses to close the stream with an error part naming the exit code or signal.
   A peer killed by a signal emitted only `close`, never `error`, so the previous handler never
   ran at all.
-- A pooled worker whose transport dies is reclaimed instead of leaking (#83). Its parked
-  cross-call tool call is dropped — the request id died with the process, and while it was set
-  the pool reserved that worker for a thread that could never use it, permanently shrinking the
-  pool.
+- A pooled worker whose transport died mid-turn is returned to the pool (#83), since the stream
+  now closes and disconnects instead of holding it forever. A worker parked on a *cross-call*
+  tool call when its process died is still reserved for a thread that can never answer it —
+  reclaiming that slot needs an abandonment record the next step can refuse on, and is left for
+  a follow-up.
 - A late `close` from a replaced transport no longer disconnects the worker's current one (#83).
+- **Behaviour change:** a malformed line on the transport now fails the turn (#83). Both stdio
+  and websocket transports emit `"error"` for a line that does not parse as JSON, and that now
+  terminates the stream rather than only rejecting pending requests. A desynced protocol stream
+  fails loudly instead of continuing with messages silently dropped.
 
 ## 0.5.5
 

@@ -82,10 +82,13 @@ export class CodexWorker
             this.inner = null;
             this.state = "disconnected";
             this.bufferedMessages = [];
-            // The parked request id died with the process, so the call can never be
-            // answered — and while it is set the pool reserves this worker for a
-            // thread that can never use it, permanently shrinking the pool.
-            this.pendingToolCall = null;
+            // `pendingToolCall` deliberately survives, even though its request id died
+            // with the process and the pool now reserves this worker for a thread that
+            // can never answer it. Clearing it is worse: the next step for that thread
+            // takes the normal resume path, and `resolveResumed` keeps only the last
+            // user message — so the tool result is dropped and the original prompt is
+            // silently re-asked. Reclaiming the slot needs an abandonment record the
+            // next step can refuse on, which is its own change.
         };
 
         transport.on("close", handleTransportDeath);
