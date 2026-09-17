@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CodexTurnFailedError } from "../src/errors";
 import type { RateLimitSnapshot } from "../src/protocol/app-server-protocol/v2/RateLimitSnapshot";
 import type { TokenUsageBreakdown } from "../src/protocol/app-server-protocol/v2/TokenUsageBreakdown";
 import { CodexEventMapper } from "../src/protocol/event-mapper";
@@ -1579,6 +1580,92 @@ describe("CodexEventMapper", () =>
             {
                 type: "finish",
                 finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
+    it("reports a failed turn's cause as an error part before the finish part", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const parts = mapper.map({
+            method: "turn/completed",
+            params: {
+                threadId: "thr",
+                turn: {
+                    id: "turn",
+                    items: [],
+                    status: "failed" as const,
+                    error: {
+                        message: "You've hit your usage limit.",
+                        codexErrorInfo: "usageLimitExceeded" as const,
+                        additionalDetails: "Resets at 16:21 UTC.",
+                        misalignment: null,
+                    },
+                },
+            },
+        });
+
+        expect(parts).toHaveLength(3);
+        expect(parts[0]).toEqual({ type: "stream-start", warnings: [] });
+
+        const errorPart = parts[1] as { type: string; error: unknown };
+        expect(errorPart.type).toBe("error");
+
+        const error = errorPart.error;
+        expect(error).toBeInstanceOf(CodexTurnFailedError);
+        expect(error).toMatchObject({
+            message: "You've hit your usage limit.",
+            codexErrorInfo: "usageLimitExceeded",
+            additionalDetails: "Resets at 16:21 UTC.",
+        });
+
+        // The stream must still terminate normally — an error part that replaced `finish` would
+        // hang every consumer awaiting the turn instead of failing it.
+        expect(parts[2]).toEqual({
+            type: "finish",
+            finishReason: { unified: "error", raw: "failed" },
+            usage: EMPTY_USAGE,
+        });
+    });
+
+    it("reports a failed turn that carries no error block rather than staying silent", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const parts = mapper.map({
+            method: "turn/completed",
+            params: {
+                threadId: "thr",
+                turn: { id: "turn", items: [], status: "failed" as const, error: null },
+            },
+        });
+
+        expect(parts[1]).toMatchObject({
+            type: "error",
+            error: { codexErrorInfo: null, additionalDetails: null },
+        });
+        expect((parts[1] as { error: Error }).error.message).toContain("failed");
+    });
+
+    it("emits no error part for an interrupted turn", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const parts = mapper.map({
+            method: "turn/completed",
+            params: {
+                threadId: "thr",
+                turn: { id: "turn", items: [], status: "interrupted" as const, error: null },
+            },
+        });
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "finish",
+                finishReason: { unified: "other", raw: "interrupted" },
                 usage: EMPTY_USAGE,
             },
         ]);

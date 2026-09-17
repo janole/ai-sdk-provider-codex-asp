@@ -39,6 +39,7 @@ export { DynamicToolsDispatcher } from "./dynamic-tools";
 export {
     CodexNotImplementedError,
     CodexProviderError,
+    CodexTurnFailedError,
 } from "./errors";
 export type {
     CodexCallOptions,
