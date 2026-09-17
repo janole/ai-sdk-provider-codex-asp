@@ -5,6 +5,7 @@ import type {
     LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 
+import { CodexTurnFailedError } from "../errors";
 import type { AccountRateLimitsUpdatedNotification } from "./app-server-protocol/v2/AccountRateLimitsUpdatedNotification";
 import type { AgentMessageDeltaNotification } from "./app-server-protocol/v2/AgentMessageDeltaNotification";
 import type { ItemCompletedNotification } from "./app-server-protocol/v2/ItemCompletedNotification";
@@ -16,6 +17,7 @@ import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadTokenUsageUpdatedNotification } from "./app-server-protocol/v2/ThreadTokenUsageUpdatedNotification";
 import type { TokenUsageBreakdown } from "./app-server-protocol/v2/TokenUsageBreakdown";
 import type { TurnCompletedNotification } from "./app-server-protocol/v2/TurnCompletedNotification";
+import type { TurnError } from "./app-server-protocol/v2/TurnError";
 import type { TurnStartedNotification } from "./app-server-protocol/v2/TurnStartedNotification";
 import type { TurnStatus } from "./app-server-protocol/v2/TurnStatus";
 import { withProviderMetadata } from "./provider-metadata";
@@ -81,6 +83,18 @@ function nonNegative(value: number): number
 {
     return Number.isFinite(value) && value > 0 ? value : 0;
 }
+
+/**
+ * Stand-in for a `failed` turn that carries no `error` block. The protocol says one is populated
+ * whenever the status is `failed`, so this should be unreachable — but reporting the failure with
+ * no detail beats the silence that hid it, and a consumer can still see it failed.
+ */
+const FAILED_WITHOUT_DETAIL: TurnError = {
+    message: "Codex ended the turn with status \"failed\" and reported no detail.",
+    codexErrorInfo: null,
+    additionalDetails: null,
+    misalignment: null,
+};
 
 function toFinishReason(status: TurnStatus | undefined): LanguageModelV3FinishReason
 {
@@ -892,6 +906,20 @@ export class CodexEventMapper
         {
             this.planSequenceByTurnId.delete(completed.turn.id);
         }
+
+        // A failed turn states its cause in `turn.error` and nowhere else — the finish part below
+        // carries only `raw: "failed"`, which cannot say *why*. Without this part a usage limit,
+        // an exhausted context window and an expired credential all reach the consumer as one
+        // indistinguishable turn with no content. Emitted *before* `finish` so the stream still
+        // terminates normally and whatever the turn did produce is still settled.
+        if (completed.turn?.status === "failed")
+        {
+            parts.push(this.withMetadata({
+                type: "error",
+                error: new CodexTurnFailedError(completed.turn.error ?? FAILED_WITHOUT_DETAIL),
+            }));
+        }
+
         const usage = this.latestUsage ?? EMPTY_USAGE;
         parts.push(this.withMetadata({ type: "finish", finishReason: toFinishReason(completed.turn?.status), usage }));
         return parts;

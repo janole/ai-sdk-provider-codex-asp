@@ -5,6 +5,23 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
+## 0.5.7
+
+- A failed turn now reports **why** it failed (#85). `turn/completed` carries a `turn.error`
+  block — message, `codexErrorInfo`, `additionalDetails` — whenever `turn.status` is `failed`, and
+  the mapper read only the status, to pick a `finishReason`. Everything else was dropped, so a
+  usage limit, an exhausted context window and an expired credential all reached the consumer as
+  one indistinguishable turn with no content, and `finishReason: { unified: "error" }` was the only
+  hint that anything had gone wrong. The failure is now emitted as an `error` stream part carrying
+  a new `CodexTurnFailedError`, *before* the `finish` part, so the stream still terminates normally
+  and whatever the turn did produce is still settled.
+- New exported `CodexTurnFailedError` with `codexErrorInfo` (`"usageLimitExceeded"`,
+  `"contextWindowExceeded"`, `"unauthorized"`, …) and `additionalDetails`. Branch on
+  `codexErrorInfo`, not on the message — the prose is upstream's and may be reworded. Which classes
+  are worth retrying is deliberately left to the consumer; this package reports what Codex said.
+- A `failed` turn with no `error` block (unreachable per the protocol) is reported with a
+  stand-in message rather than silently, since the silence is the bug being fixed.
+
 ## 0.5.6
 
 - A transport that dies mid-turn now terminates the in-flight stream (#83). `AppServerClient`
