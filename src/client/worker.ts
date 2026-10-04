@@ -20,6 +20,9 @@ export interface PendingToolCall {
     openProviderToolCalls?: Array<{ itemId: string; toolName: string }>;
 }
 
+/** Requests whose successful response leaves the thread loaded — and write-leased — in this app-server process. */
+const THREAD_LOADING_METHODS = new Set(["thread/start", "thread/resume", "thread/fork"]);
+
 type SessionListenerEntry<K extends keyof CodexTransportEventMap> = {
     event: K;
     listener: CodexTransportEventMap[K];
@@ -39,6 +42,11 @@ export class CodexWorker
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private sessionListeners: SessionListenerEntry<any>[] = [];
     private bufferedMessages: JsonRpcMessage[] = [];
+    // Codex >= 0.159 holds a per-thread writer lease for as long as a thread stays loaded, and
+    // neither `thread/unsubscribe` nor idling unloads it: only the process exiting does. A thread
+    // loaded here therefore cannot be resumed by any other worker while this process lives.
+    private readonly loadedThreads = new Set<string>();
+    private readonly pendingThreadLoads = new Set<JsonRpcId>();
 
     constructor(settings: CodexWorkerSettings)
     {
@@ -61,6 +69,8 @@ export class CodexWorker
         // running when the step closed. Buffer them for replay on resume.
         transport.on("message", (message) =>
         {
+            this.trackThreadLoad(message);
+
             if (this.pendingToolCall && this.sessionListeners.length === 0)
             {
                 this.bufferedMessages.push(message);
@@ -82,6 +92,8 @@ export class CodexWorker
             this.inner = null;
             this.state = "disconnected";
             this.bufferedMessages = [];
+            this.loadedThreads.clear();
+            this.pendingThreadLoads.clear();
             // `pendingToolCall` deliberately survives, even though its request id died
             // with the process and the pool now reserves this worker for a thread that
             // can never answer it. Clearing it is worse: the next step for that thread
@@ -100,6 +112,7 @@ export class CodexWorker
     acquire(): void
     {
         this.clearSessionListeners();
+        this.pendingThreadLoads.clear();
         if (this.idleTimer)
         {
             clearTimeout(this.idleTimer);
@@ -111,6 +124,7 @@ export class CodexWorker
     release(): void
     {
         this.clearSessionListeners();
+        this.pendingThreadLoads.clear();
         this.state = "idle";
 
         if (!this.pendingToolCall)
@@ -125,6 +139,18 @@ export class CodexWorker
                 void this.shutdown();
             }, this.settings.idleTimeoutMs);
         }
+    }
+
+    /** Whether this worker's live app-server process has `threadId` loaded, and so holds its writer lease. */
+    hasLoadedThread(threadId: string): boolean
+    {
+        return this.loadedThreads.has(threadId);
+    }
+
+    /** Number of threads loaded in this worker's live app-server process. */
+    get loadedThreadCount(): number
+    {
+        return this.loadedThreads.size;
     }
 
     /** Returns and clears messages buffered while a tool call was parked with no session attached. */
@@ -169,6 +195,12 @@ export class CodexWorker
         {
             throw new Error("Worker has no active transport.");
         }
+
+        if ("id" in message && "method" in message && THREAD_LOADING_METHODS.has(message.method))
+        {
+            this.pendingThreadLoads.add(message.id);
+        }
+
         await this.inner.sendMessage(message);
     }
 
@@ -191,6 +223,8 @@ export class CodexWorker
 
         this.clearSessionListeners();
         this.bufferedMessages = [];
+        this.loadedThreads.clear();
+        this.pendingThreadLoads.clear();
 
         if (this.inner)
         {
@@ -206,4 +240,33 @@ export class CodexWorker
             this.state = "disconnected";
         }
     }
+
+    private trackThreadLoad(message: JsonRpcMessage): void
+    {
+        if (!("id" in message) || message.id === undefined || !this.pendingThreadLoads.delete(message.id) || !("result" in message))
+        {
+            return;
+        }
+
+        const threadId = loadedThreadId(message.result);
+
+        if (threadId)
+        {
+            this.loadedThreads.add(threadId);
+        }
+    }
+}
+
+/** `thread/start` answers `{ threadId }` on older app servers and `{ thread: { id } }` on newer ones. */
+function loadedThreadId(result: unknown): string | undefined
+{
+    if (typeof result !== "object" || result === null)
+    {
+        return undefined;
+    }
+
+    const { threadId, thread } = result as { threadId?: unknown; thread?: { id?: unknown } };
+    const id = thread?.id ?? threadId;
+
+    return typeof id === "string" ? id : undefined;
 }

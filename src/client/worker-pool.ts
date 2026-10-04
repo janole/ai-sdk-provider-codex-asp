@@ -52,26 +52,7 @@ export class CodexWorkerPool
             throw new CodexProviderError("Worker pool has been shut down.");
         }
 
-        // 1. Exact match: worker reserved for this thread's pending tool call
-        if (options?.threadId)
-        {
-            const reserved = this.workers.find(
-                (w) => (w.state === "idle" || w.state === "disconnected")
-                    && w.pendingToolCall?.threadId === options.threadId,
-            );
-
-            if (reserved)
-            {
-                reserved.acquire();
-                return reserved;
-            }
-        }
-
-        // 2. Any unreserved worker (no pending tool call from another thread)
-        const worker = this.workers.find(
-            (w) => (w.state === "idle" || w.state === "disconnected")
-                && !w.pendingToolCall,
-        );
+        const worker = this.pickWorker(options?.threadId);
 
         if (!worker)
         {
@@ -120,25 +101,15 @@ export class CodexWorkerPool
         // synchronously removes it from the queue via removeWaiter(),
         // so shift() will only ever return live (non-aborted) waiters.
 
-        // Try to match a waiter that needs this specific worker's pending tool call
-        if (worker.pendingToolCall)
-        {
-            const idx = this.waiters.findIndex(w => w.threadId === worker.pendingToolCall?.threadId);
-            if (idx >= 0)
-            {
-                const [waiter] = this.waiters.splice(idx, 1);
-                this.clearWaiterAbortHandler(waiter!);
-                waiter!.resolve(worker);
-                return;
-            }
-        }
+        // FIFO among the waiters this worker may serve: a thread owned by another worker keeps
+        // waiting for its owner, and a reserved worker only serves its reserving thread.
+        const index = this.waiters.findIndex(waiter => this.mayServe(worker, waiter.threadId));
 
-        // Otherwise: existing FIFO behavior
-        const waiter = this.waiters.shift();
-        if (waiter)
+        if (index >= 0)
         {
-            this.clearWaiterAbortHandler(waiter); // prevent stale abort handler from firing after resolve
-            waiter.resolve(worker);
+            const [waiter] = this.waiters.splice(index, 1);
+            this.clearWaiterAbortHandler(waiter!); // prevent stale abort handler from firing after resolve
+            waiter!.resolve(worker);
         }
         else
         {
@@ -171,6 +142,62 @@ export class CodexWorkerPool
         this.lastUsageTotalByThreadId.clear();
     }
 
+    /**
+     * A thread already bound to a worker — by a parked tool call, or by being loaded in its live
+     * process (Codex's writer lease) — runs only there, waiting while it is busy: any other worker's
+     * `thread/resume` would fail with "already has an active writer". An unbound thread goes to the
+     * available worker holding the fewest threads, so concurrent threads spread across processes
+     * instead of queueing behind one another's owner.
+     */
+    private pickWorker(threadId: string | undefined): CodexWorker | undefined
+    {
+        const owner = threadId === undefined ? undefined : this.ownerOf(threadId);
+
+        if (owner)
+        {
+            return isAvailable(owner) && this.mayServe(owner, threadId) ? owner : undefined;
+        }
+
+        let best: CodexWorker | undefined;
+
+        for (const worker of this.workers)
+        {
+            if (!isAvailable(worker) || worker.pendingToolCall)
+            {
+                continue;
+            }
+
+            // A live idle worker beats spawning a process for an equally loaded empty slot.
+            if (!best
+                || worker.loadedThreadCount < best.loadedThreadCount
+                || (worker.loadedThreadCount === best.loadedThreadCount && best.state === "disconnected" && worker.state === "idle"))
+            {
+                best = worker;
+            }
+        }
+
+        return best;
+    }
+
+    private ownerOf(threadId: string): CodexWorker | undefined
+    {
+        return this.workers.find(w => w.pendingToolCall?.threadId === threadId)
+            ?? this.workers.find(w => w.hasLoadedThread(threadId));
+    }
+
+    /** Ownership and reservation rules only; availability is the caller's concern. */
+    private mayServe(worker: CodexWorker, threadId: string | undefined): boolean
+    {
+        if (worker.pendingToolCall)
+        {
+            return worker.pendingToolCall.threadId === threadId;
+        }
+
+        const owner = threadId === undefined ? undefined : this.ownerOf(threadId);
+
+        return !owner || owner === worker;
+    }
+
     private removeWaiter(target: AcquireWaiter): void
     {
         const index = this.waiters.indexOf(target);
@@ -190,4 +217,9 @@ export class CodexWorkerPool
         waiter.signal.removeEventListener("abort", waiter.abortHandler);
         waiter.abortHandler = undefined;
     }
+}
+
+function isAvailable(worker: CodexWorker): boolean
+{
+    return worker.state === "idle" || worker.state === "disconnected";
 }

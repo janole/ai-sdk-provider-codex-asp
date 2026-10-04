@@ -5,6 +5,19 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
+## Unreleased
+
+- The persistent worker pool now keeps every thread on the worker that loaded it. Codex 0.159
+  added a per-thread writer lease: a thread loaded in one app-server process cannot be
+  `thread/resume`d in another (`thread … already has an active writer`), and neither
+  `thread/unsubscribe` nor idling releases it — only the process exiting does. The pool handed
+  each turn to the first idle worker, so two concurrent sessions swapped workers as soon as their
+  turns overlapped, and the second resume failed. Now a thread's turn goes to its owner, waiting
+  while the owner is busy; a new thread goes to the worker holding the fewest threads, so
+  concurrent sessions spread across processes; ownership ends when the process does.
+- `scripts/writer-lease-probe.ts` checks the lease and the pool's routing against the real
+  `codex` binary without a model call. Run it after a `codex` upgrade.
+
 ## 0.5.7
 
 - A failed turn now reports **why** it failed (#85). `turn/completed` carries a `turn.error`
