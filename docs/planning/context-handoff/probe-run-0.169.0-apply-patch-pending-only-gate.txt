@@ -1,0 +1,43 @@
+codex: codex-cli 0.169.0  workspaces: <root>
+
+=== gated-parallel
+    101ms  → thread/start {"cwd":"<root>/gated-parallel/A"}
+    153ms  ← thread/start: thread=61c711 cwd=<root>/gated-parallel/A instructionSources=["<root>/gated-parallel/A/AGENTS.md"]
+    154ms  → turn/start {"input":1}
+    158ms  ← turn/start: turn=59b625 status=inProgress
+    158ms  · turn/started thread=61c711 turn=59b625
+   4014ms  · agentMessage "I’ll run the steps in order and won’t retry a declined command."
+   4347ms  · started command turn=59b625 cwd=<root>/gated-parallel/A status=inProgress cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'"
+   4347ms  ⇐ item/commandExecution/requestApproval turn=59b625 cwd=<root>/gated-parallel/A cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'"
+   4347ms    gate: accept (pending=false)
+   4347ms  → server-request response: {"decision":"accept"}
+   4348ms  · serverRequest/resolved {"threadId":"01a1e60d-9a4b-73d3-bfb4-a7468e61c711","requestId":0}
+   4405ms  · completed command turn=59b625 cwd=<root>/gated-parallel/A status=completed cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'" exit=0 out="<root>/gated-parallel/A"
+   6886ms  · started dynamicToolCall turn=59b625 status=inProgress success=null
+   6886ms  ⇐ item/tool/call switch_workspace turn=59b625 call=ed84ea
+   6886ms  → turn/settings/update {"turnId":"59b625","environments":[{"environmentId":"local","cwd":"<root>/gated-parallel/B","runtimeWorkspaceRoots":["<root>/gated-parallel/B"]}]}
+   6887ms  ← turn/settings/update: {"status":"applied"}
+   6887ms  → thread/settings/update {"cwd":"<root>/gated-parallel/B","environments":[{"environmentId":"local","cwd":"<root>/gated-parallel/B","runtimeWorkspaceRoots":["<root>/gated-parallel/B"]}],"sandboxPolicy":"workspaceWrite"}
+   6888ms  ← thread/settings/update: {}
+   6888ms  · thread/settings/updated cwd=<root>/gated-parallel/B environments=[{"environmentId":"local","cwd":"<root>/gated-parallel/B","runtimeWorkspaceRoots":["<root>/gated-parallel/B"]}]
+  10889ms  → server-request response: {"contentItems":[{"type":"inputText","text":"Switched to workspace B."}],"success":true}
+  10890ms  · completed dynamicToolCall turn=59b625 status=completed success=true
+  10891ms  · started fileChange turn=59b625 status=inProgress paths=["<root>/gated-parallel/A/batch.txt"]
+  10891ms  ⇐ item/fileChange/requestApproval turn=59b625 item=6a2205 grantRoot=null
+  10891ms    gate: accept (pending=false)
+  10891ms  → server-request response: {"decision":"accept"}
+  10891ms  · serverRequest/resolved {"threadId":"01a1e60d-9a4b-73d3-bfb4-a7468e61c711","requestId":2}
+  10919ms  · completed fileChange turn=59b625 status=completed paths=["<root>/gated-parallel/A/batch.txt"]
+  13093ms  · started command turn=59b625 cwd=<root>/gated-parallel/B status=inProgress cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'"
+  13093ms  ⇐ item/commandExecution/requestApproval turn=59b625 cwd=<root>/gated-parallel/B cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'"
+  13093ms    gate: accept (pending=false)
+  13094ms  → server-request response: {"decision":"accept"}
+  13094ms  · serverRequest/resolved {"threadId":"01a1e60d-9a4b-73d3-bfb4-a7468e61c711","requestId":3}
+  13155ms  · completed command turn=59b625 cwd=<root>/gated-parallel/B status=completed cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'" exit=0 out="<root>/gated-parallel/B"
+  16218ms  · agentMessage "DONE"
+  16235ms  · turn/completed turn=59b625 status=completed
+--- observations
+  turn1=completed
+  command turn=59b625 cwd=<root>/gated-parallel/A exit=0 cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'" out="<root>/gated-parallel/A"
+  command turn=59b625 cwd=<root>/gated-parallel/B exit=0 cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'" out="<root>/gated-parallel/B"
+  files A: step1.txt(A) batch.txt(patched) | B: step3.txt(B)
