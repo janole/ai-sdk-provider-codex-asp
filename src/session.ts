@@ -34,9 +34,13 @@ export interface CodexExecutionContext
      * Omitted means `[cwd]`. Pass the complete set: roots from the previous context are not kept.
      */
     runtimeWorkspaceRoots?: string[];
-    /** Sandbox policy for the thread's future turns. Cannot be combined with `permissions`. */
+    /**
+     * Sandbox policy for the thread's future turns. Cannot be combined with `permissions`. The
+     * running turn keeps its sandbox mode (Codex cannot change it mid-turn); only its writable
+     * roots follow `runtimeWorkspaceRoots` from the next step.
+     */
     sandboxPolicy?: SandboxPolicy;
-    /** Named permissions profile id for the thread's future turns. Cannot be combined with `sandboxPolicy`. */
+    /** Named permissions profile id for the thread's future turns, like `sandboxPolicy`. Cannot be combined with it. */
     permissions?: string;
     /** Codex environment to move. Defaults to `"local"`. */
     environmentId?: string;
@@ -72,7 +76,10 @@ export type CodexExecutionContextMoveResult =
         status: "moved";
         threadId: string;
         turnId: string;
-        /** The new context applies from the running turn's next model step and to every later turn. */
+        /**
+         * `cwd` and `runtimeWorkspaceRoots` apply from the running turn's next model step and to
+         * every later turn; `sandboxPolicy`/`permissions` apply from the next turn.
+         */
         effective: "nextStep";
         /** The context now in force, with defaults filled in. */
         context: CodexExecutionContext & { environmentId: string; runtimeWorkspaceRoots: string[] };
@@ -383,7 +390,8 @@ function validateContext(request: CodexExecutionContext): string | undefined
         return "cwd must be an absolute path.";
     }
 
-    if (request.runtimeWorkspaceRoots?.some((root) => typeof root !== "string" || !isAbsolute(root)))
+    const roots: unknown = request.runtimeWorkspaceRoots;
+    if (roots !== undefined && (!Array.isArray(roots) || roots.some((root) => typeof root !== "string" || !isAbsolute(root))))
     {
         return "runtimeWorkspaceRoots must be absolute paths.";
     }

@@ -261,6 +261,7 @@ describe("CodexSession.moveExecutionContext", () =>
         [{ cwd: "relative/b" }, "cwd must be an absolute path."],
         [{ cwd: "/work/b", runtimeWorkspaceRoots: ["/work/b", "shared"] }, "runtimeWorkspaceRoots must be absolute paths."],
         [{ cwd: "/work/b", permissions: "p", sandboxPolicy: { type: "dangerFullAccess" as const } }, "sandboxPolicy and permissions cannot be combined."],
+        [{ cwd: "/work/b", runtimeWorkspaceRoots: "/work/b" as unknown as string[] }, "runtimeWorkspaceRoots must be absolute paths."],
     ])("rejects an invalid request without sending anything (%#)", async (request, message) =>
     {
         const { session, client } = createSession();

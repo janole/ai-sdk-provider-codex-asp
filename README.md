@@ -120,7 +120,7 @@ await codex.shutdown();
 
 ## Moving a running session to another directory
 
-`CodexSession.moveExecutionContext()` moves a running session to a new working directory, together with its runtime workspace roots and sandbox settings, and resolves once Codex has acknowledged the move. From the model's next step on, native commands run there by default, the model is shown the new directory, and its `AGENTS.md` applies. Later turns of the thread stay there. Requires Codex ≥ 0.169 and the `experimentalApi` capability, which is enabled whenever tools are configured.
+`CodexSession.moveExecutionContext()` moves a running session to a new working directory, together with its runtime workspace roots and sandbox settings, and resolves once Codex has acknowledged the move. From the model's next step on, native commands run there by default, the model is shown the new directory, and its `AGENTS.md` applies. Later turns of the thread stay there. A `sandboxPolicy` or `permissions` you pass applies from the next turn: Codex cannot change a running turn's sandbox mode, so the running turn keeps its mode, and only its writable roots follow `runtimeWorkspaceRoots` from the next step. Requires Codex ≥ 0.169 and the `experimentalApi` capability, which is enabled whenever tools are configured.
 
 Call it from the tool that requests the move, before the tool returns. With AI SDK tools (cross-call), take the session from `onSessionCreated`. With provider-executed `tools`, the handler's context carries it:
 
