@@ -1,6 +1,6 @@
 # Execution-context handoff: protocol proof
 
-Evidence record for plan 004 `protocol-proof`: how a running Codex turn can move to another working directory, and what the adapter must add so that no native action runs under the old context.
+Evidence record for plan 004 `protocol-proof`: how a running Codex turn can move to another working directory, so that the new directory becomes the base directory for the rest of the session.
 
 - **Adapter:** `0.5.8` (`main` at `9c44333`)
 - **Codex:** `codex-cli 0.169.0` (live, logged in; no mocked RPC). Source read at tags `rust-v0.163.0` and `rust-v0.169.0` (`d32063f`).
@@ -31,25 +31,45 @@ Each scenario creates two git workspaces, A and B, under the home directory. TMP
 - Both settings methods require the `experimentalApi` capability: without it, `turn/settings/update requires experimentalApi capability`. A turn update for a turn that is no longer running returns `{"status":"targetUnavailable"}`, not an error.
 - The only client-side hooks on native execution are approval requests (`item/commandExecution/requestApproval` carries `cwd`; `item/fileChange/requestApproval` carries `itemId`, and the paths arrive in the preceding `item/started`).
 
+## Requirement
+
+The consumer problem (plan 488) is that a session told to move keeps working in the old directory: Codex keeps executing there, so commands such as `npm i` land in the wrong place, and the model starts improvising workarounds (`ln`, absolute paths). Access to the old directory is not itself the problem. The requirement is that the **new directory becomes the effective base directory**: the default working directory for native commands, the directory the model is shown, the project instructions and the writable workspace.
+
 ## Selected mechanism
 
-**In-place move plus an adapter approval gate.** This is the smallest mechanism that enforces the contract:
+**In-place move, acknowledged before the tool response.** Inside the switch tool's handler, before its response is sent:
 
-1. Inside the switch tool's handler, before its response is sent: `turn/settings/update {threadId, turnId, environments}`, then `thread/settings/update {cwd, environments, sandboxPolicy | permissions}`. Both are acknowledged before the tool response goes out, so the acknowledgement never waits on the response (contract 5). The turn, tool-result pairing and usage stream are unchanged; no user message is manufactured.
-2. While a handoff is pending, and for every later action in the turn, the adapter answers approvals itself. It declines a command whose `cwd` is not the current context, and a file change whose paths are not under the current writable roots. Anything else goes to the consumer's own approval policy. This needs the thread to run with `approvalPolicy: "untrusted"` so that native actions reach the adapter. Without that, nothing can stop a same-batch sibling (`inplace-parallel`).
-3. Failure handling: `targetUnavailable`, a rejection, or a failed thread update after an applied turn update (the two requests are **not atomic**) leaves the session refused/interrupted. It is never reported as moved.
+1. `turn/settings/update {threadId, turnId, environments: [{environmentId: "local", cwd, runtimeWorkspaceRoots}]}`, which must return `{"status": "applied"}`. It applies from the running turn's next step.
+2. `thread/settings/update {threadId, cwd, environments, sandboxPolicy | permissions}`, which applies to future turns.
+3. Send the tool response. The handoff is reported as **effective from the next step**.
 
-The turn boundary (`boundary-parallel`) also works and preserves pairing via `toolOutput`. It has the same same-batch hole and also changes the turn id and continuation, so it is only a fallback for Codex < 0.169.
+Both updates are acknowledged before the tool response goes out, so the acknowledgement never waits on the response. The turn, tool-result pairing and usage stream are unchanged, and no user message is manufactured. The consumer's approval policy is untouched.
 
-## Guarantees that are not available
+Which writable roots to pass is the consumer's policy. With roots `[B]`, a write to the old directory fails loudly (`operation not permitted`), which surfaces drift instead of hiding it. With roots `[B, A]`, the old directory stays writable.
 
-- **No ordering guarantee from Codex.** A native call in the same batch as the switch can start before, during or after the switch. Only the approval gate decides whether it runs.
-- **Actions without an approval request cannot be gated.** That covers MCP tool calls, `view_image` and other in-process reads, and anything else outside the command and file-change approval paths. Reads of the old workspace stay possible, because the sandbox allows reads everywhere.
-- **Same-step siblings keep the old sandbox.** If the gate accepts one by mistake, the sandbox will not stop it (`apply_patch` wrote to A after the move).
-- **`approvalPolicy: "untrusted"` is required for the barrier.** If a consumer runs `never`, it gets the in-place move without a barrier, and the adapter must refuse to report the move as safe.
-- **Commands emitted before the switch** in model order may be approved before the adapter sees the switch call. They are treated as pre-handoff actions.
-- **Experimental API:** the field is behind `experimentalApi`, so its shape and semantics may change between Codex releases. Re-run the probe after each upgrade.
+`inplace-sequential` and `concurrent` show the result. Without any `cd`, the next step's commands ran in B, the model followed B's `AGENTS.md`, and the next turn stayed in B. `steer` shows the failure mode this replaces.
 
-## Upstream change that would remove the gate
+### Optional: report old-directory actions
 
-A per-tool or per-call barrier, for example a `DynamicToolSpec` flag that makes a dynamic tool exclusive *and* re-captures the step context for queued siblings. Another option is for `turn/settings/update` to cancel or reject queued calls of the current step. Either would let the adapter drop the `untrusted` requirement. No such field exists in 0.169.
+The adapter can watch `item/started` and report any command or file change that started in the old directory after the switch was requested. Doing so is cheap and makes the same-batch case visible. It detects but does not prevent.
+
+### Not selected: approval gate
+
+A strict variant runs threads with `approvalPolicy: "untrusted"` and has the adapter decline every command or file change outside the current context (`gated-parallel`). It stopped every stale action in the probe, but it puts every native action through the adapter, partly reimplementing Codex's approval logic, and it must be on for every turn because the approval policy cannot change mid-turn. It is not needed for the requirement above. Keep it in mind only if a consumer later needs a hard "nothing runs in the old directory" guarantee.
+
+### Fallback: turn boundary
+
+Interrupt, then `turn/start {toolOutput, cwd, runtimeWorkspaceRoots, sandboxPolicy}` (`boundary-parallel`). It works without the experimental API and on Codex < 0.169, and it pairs the tool output without a manufactured user message. The cost is a new turn id.
+
+## Known limits
+
+- **Actions emitted together with the switch may run in the old directory.** Codex gives no ordering barrier: dynamic tools are parallel in 0.169, and calls from the step that contained the switch keep that step's context and sandbox, even when they run after the move is acknowledged (`inplace-parallel`; `apply_patch` in the pending-only-gate log). This affects at most that one batch; the next step runs in the new directory.
+- **A model can still type an absolute path to the old directory** from memory (Codex issue #12232). Whether that write succeeds depends on the writable roots the consumer passes.
+- **The move is two requests.** The turn and thread updates are not atomic. If either fails, or the turn update returns `targetUnavailable`, the handoff must report failure, never success.
+- **Running terminals and background processes stay** in the old directory, as the contract requires.
+- **Experimental API.** Requires Codex ≥ 0.169 and the `experimentalApi` capability. Re-run the probe after each Codex upgrade.
+- **Not exercised:** permission profiles instead of `sandboxPolicy`, worker-pool reuse and resume across processes. Each scenario ran 1–3 times.
+
+## Upstream change that would close the same-batch gap
+
+A per-tool barrier, for example a `DynamicToolSpec` flag that makes a dynamic tool exclusive *and* re-captures the step context for queued siblings, or a `turn/settings/update` option that cancels the current step's queued calls. Neither exists in 0.169. Not required for the selected mechanism.
