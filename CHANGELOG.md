@@ -5,6 +5,42 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
+## 0.6.0
+
+- New `CodexSession.moveExecutionContext()` (#89) moves a running session to a new working
+  directory, together with its runtime workspace roots and sandbox settings, and resolves once
+  Codex has acknowledged the move. From the model's next step on, native commands run there by
+  default, the model is shown the new directory and its `AGENTS.md` applies; later turns of the
+  thread stay there. It sends `turn/settings/update`, then `thread/settings/update`, and returns
+  one of two outcomes: `moved` (effective from the next step) or `failed` with a `reason`
+  (`targetUnavailable`, `invalidRequest`, `aborted`, `turnUpdateFailed`, `threadUpdateFailed`).
+  It never throws, and a partial move is reported as `failed`, never as moved. Moves on one
+  session are serialized, and a pending tool response is held until they settle, so the next
+  step is the first to see the new context. Requires Codex ≥ 0.169 and the `experimentalApi`
+  capability, which is enabled whenever tools are configured; on older Codex the move fails with
+  `turnUpdateFailed`. See the README section "Moving a running session to another directory".
+- A `sandboxPolicy` or `permissions` passed to a move takes effect from the **next turn**: Codex
+  cannot change a running turn's sandbox mode. The running turn keeps its mode; only its writable
+  roots follow `runtimeWorkspaceRoots` from the next step.
+- Actions the model emitted in the same step as the move may still run in the old directory:
+  Codex gives no ordering barrier. Every later step runs in the new context.
+- After a move, a `cwd` in call options or provider defaults moves the thread back on the next
+  call, because `thread/resume` and `turn/start` send it again. Stop passing the old `cwd` once a
+  session has moved.
+- The session handed to `onSessionCreated` now stays usable for the whole Codex turn. Before, it
+  went inactive at the first tool call; now `isActive()` is true again during a continuation step,
+  and `injectMessage`/`interrupt` use that step's client. It ends when the turn completes or the
+  stream errors, aborts or is cancelled. Provider-executed dynamic tools receive it as
+  `context.session`.
+- New exported types: `CodexExecutionContext`, `CodexExecutionContextMoveRequest`,
+  `CodexExecutionContextMoveResult`, `CodexExecutionContextMoveFailureReason`, `SandboxPolicy`.
+- Protocol types upgraded to Codex 0.169.0 (#88); tested codex-cli version is now 0.169.0. The
+  exported `CodexTurnInputImage` is now `{ url } | { fileId }`, so code that reads `.url` without
+  narrowing stops compiling. An image generated as a Files API `fileId` (new in 0.169) emits no
+  `file` part, since the adapter cannot fetch its bytes; inline images are unchanged.
+- `docs/planning/context-handoff/protocol-proof.md` and `scripts/context-handoff-probe.ts`
+  (#87) record and re-check the handoff against the real `codex` binary.
+
 ## 0.5.8
 
 - The persistent worker pool now keeps every thread on the worker that loaded it. Codex 0.159

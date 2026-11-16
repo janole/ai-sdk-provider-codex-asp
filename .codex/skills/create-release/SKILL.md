@@ -3,6 +3,24 @@ name: create-release
 description: Create a release for this repo on github.com
 ---
 
+## Release procedure
+
+Nothing publishes from CI: `ci.yml` only runs lint, typecheck and tests. A release is split
+between agent and operator, in this order:
+
+1. **Agent: CHANGELOG PR.** On a fresh branch from `origin/main`, write the `CHANGELOG.md`
+   entry for the next version (per-release style, see Step 6) and open it as a draft PR with the
+   `/open-pr` skill. Pick the bump by semver: a new public API or a consumer-visible behaviour
+   change is a minor bump while the major is 0. Do not touch `package.json`'s version.
+2. **Operator: version and publish.** The operator merges the PR, then runs `npm version
+   <patch|minor>` (commits the bare version, e.g. `0.6.0`, and tags `v0.6.0`),
+   `git push --follow-tags` and `npm publish` under their own npm login. An agent never runs
+   `npm version` or `npm publish`, and never pushes to `main`.
+3. **Agent: GitHub release.** Once the tag is on the remote (`git ls-remote --tags origin
+   v<VERSION>`), check out the tagged commit and create the GitHub release with the steps below.
+
+The rest of this skill is step 3.
+
 ## Constraints
 
 - Do NOT check npm or publish anything.
