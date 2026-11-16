@@ -204,6 +204,20 @@ export class PersistentTransport implements CodexTransport
         });
     }
 
+    /**
+     * A request function bound to the acquired worker, usable after this transport disconnects:
+     * a parked turn's session sends its context handoff through it between steps.
+     */
+    createWorkerRequester(): <TResult>(method: string, params: unknown, timeoutMs: number) => Promise<TResult>
+    {
+        if (!this.worker)
+        {
+            throw new Error("PersistentTransport is not connected.");
+        }
+        const worker = this.worker;
+        return <TResult>(method: string, params: unknown, timeoutMs: number) => worker.request<TResult>(method, params, timeoutMs);
+    }
+
     parkToolCall(pending: PendingToolCall): void
     {
         if (!this.worker)
