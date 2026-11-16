@@ -558,7 +558,10 @@ export class CodexEventMapper
             parts.push(this.withMetadata({ type: "reasoning-end", id: item.id }));
             this.openReasoningParts.delete(item.id);
         }
-        else if (item.type === "imageGeneration" && item.result)
+        // Since 0.169 the image arrives either inline as `result` or as a Files API
+        // `fileId`. Only inline bytes can become a file part; a fileId-only image
+        // emits nothing here, as before.
+        else if (item.type === "imageGeneration" && "result" in item && item.result)
         {
             this.ensureStreamStarted(parts);
 

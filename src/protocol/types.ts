@@ -29,10 +29,17 @@ import type { ThreadCompactStartResponse } from "./app-server-protocol/v2/Thread
 import type { ThreadItem } from "./app-server-protocol/v2/ThreadItem";
 import type { ThreadResumeParams } from "./app-server-protocol/v2/ThreadResumeParams";
 import type { ThreadResumeResponse } from "./app-server-protocol/v2/ThreadResumeResponse";
+import type { ThreadSettingsUpdatedNotification } from "./app-server-protocol/v2/ThreadSettingsUpdatedNotification";
+import type { ThreadSettingsUpdateParams } from "./app-server-protocol/v2/ThreadSettingsUpdateParams";
+import type { ThreadSettingsUpdateResponse } from "./app-server-protocol/v2/ThreadSettingsUpdateResponse";
 import type { ToolRequestUserInputParams } from "./app-server-protocol/v2/ToolRequestUserInputParams";
 import type { ToolRequestUserInputResponse } from "./app-server-protocol/v2/ToolRequestUserInputResponse";
+import type { TurnEnvironmentParams } from "./app-server-protocol/v2/TurnEnvironmentParams";
 import type { TurnInterruptParams } from "./app-server-protocol/v2/TurnInterruptParams";
 import type { TurnInterruptResponse } from "./app-server-protocol/v2/TurnInterruptResponse";
+import type { TurnSettingsUpdateParams } from "./app-server-protocol/v2/TurnSettingsUpdateParams";
+import type { TurnSettingsUpdateResponse } from "./app-server-protocol/v2/TurnSettingsUpdateResponse";
+import type { TurnSettingsUpdateStatus } from "./app-server-protocol/v2/TurnSettingsUpdateStatus";
 import type { TurnStartParams } from "./app-server-protocol/v2/TurnStartParams";
 import type { UserInput } from "./app-server-protocol/v2/UserInput";
 
@@ -148,6 +155,16 @@ export type CodexTurnInputSkill = Extract<UserInput, { type: "skill" }>;
 export type CodexTurnInputMention = Extract<UserInput, { type: "mention" }>;
 
 export type CodexTurnStartParams = TurnStartParams;
+
+// Experimental mid-turn settings updates (codex >= 0.169, requires `experimentalApi`).
+// The turn update moves the running turn's later steps; the thread update moves future turns.
+export type CodexTurnEnvironmentParams = TurnEnvironmentParams;
+export type CodexTurnSettingsUpdateParams = TurnSettingsUpdateParams;
+export type CodexTurnSettingsUpdateResult = TurnSettingsUpdateResponse;
+export type CodexTurnSettingsUpdateStatus = TurnSettingsUpdateStatus;
+export type CodexThreadSettingsUpdateParams = ThreadSettingsUpdateParams;
+export type CodexThreadSettingsUpdateResult = ThreadSettingsUpdateResponse;
+export type CodexThreadSettingsUpdatedNotification = ThreadSettingsUpdatedNotification;
 export type CodexDynamicToolCallItem = Extract<ThreadItem, { type: "dynamicToolCall" }>;
 
 export interface CodexTurnStartResult

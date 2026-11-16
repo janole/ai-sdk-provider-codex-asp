@@ -1539,6 +1539,49 @@ describe("CodexEventMapper", () =>
         ]);
     });
 
+    it("emits no file part for an imageGeneration item delivered as a fileId", () =>
+    {
+        const mapper = new CodexEventMapper();
+
+        const events = [
+            { method: "turn/started", params: { threadId: "thr", turn: { id: "turn" } } },
+            {
+                method: "item/completed",
+                params: {
+                    item: {
+                        type: "imageGeneration",
+                        id: "img_file",
+                        status: "completed",
+                        revisedPrompt: null,
+                        failure: null,
+                        generationId: null,
+                        fileId: "file_abc",
+                    },
+                    threadId: "thr",
+                    turnId: "turn",
+                },
+            },
+            {
+                method: "turn/completed",
+                params: {
+                    threadId: "thr",
+                    turn: { id: "turn", items: [], status: "completed" as const, error: null },
+                },
+            },
+        ];
+
+        const parts = events.flatMap((event) => mapper.map(event));
+
+        expect(parts).toEqual([
+            { type: "stream-start", warnings: [] },
+            {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "completed" },
+                usage: EMPTY_USAGE,
+            },
+        ]);
+    });
+
     it("emits file stream part without providerMetadata when revisedPrompt is null", () =>
     {
         const mapper = new CodexEventMapper();
