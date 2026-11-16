@@ -431,6 +431,7 @@ export class CodexLanguageModel implements LanguageModelV3
         threadId: string,
         closeSuccessfully: () => Promise<void>,
         mapper: CodexEventMapper,
+        getSession: () => CodexSessionImpl | undefined,
     ): void
     {
         client.onToolCallRequest((params: CodexToolCallRequestParams, request) =>
@@ -448,14 +449,19 @@ export class CodexLanguageModel implements LanguageModelV3
             // Return a never-resolving promise so AppServerClient does NOT
             // auto-send a JSON-RPC response — we respond manually on the
             // next doStream() via persistentTransport.respondToToolCall().
-            persistentTransport.parkToolCall({
+            // The turn's session is parked with the call: the tool runs between
+            // steps, and a context move it requests goes through the worker.
+            const session = getSession();
+            session?.park(persistentTransport.createWorkerRequester());
+            persistentTransport.parkToolCall(stripUndefined({
                 requestId: request.id,
                 callId,
                 toolName,
                 args,
                 threadId,
                 openProviderToolCalls: mapper.takeOpenToolCalls(),
-            });
+                session,
+            }));
 
             controller.enqueue(mapper.withMetadata({
                 type: "tool-call",
@@ -548,6 +554,27 @@ export class CodexLanguageModel implements LanguageModelV3
         let detachDynamicTools: (() => void) | undefined;
 
         const interruptTimeoutMs = this.config.providerSettings.interruptTimeoutMs ?? 10_000;
+
+        // Normally created once turn/start returns. A tool call can race that response, and its
+        // handler may need the session to move the context, so it is then created on demand.
+        const ensureSession = (): CodexSessionImpl =>
+        {
+            if (!session)
+            {
+                if (!activeThreadId)
+                {
+                    throw new CodexProviderError("No thread to create a session for.");
+                }
+                session = new CodexSessionImpl({
+                    client,
+                    threadId: activeThreadId,
+                    turnId: activeTurnId,
+                    interruptTimeoutMs,
+                });
+            }
+            return session;
+        };
+        const sessionForToolCall = (): CodexSessionImpl | undefined => activeThreadId ? ensureSession() : session;
 
         const interruptTurnIfPossible = async () =>
         {
@@ -758,6 +785,12 @@ export class CodexLanguageModel implements LanguageModelV3
                             });
                             mapper.setThreadId(pendingToolCall.threadId);
 
+                            // The session of the parked turn follows it into this step.
+                            session = pendingToolCall.session instanceof CodexSessionImpl
+                                ? pendingToolCall.session
+                                : undefined;
+                            session?.attach(client);
+
                             // Codex can give up on a parked cross-call tool: when a tool stays
                             // unanswered too long (e.g. a human approval that never lands in time)
                             // it terminates the call and ends the turn on its own. If that turn-end
@@ -802,6 +835,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
                                 pendingToolCall.threadId, closeSuccessfully, mapper,
+                                () => session,
                             );
 
                             const approvalsDispatcher = new ApprovalsDispatcher(
@@ -818,6 +852,11 @@ export class CodexLanguageModel implements LanguageModelV3
                             {
                                 await client.dispatchMessage(bufferedMessage);
                             }
+
+                            // A context move the tool requested must be acknowledged before
+                            // Codex sees the result, so its next step runs in the new context.
+                            // The move never waits on this response, so this cannot deadlock.
+                            await session?.settleContextMoves();
 
                             // Codex already ended the turn while the call was parked: the request
                             // is gone, so drop it rather than responding into a dead turn (which
@@ -866,8 +905,16 @@ export class CodexLanguageModel implements LanguageModelV3
                                 handlers: this.config.providerSettings.toolHandlers,
                                 timeoutMs: this.config.providerSettings.toolTimeoutMs,
                                 onDebugEvent: toolLogger,
+                                getSession: sessionForToolCall,
                             }));
-                            detachDynamicTools = dispatcher.attach(client);
+                            // A context move the handler requested is acknowledged before
+                            // the tool response goes out (see CodexSession.moveExecutionContext).
+                            detachDynamicTools = client.onToolCallRequest(async (params) =>
+                            {
+                                const result = await dispatcher.dispatch(params);
+                                await session?.settleContextMoves();
+                                return result;
+                            });
                         }
 
                         const approvalsDispatcher = new ApprovalsDispatcher(
@@ -1075,6 +1122,7 @@ export class CodexLanguageModel implements LanguageModelV3
                             this.registerCrossCallToolHandler(
                                 client, controller, persistentTransport,
                                 threadId, closeSuccessfully, mapper,
+                                sessionForToolCall,
                             );
                         }
 
@@ -1100,12 +1148,8 @@ export class CodexLanguageModel implements LanguageModelV3
 
                         activeTurnId = extractTurnId(turnStartResult);
 
-                        session = new CodexSessionImpl({
-                            client,
-                            threadId: activeThreadId,
-                            turnId: activeTurnId,
-                            interruptTimeoutMs,
-                        });
+                        session = ensureSession();
+                        session.setTurnId(activeTurnId);
                         this.config.providerSettings.onSessionCreated?.(session);
                     }
                     catch (error)

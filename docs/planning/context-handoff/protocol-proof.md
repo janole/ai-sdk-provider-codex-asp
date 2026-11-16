@@ -61,6 +61,10 @@ A strict variant runs threads with `approvalPolicy: "untrusted"` and has the ada
 
 Interrupt, then `turn/start {toolOutput, cwd, runtimeWorkspaceRoots, sandboxPolicy}` (`boundary-parallel`). It works without the experimental API and on Codex < 0.169, and it pairs the tool output without a manufactured user message. The cost is a new turn id.
 
+## Adapter API
+
+The selected mechanism ships as `CodexSession.moveExecutionContext()` (`src/session.ts`; usage in the README). For AI SDK tools, the tool runs between two `doStream` steps while its call is parked on the pooled worker. The session therefore stays with the parked call and sends both updates through the worker (`CodexWorker.request`). The next step holds the tool response until the move has settled. The probe scenarios `adapter-crosscall` and `adapter-dynamic` drive that API through `generateText` against the real binary. Log: [`probe-run-0.169.0-adapter.txt`](probe-run-0.169.0-adapter.txt). In both, the next step ran in B, the write to A was denied, the model answered `MARKER-B` and the next turn ran in B.
+
 ## Known limits
 
 - **Actions emitted together with the switch may run in the old directory.** Codex gives no ordering barrier: dynamic tools are parallel in 0.169, and calls from the step that contained the switch keep that step's context and sandbox, even when they run after the move is acknowledged (`inplace-parallel`; `apply_patch` in the pending-only-gate log). This affects at most that one batch; the next step runs in the new directory.

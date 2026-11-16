@@ -17,6 +17,9 @@
  *   boundary-parallel   interrupt the turn while the switch is pending, then `turn/start` with
  *                       `toolOutput` and the new context
  *   concurrent          inplace-sequential on two threads of one app-server at the same time
+ *   adapter-crosscall   inplace-sequential through the adapter's CodexSession.moveExecutionContext,
+ *                       from an AI SDK tool that runs between cross-call steps (persistent pool)
+ *   adapter-dynamic     the same from a provider-executed dynamic tool, which runs inside the step
  *
  * Needs codex >= 0.169 (environments on the settings APIs) and a logged-in `codex`.
  * Workspaces live under the home directory, not TMPDIR: workspace-write always allows TMPDIR
@@ -35,9 +38,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { generateText, jsonSchema, type ModelMessage, stepCountIs, tool } from "ai";
+
 import { AppServerClient } from "../src/client/app-server-client";
-import type { JsonRpcMessage } from "../src/client/transport";
+import type { CodexTransport, JsonRpcMessage } from "../src/client/transport";
+import { PersistentTransport } from "../src/client/transport-persistent";
 import { StdioTransport } from "../src/client/transport-stdio";
+import { CodexWorkerPool } from "../src/client/worker-pool";
+import { CODEX_PROVIDER_ID } from "../src/protocol/provider-metadata";
+import { createCodexAppServer } from "../src/provider";
+import type { CodexSession } from "../src/session";
+import { stripUndefined } from "../src/utils/object";
 
 const CODEX = process.env.CODEX_BIN ?? "codex";
 const ROOT = mkdtempSync(join(homedir(), ".codex-handoff-probe-"));
@@ -377,7 +388,7 @@ const PARALLEL = [
 
 const NEXT_TURN = "Run the shell command: pwd > nextturn.txt; pwd. Then reply with only the workspace marker your project instructions (AGENTS.md) give you now.";
 
-interface Result { name: string; probe: Probe; observations: string[] }
+interface Result { name: string; probe: { log: string[]; close(): Promise<void> }; observations: string[] }
 
 async function inPlaceSequential(name = "inplace-sequential", shared?: Probe): Promise<Result>
 {
@@ -560,6 +571,175 @@ function commandLines(probe: Probe, threadId: string): string[]
         .map((c) => sanitize(`command turn=${short(c.turnId)} cwd=${c.cwd} exit=${c.exitCode} cmd=${JSON.stringify(c.command)} out=${JSON.stringify(c.output)}`));
 }
 
+// ── Through the adapter ─────────────────────────────────────────────────────
+
+const APP_SERVER_ARGS = ["app-server", "-c", "notify=[]", "--listen", "stdio://"];
+
+/**
+ * Wraps the app-server transport to log every message, including requests a pooled worker sends
+ * itself while a tool call is parked between steps, which no client's packet logger sees.
+ */
+class WireLog
+{
+    readonly log: string[] = [];
+    readonly commands: CommandRecord[] = [];
+    private readonly t0 = Date.now();
+    private readonly methods = new Map<string | number, string>();
+
+    note(line: string): void
+    {
+        this.log.push(`${String(Date.now() - this.t0).padStart(7)}ms  ${sanitize(line)}`);
+    }
+
+    wrap(inner: CodexTransport): CodexTransport
+    {
+        inner.on("message", (message) => this.inbound(message as Record<string, any>));
+        const send = inner.sendMessage.bind(inner);
+        inner.sendMessage = async (message) =>
+        {
+            this.outbound(message as Record<string, any>);
+            await send(message);
+        };
+        return inner;
+    }
+
+    private outbound(m: Record<string, any>): void
+    {
+        if ("method" in m && "id" in m)
+        {
+            this.methods.set(m.id, m.method);
+            if (["turn/settings/update", "thread/settings/update", "turn/start", "thread/start", "thread/resume"].includes(m.method))
+            {
+                this.note(`→ ${m.method} ${summarizeParams(m.params ?? {})}`);
+            }
+        }
+        else if ("id" in m && "result" in m)
+        {
+            this.note(`→ tool response ${JSON.stringify(trim(JSON.stringify(m.result)))}`);
+        }
+    }
+
+    private inbound(m: Record<string, any>): void
+    {
+        if ("id" in m && !("method" in m))
+        {
+            const method = this.methods.get(m.id);
+            if (method?.includes("settings/update"))
+            {
+                this.note(`← ${method}: ${"error" in m ? `ERROR ${JSON.stringify(m.error)}` : JSON.stringify(m.result)}`);
+            }
+            return;
+        }
+        const p = m.params ?? {};
+        if (m.method === "item/tool/call")
+        {
+            this.note(`⇐ item/tool/call ${p.tool} turn=${short(p.turnId)}`);
+        }
+        else if (m.method === "turn/completed")
+        {
+            this.note(`· turn/completed turn=${short(p.turn?.id)} status=${p.turn?.status}`);
+        }
+        else if (m.method === "item/completed" && p.item?.type === "commandExecution")
+        {
+            const item = p.item;
+            this.note(`· command turn=${short(p.turnId)} cwd=${item.cwd} exit=${item.exitCode} cmd=${JSON.stringify(item.command)}`);
+            this.commands.push({ threadId: p.threadId, turnId: p.turnId, command: item.command, cwd: item.cwd, exitCode: item.exitCode, output: trim(item.aggregatedOutput) });
+        }
+        else if (m.method === "item/completed" && p.item?.type === "agentMessage")
+        {
+            this.note(`· agentMessage ${JSON.stringify(trim(p.item.text))}`);
+        }
+    }
+}
+
+const SWITCH_DESCRIPTION = "Moves this session's execution context (working directory and writable workspace) to workspace B. Shell commands issued after this tool returns run in workspace B.";
+const SWITCH_SCHEMA = { type: "object", properties: { target: { type: "string", enum: ["B"] } }, required: ["target"], additionalProperties: false } as const;
+
+async function moveToB(wire: WireLog, session: CodexSession | undefined, ws: Workspace, turnId?: string): Promise<string>
+{
+    if (!session)
+    {
+        wire.note("switch: no session");
+        return "Switch failed: no session.";
+    }
+    const result = await session.moveExecutionContext(stripUndefined({
+        cwd: ws.b,
+        runtimeWorkspaceRoots: [ws.b],
+        sandboxPolicy: workspaceWrite() as any,
+        expectedTurnId: turnId,
+    }));
+    wire.note(`moveExecutionContext → ${JSON.stringify(result)}`);
+    return result.status === "moved" ? "Switched to workspace B." : `Switch failed: ${result.message}`;
+}
+
+async function adapterScenario(name: string, mode: "crosscall" | "dynamic"): Promise<Result>
+{
+    const ws = makeWorkspace(name);
+    const wire = new WireLog();
+    const pool = new CodexWorkerPool({
+        poolSize: 1,
+        idleTimeoutMs: 60_000,
+        transportFactory: () => wire.wrap(new StdioTransport({ command: CODEX, args: APP_SERVER_ARGS })),
+    });
+    let session: CodexSession | undefined;
+    const codex = createCodexAppServer({
+        transportFactory: (context) => new PersistentTransport(stripUndefined({ pool, signal: context.signal, threadId: context.threadId })),
+        onSessionCreated: (created) =>
+        {
+            session = created;
+        },
+        experimentalApi: true,
+        ...mode === "dynamic"
+            ? { tools: {
+                [SWITCH_TOOL]: {
+                    description: SWITCH_DESCRIPTION,
+                    inputSchema: SWITCH_SCHEMA,
+                    execute: async (_args, context) => ({
+                        success: true,
+                        contentItems: [{ type: "inputText" as const, text: await moveToB(wire, context.session, ws, context.turnId) }],
+                    }),
+                },
+            } }
+            : {},
+    });
+    const model = codex(process.env.PROBE_MODEL ?? "");
+    const sdkTools = mode === "crosscall"
+        ? {
+            [SWITCH_TOOL]: tool({
+                description: SWITCH_DESCRIPTION,
+                inputSchema: jsonSchema<{ target: "B" }>(SWITCH_SCHEMA as any),
+                // Runs between two doStream steps: the turn's tool call is parked on the worker.
+                execute: () => moveToB(wire, session, ws),
+            }),
+        }
+        : undefined;
+
+    // Turn 1 starts in A. Later calls pass no cwd: a call-option cwd would move the thread back.
+    const first = await generateText(stripUndefined({
+        model,
+        prompt: SEQUENTIAL(ws),
+        tools: sdkTools,
+        stopWhen: stepCountIs(15),
+        providerOptions: { [CODEX_PROVIDER_ID]: { cwd: ws.a, sandbox: "workspace-write", approvalPolicy: "never" } },
+    }) as Parameters<typeof generateText>[0]);
+    const rawThreadId = first.steps[0]?.providerMetadata?.[CODEX_PROVIDER_ID]?.["threadId"];
+    const threadId = typeof rawThreadId === "string" ? rawThreadId : "?";
+    const messages: ModelMessage[] = [...first.response.messages, { role: "user", content: NEXT_TURN }];
+    const second = await generateText(stripUndefined({ model, messages, tools: sdkTools, stopWhen: stepCountIs(10) }) as Parameters<typeof generateText>[0]);
+
+    return {
+        name,
+        probe: { log: wire.log, close: () => pool.shutdown() },
+        observations: [
+            `turn1 steps=${first.steps.length} turn2 steps=${second.steps.length} thread=${short(threadId)}`,
+            ...wire.commands.map((c) => sanitize(`command turn=${short(c.turnId)} cwd=${c.cwd} exit=${c.exitCode} cmd=${JSON.stringify(c.command)} out=${JSON.stringify(c.output)}`)),
+            `files ${sanitize(files(ws))}`,
+            `final message turn1: ${JSON.stringify(trim(first.text))}`,
+            `final message turn2: ${JSON.stringify(trim(second.text))}`,
+        ],
+    };
+}
+
 const SCENARIOS: Record<string, () => Promise<Result>> = {
     "inplace-sequential": () => inPlaceSequential(),
     "inplace-parallel": inPlaceParallel,
@@ -567,6 +747,8 @@ const SCENARIOS: Record<string, () => Promise<Result>> = {
     "steer": steer,
     "boundary-parallel": boundaryParallel,
     "concurrent": concurrent,
+    "adapter-crosscall": () => adapterScenario("adapter-crosscall", "crosscall"),
+    "adapter-dynamic": () => adapterScenario("adapter-dynamic", "dynamic"),
 };
 
 const selected = process.argv.slice(2).length > 0 ? process.argv.slice(2) : Object.keys(SCENARIOS);

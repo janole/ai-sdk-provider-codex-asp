@@ -1,3 +1,5 @@
+import { CodexProviderError } from "../errors";
+import { JsonRpcError } from "./app-server-client";
 import type {
     CodexTransport,
     CodexTransportEventMap,
@@ -18,7 +20,21 @@ export interface PendingToolCall {
     threadId: string;
     /** Provider-executed tool calls (e.g. parallel exec commands) still awaiting item/completed when the step closed. */
     openProviderToolCalls?: Array<{ itemId: string; toolName: string }>;
+    /**
+     * @internal The session of the turn the call belongs to. It outlives the step that parked the
+     * call so a context handoff can run between steps, and the next step re-attaches it.
+     */
+    session?: unknown;
 }
+
+type WorkerRequest = {
+    resolve: (value: unknown) => void;
+    reject: (error: unknown) => void;
+    timer: ReturnType<typeof setTimeout>;
+};
+
+/** Prefix of ids for requests the worker sends itself; AppServerClient uses numeric ids, so they never collide. */
+const WORKER_REQUEST_ID_PREFIX = "codex-asp-worker-";
 
 /** Requests whose successful response leaves the thread loaded — and write-leased — in this app-server process. */
 const THREAD_LOADING_METHODS = new Set(["thread/start", "thread/resume", "thread/fork"]);
@@ -47,6 +63,10 @@ export class CodexWorker
     // loaded here therefore cannot be resumed by any other worker while this process lives.
     private readonly loadedThreads = new Set<string>();
     private readonly pendingThreadLoads = new Set<JsonRpcId>();
+    // Requests sent by the worker itself rather than by an attached session's client, e.g. a
+    // context handoff while a tool call is parked between steps and no client is attached.
+    private readonly workerRequests = new Map<JsonRpcId, WorkerRequest>();
+    private nextWorkerRequestId = 1;
 
     constructor(settings: CodexWorkerSettings)
     {
@@ -71,6 +91,11 @@ export class CodexWorker
         {
             this.trackThreadLoad(message);
 
+            if (this.settleWorkerRequest(message))
+            {
+                return;
+            }
+
             if (this.pendingToolCall && this.sessionListeners.length === 0)
             {
                 this.bufferedMessages.push(message);
@@ -94,6 +119,7 @@ export class CodexWorker
             this.bufferedMessages = [];
             this.loadedThreads.clear();
             this.pendingThreadLoads.clear();
+            this.rejectWorkerRequests(new CodexProviderError("Codex app server connection closed."));
             // `pendingToolCall` deliberately survives, even though its request id died
             // with the process and the pool now reserves this worker for a thread that
             // can never answer it. Clearing it is worse: the next step for that thread
@@ -204,6 +230,47 @@ export class CodexWorker
         await this.inner.sendMessage(message);
     }
 
+    /**
+     * Sends a request on the worker's own channel and resolves with its result. Works whether or
+     * not a session is attached; the response is consumed here and never buffered or replayed.
+     */
+    async request<TResult>(method: string, params: unknown, timeoutMs: number): Promise<TResult>
+    {
+        if (!this.inner)
+        {
+            throw new Error("Worker has no active transport.");
+        }
+
+        const id = `${WORKER_REQUEST_ID_PREFIX}${this.nextWorkerRequestId++}`;
+        const promise = new Promise<TResult>((resolve, reject) =>
+        {
+            const timer = setTimeout(() =>
+            {
+                this.workerRequests.delete(id);
+                reject(new CodexProviderError(`Request timed out: ${method}`));
+            }, timeoutMs);
+
+            this.workerRequests.set(id, { resolve: (value) => resolve(value as TResult), reject, timer });
+        });
+
+        try
+        {
+            await this.inner.sendMessage({ id, method, params });
+        }
+        catch (error)
+        {
+            const pending = this.workerRequests.get(id);
+            if (pending)
+            {
+                clearTimeout(pending.timer);
+                this.workerRequests.delete(id);
+            }
+            throw error;
+        }
+
+        return promise;
+    }
+
     async sendNotification(method: string, params?: unknown): Promise<void>
     {
         if (!this.inner)
@@ -225,6 +292,7 @@ export class CodexWorker
         this.bufferedMessages = [];
         this.loadedThreads.clear();
         this.pendingThreadLoads.clear();
+        this.rejectWorkerRequests(new CodexProviderError("Codex worker shut down."));
 
         if (this.inner)
         {
@@ -239,6 +307,44 @@ export class CodexWorker
         {
             this.state = "disconnected";
         }
+    }
+
+    private settleWorkerRequest(message: JsonRpcMessage): boolean
+    {
+        if (!("id" in message) || message.id === undefined || "method" in message)
+        {
+            return false;
+        }
+
+        const pending = this.workerRequests.get(message.id);
+        if (!pending)
+        {
+            return false;
+        }
+
+        clearTimeout(pending.timer);
+        this.workerRequests.delete(message.id);
+
+        if ("error" in message && message.error)
+        {
+            pending.reject(new JsonRpcError(message.error));
+        }
+        else
+        {
+            pending.resolve("result" in message ? message.result : undefined);
+        }
+
+        return true;
+    }
+
+    private rejectWorkerRequests(error: unknown): void
+    {
+        for (const pending of this.workerRequests.values())
+        {
+            clearTimeout(pending.timer);
+            pending.reject(error);
+        }
+        this.workerRequests.clear();
     }
 
     private trackThreadLoad(message: JsonRpcMessage): void

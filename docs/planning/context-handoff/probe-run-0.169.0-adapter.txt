@@ -1,0 +1,64 @@
+codex: codex-cli 0.169.0  workspaces: <root>
+
+=== adapter-crosscall
+    989ms  → thread/start {"cwd":"<root>/adapter-crosscall/A"}
+   1132ms  → turn/start {"cwd":"<root>/adapter-crosscall/A","input":1}
+   4708ms  · agentMessage "I’ll run the probe steps in order."
+   5228ms  · command turn=d68785 cwd=<root>/adapter-crosscall/A exit=0 cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'"
+   6962ms  ⇐ item/tool/call switch_workspace turn=d68785
+   6967ms  → turn/settings/update {"turnId":"d68785","environments":[{"environmentId":"local","cwd":"<root>/adapter-crosscall/B","runtimeWorkspaceRoots":["<root>/adapter-crosscall/B"]}]}
+   6968ms  ← turn/settings/update: {"status":"applied"}
+   6968ms  → thread/settings/update {"cwd":"<root>/adapter-crosscall/B","environments":[{"environmentId":"local","cwd":"<root>/adapter-crosscall/B","runtimeWorkspaceRoots":["<root>/adapter-crosscall/B"]}],"sandboxPolicy":"workspaceWrite"}
+   6970ms  ← thread/settings/update: {}
+   6971ms  moveExecutionContext → {"status":"moved","threadId":"01a1e63e-59c2-7e71-a0c8-4f46e5dc89a4","turnId":"01a1e63e-5a41-72f3-93f4-80b056d68785","effective":"nextStep","context":{"cwd":"<root>/adapter-crosscall/B","runtimeWorkspaceRoots":["<root>/adapter-crosscall/B"],"sandboxPolicy":{"type":"workspaceWrite","writableRoots":[],"networkAccess":false,"excludeTmpdirEnvVar":false,"excludeSlashTmp":false},"environmentId":"local"},"noop":false}
+   7364ms  → tool response "{\"success\":true,\"contentItems\":[{\"type\":\"inputText\",\"text\":\"Switched to workspace B.\"}]}"
+   9939ms  · command turn=d68785 cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'"
+  12772ms  · command turn=d68785 cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'echo probe > <root>/adapter-crosscall/A/escape.txt; echo exit=$?'"
+  14553ms  · agentMessage "MARKER-B"
+  14583ms  · turn/completed turn=d68785 status=completed
+  15075ms  → thread/resume {}
+  15092ms  → turn/start {"input":1}
+  17752ms  · command turn=06b4ca cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'pwd > nextturn.txt; pwd'"
+  19648ms  · agentMessage "MARKER-B"
+  19666ms  · turn/completed turn=06b4ca status=completed
+--- observations
+  turn1 steps=2 turn2 steps=1 thread=c89a4"
+  command turn=d68785 cwd=<root>/adapter-crosscall/A exit=0 cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'" out="<root>/adapter-crosscall/A"
+  command turn=d68785 cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'" out="<root>/adapter-crosscall/B"
+  command turn=d68785 cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'echo probe > <root>/adapter-crosscall/A/escape.txt; echo exit=$?'" out="exit=1\nzsh:1: operation not permitted: <root>/adapter-crosscall/A/escape.txt"
+  command turn=06b4ca cwd=<root>/adapter-crosscall/B exit=0 cmd="/bin/zsh -lc 'pwd > nextturn.txt; pwd'" out="<root>/adapter-crosscall/B"
+  files A: step1.txt(A) | B: step3.txt(B) nextturn.txt(B)
+  final message turn1: "MARKER-B"
+  final message turn2: "MARKER-B"
+
+=== adapter-dynamic
+    714ms  → thread/start {"cwd":"<root>/adapter-dynamic/A"}
+    767ms  → turn/start {"cwd":"<root>/adapter-dynamic/A","input":1}
+   4537ms  · agentMessage "I’ll run the probe steps in order."
+   4964ms  · command turn=0da8cc cwd=<root>/adapter-dynamic/A exit=0 cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'"
+   6963ms  ⇐ item/tool/call switch_workspace turn=0da8cc
+   6964ms  → turn/settings/update {"turnId":"0da8cc","environments":[{"environmentId":"local","cwd":"<root>/adapter-dynamic/B","runtimeWorkspaceRoots":["<root>/adapter-dynamic/B"]}]}
+   6964ms  ← turn/settings/update: {"status":"applied"}
+   6965ms  → thread/settings/update {"cwd":"<root>/adapter-dynamic/B","environments":[{"environmentId":"local","cwd":"<root>/adapter-dynamic/B","runtimeWorkspaceRoots":["<root>/adapter-dynamic/B"]}],"sandboxPolicy":"workspaceWrite"}
+   6966ms  ← thread/settings/update: {}
+   6966ms  moveExecutionContext → {"status":"moved","threadId":"01a1e63e-cf7f-7333-8ad0-645e2c7e35c3","turnId":"01a1e63e-cfac-7521-af76-272fa20da8cc","effective":"nextStep","context":{"cwd":"<root>/adapter-dynamic/B","runtimeWorkspaceRoots":["<root>/adapter-dynamic/B"],"sandboxPolicy":{"type":"workspaceWrite","writableRoots":[],"networkAccess":false,"excludeTmpdirEnvVar":false,"excludeSlashTmp":false},"environmentId":"local"},"noop":false}
+   6966ms  → tool response "{\"success\":true,\"contentItems\":[{\"type\":\"inputText\",\"text\":\"Switched to workspace B.\"}]}"
+   9880ms  · command turn=0da8cc cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'"
+  12613ms  · command turn=0da8cc cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'echo probe > <root>/adapter-dynamic/A/escape.txt; echo exit=$?'"
+  14472ms  · agentMessage "MARKER-B"
+  14483ms  · turn/completed turn=0da8cc status=completed
+  15051ms  → thread/resume {}
+  15060ms  → turn/start {"input":1}
+  18124ms  · agentMessage "I’ll run the command in the current workspace."
+  18220ms  · command turn=bad852 cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'pwd > nextturn.txt; pwd'"
+  21863ms  · agentMessage "MARKER-B"
+  21888ms  · turn/completed turn=bad852 status=completed
+--- observations
+  turn1 steps=1 turn2 steps=1 thread=7e35c3
+  command turn=0da8cc cwd=<root>/adapter-dynamic/A exit=0 cmd="/bin/zsh -lc 'pwd > step1.txt; pwd'" out="<root>/adapter-dynamic/A"
+  command turn=0da8cc cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'pwd > step3.txt; pwd'" out="<root>/adapter-dynamic/B"
+  command turn=0da8cc cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'echo probe > <root>/adapter-dynamic/A/escape.txt; echo exit=$?'" out="zsh:1: operation not permitted: <root>/adapter-dynamic/A/escape.txt\nexit=1"
+  command turn=bad852 cwd=<root>/adapter-dynamic/B exit=0 cmd="/bin/zsh -lc 'pwd > nextturn.txt; pwd'" out="<root>/adapter-dynamic/B"
+  files A: step1.txt(A) | B: step3.txt(B) nextturn.txt(B)
+  final message turn1: "I’ll run the probe steps in order.\nMARKER-B"
+  final message turn2: "I’ll run the command in the current workspace.\nMARKER-B"

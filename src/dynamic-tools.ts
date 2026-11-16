@@ -5,6 +5,7 @@ import type {
     CodexToolCallResult,
     CodexToolResultContentItem,
 } from "./protocol/types";
+import type { CodexSession } from "./session";
 import { stripUndefined } from "./utils/object";
 
 export interface DynamicToolExecutionContext
@@ -13,6 +14,8 @@ export interface DynamicToolExecutionContext
     turnId?: string;
     callId?: string;
     toolName: string;
+    /** The running session, e.g. to move its execution context before returning. Absent before turn/start has returned. */
+    session?: CodexSession;
 }
 
 export type DynamicToolHandler = (
@@ -35,6 +38,8 @@ export interface DynamicToolsDispatcherSettings
     /** Legacy handler-only registration (no schema). Tools are not advertised to Codex. */
     handlers?: Record<string, DynamicToolHandler>;
     timeoutMs?: number;
+    /** Supplies the running session to handlers. */
+    getSession?: () => CodexSession | undefined;
     onDebugEvent?: (event: {
         event: string;
         data?: unknown;
@@ -74,12 +79,14 @@ export class DynamicToolsDispatcher
 {
     private readonly handlers = new Map<string, DynamicToolHandler>();
     private readonly timeoutMs: number;
+    private readonly getSession: (() => CodexSession | undefined) | undefined;
     private readonly onDebugEvent?: DynamicToolsDispatcherSettings["onDebugEvent"];
 
     constructor(settings: DynamicToolsDispatcherSettings = {})
     {
         this.timeoutMs = settings.timeoutMs ?? 30_000;
         this.onDebugEvent = settings.onDebugEvent;
+        this.getSession = settings.getSession;
 
         if (settings.tools)
         {
@@ -154,6 +161,7 @@ export class DynamicToolsDispatcher
             threadId: params.threadId,
             turnId: params.turnId,
             callId: params.callId,
+            session: this.getSession?.(),
         });
 
         const args = params.arguments ?? params.input;

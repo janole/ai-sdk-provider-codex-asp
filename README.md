@@ -118,6 +118,52 @@ for await (const chunk of result.textStream) {
 await codex.shutdown();
 ```
 
+## Moving a running session to another directory
+
+`CodexSession.moveExecutionContext()` moves a running session to a new working directory, together with its runtime workspace roots and sandbox settings, and resolves once Codex has acknowledged the move. From the model's next step on, native commands run there by default, the model is shown the new directory, and its `AGENTS.md` applies. Later turns of the thread stay there. A `sandboxPolicy` or `permissions` you pass applies from the next turn: Codex cannot change a running turn's sandbox mode, so the running turn keeps its mode, and only its writable roots follow `runtimeWorkspaceRoots` from the next step. Requires Codex ≥ 0.169 and the `experimentalApi` capability, which is enabled whenever tools are configured.
+
+Call it from the tool that requests the move, before the tool returns. With AI SDK tools (cross-call), take the session from `onSessionCreated`. With provider-executed `tools`, the handler's context carries it:
+
+```ts
+let session: CodexSession | undefined;
+const codex = createCodexAppServer({
+  persistent: { scope: 'global', poolSize: 1, idleTimeoutMs: 60_000 },
+  onSessionCreated: (created) => { session = created; },
+});
+
+const switchWorkspace = tool({
+  description: 'Move this session to another workspace.',
+  inputSchema: z.object({ path: z.string() }),
+  execute: async ({ path }) => {
+    const result = await session!.moveExecutionContext({
+      cwd: path,
+      runtimeWorkspaceRoots: [path],  // the complete writable set; nothing is kept from the old context
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
+    });
+    return result.status === 'moved' ? `Now working in ${path}.` : `Could not switch: ${result.message}`;
+  },
+});
+```
+
+The result is either `{ status: "moved", effective: "nextStep", threadId, turnId, context, noop }` or `{ status: "failed", reason, message, turnApplied }`. It never throws.
+
+- `targetUnavailable`: the session's turn has ended, or `expectedTurnId` names another turn. Nothing changed.
+- `invalidRequest`: a relative path, or both `sandboxPolicy` and `permissions`. Nothing was sent.
+- `aborted`: `signal` fired before anything was sent.
+- `turnUpdateFailed`: Codex rejected `turn/settings/update`, e.g. without `experimentalApi`. Nothing changed.
+- `threadUpdateFailed`: the running turn moved but future turns did not (`turnApplied: true`). Move again before relying on either context.
+
+How it works and what it does not guarantee:
+
+- It sends `turn/settings/update` for the running turn, then `thread/settings/update` for the thread's future turns. Moves on one session are serialized. A move that repeats the context already in force for this turn sends nothing and reports `noop: true`.
+- The tool response is held until every move requested so far is acknowledged, even if the handler did not await it. Codex's next step is therefore the first to run in the new context.
+- Actions the model emitted in the **same response** as the move may still run in the old directory. Codex has no ordering barrier for them.
+- Running terminals and background processes stay where they are.
+- The adapter applies exactly the roots and sandbox you pass and never widens them. With `runtimeWorkspaceRoots: [newDir]`, writes to the old directory are denied.
+- A `cwd` passed in call options or `defaultThreadSettings`/`defaultTurnSettings` is sent again on the next call's `thread/resume` and `turn/start`, which moves the thread back. After a move, pass the new directory, or none.
+
+Evidence: [`docs/planning/context-handoff/protocol-proof.md`](docs/planning/context-handoff/protocol-proof.md); run [`scripts/context-handoff-probe.ts`](scripts/context-handoff-probe.ts) `adapter-crosscall adapter-dynamic` against a real `codex`.
+
 ## API Reference
 
 ```ts
