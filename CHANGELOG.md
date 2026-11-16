@@ -5,7 +5,7 @@ since most of their patch releases were protocol-type upgrades and dependency ma
 Full detail for any version is in the [releases](https://github.com/janole/ai-sdk-provider-codex-asp/releases)
 and the git history.
 
-## Unreleased
+## 0.5.8
 
 - The persistent worker pool now keeps every thread on the worker that loaded it. Codex 0.159
   added a per-thread writer lease: a thread loaded in one app-server process cannot be
@@ -17,6 +17,7 @@ and the git history.
   concurrent sessions spread across processes; ownership ends when the process does.
 - `scripts/writer-lease-probe.ts` checks the lease and the pool's routing against the real
   `codex` binary without a model call. Run it after a `codex` upgrade.
+- Updated development lockfile entries for `brace-expansion` to 1.1.21 and 5.0.12.
 
 ## 0.5.7
 
